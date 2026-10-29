@@ -1017,52 +1017,12 @@ namespace GenOnlineService.Controllers
 				}
 				else if (msgID == EWebSocketMessageID.FULL_MESH_CONNECTIVITY_CHECK_HOST_REQUESTS_BEGIN)
 				{
-					// Host has requested this, as part of the start game flow
-
-					// must be in a lobby
-					Lobby? lobbyInfo = null;
-					if (sourceUserSession.currentLobbyID != -1)
-					{
-						// must be lobby owner too
-						lobbyInfo = _lobbyManager.GetLobby(sourceUserSession.currentLobbyID);
-
-						if (lobbyInfo == null || lobbyInfo.Owner != sourceUserSession.m_UserID)
-						{
-							return;
-						}
-					}
-
-					if (lobbyInfo == null)
-					{
-						return;
-					}
-
-					// lock slots (more people joining when we're already doing connectivity checks won't help the situation)
-					// Awaited separately from StartFullMeshConnectivityCheck below: each is its own
-					// gated operation on the lobby, so neither ever nests inside the other's gate use.
-					await lobbyInfo.CloseOpenSlots();
-
-					// mark lobby as in progress of full mesh connectivity checks
-					await lobbyInfo.StartFullMeshConnectivityCheck();
-
-					// start full mesh connectivity checks
-					lobbyInfo.SendFullMeshConnectivityCheckRequestToMembers();
+					await _lobbyManager.StartMeshCheckAsync(sourceUserSession, sourceWS);
 				}
 				else if (msgID == EWebSocketMessageID.FULL_MESH_CONNECTIVITY_CHECK_RESPONSE)
 				{
-					// process a response from a user
-					WebSocketMessage_FullMeshConnectivityCheckResponseFromUser? fullMeshMsg =
-						JsonSerializer.Deserialize<WebSocketMessage_FullMeshConnectivityCheckResponseFromUser>(payload, JsonOpts);
-
-					// store response
-					if (fullMeshMsg != null)
-					{
-						Lobby? lobby = _lobbyManager.GetLobby(sourceUserSession.currentLobbyID);
-						if (lobby != null)
-						{
-							await lobby.StoreFullMeshConnectivityResponse(sourceUserSession.m_UserID, fullMeshMsg);
-						}
-					}
+					var response = JsonSerializer.Deserialize<WebSocketMessage_FullMeshConnectivityCheckResponseFromUser>(payload, JsonOpts);
+					if (response != null) await _lobbyManager.StoreMeshResponseAsync(sourceUserSession, sourceWS, response);
 				}
 				else if (msgID == EWebSocketMessageID.NETWORK_CONNECTION_CLIENT_REQUEST_SIGNALLING)
 				{
@@ -1237,6 +1197,10 @@ namespace GenOnlineService.Controllers
 							List<List<object>> result = JsonSerializer.Deserialize<List<List<object>>>(respElement.GetRawText(), JsonOpts);
 							//Console.WriteLine("Len: {0}", result.Count);
 
+							UInt64 mostRecentMatchID = sourceUserSession.GetLatestMatchID();
+							List<AcModuleReport> lstModulesToFlag = new();
+							HashSet<string> setSeenModules = new(StringComparer.Ordinal);
+
 							foreach (List<object> moduleData in result)
 							{
 								string strFullModulePath = moduleData[0].ToString().Replace('\\', '/').ToLower(); // Fix for linux
@@ -1245,50 +1209,28 @@ namespace GenOnlineService.Controllers
 								string strModulePath = Path.GetDirectoryName(strFullModulePath);
 								int sizeBytes = Convert.ToInt32(moduleData[1].ToString());
 
-								UInt64 mostRecentMatchID = sourceUserSession.GetLatestMatchID();
-
 								// is it whitelisted?
-								bool bShouldFlag = true;
-								if (Program.g_Config != null)
+								if (AntiCheatModuleAllowList.IsAllowed(strModuleFilename, strModulePath))
 								{
-									IConfiguration? acSettings = Program.g_Config.GetSection("AC");
-
-									if (acSettings != null)
-									{
-										List<string>? lstAllowedModules = acSettings.GetSection("allowed_modules").Get<List<string>>();
-										List<string>? lstAllowedModulePaths = acSettings.GetSection("allowed_module_paths").Get<List<string>>();
-
-										if (lstAllowedModules != null)
-										{
-											if (lstAllowedModules.Contains(strModuleFilename))
-											{
-												bShouldFlag = false;
-											}
-										}
-
-										if (lstAllowedModulePaths != null)
-										{
-											foreach (string strAllowedDir in lstAllowedModulePaths)
-											{
-												if (strModulePath.StartsWith(strAllowedDir))
-												{
-													bShouldFlag = false;
-												}
-											}
-										}
-									}
+									continue;
 								}
 
-								if (bShouldFlag)
+								// already reported this match (or earlier in this response)? then don't touch the DB
+								if (sourceUserSession.IsModuleFlagged(mostRecentMatchID, strModuleFilename) || !setSeenModules.Add(strModuleFilename))
 								{
-									await using var db = await _dbFactory.CreateDbContextAsync();
-									await Database.AntiCheat.FlagAccountForReview_Module(
-										db,
-										sourceUserSession.m_UserID,
-										mostRecentMatchID,
-										strModuleFilename,
-										strModulePath,
-										sizeBytes);
+									continue;
+								}
+
+								lstModulesToFlag.Add(new AcModuleReport(strModuleFilename, strModulePath, sizeBytes));
+							}
+
+							if (lstModulesToFlag.Count > 0)
+							{
+								// one context and one statement for the whole response
+								await using var db = await _dbFactory.CreateDbContextAsync();
+								if (await Database.AntiCheat.FlagAccountForReview_Modules(db, sourceUserSession.m_UserID, mostRecentMatchID, lstModulesToFlag))
+								{
+									sourceUserSession.MarkModulesFlagged(mostRecentMatchID, lstModulesToFlag.Select(m => m.ModuleName));
 								}
 							}
 

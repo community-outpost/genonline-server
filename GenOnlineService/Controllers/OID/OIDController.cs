@@ -18,6 +18,7 @@
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System;
@@ -273,26 +274,29 @@ namespace GenOnlineService.Controllers.LoginWithToken
 
 					ClaimsPrincipal validatedClaims = await ValidateEpicJwtAsync(mw_token);
 
-					if (validatedClaims != null)
+					if (validatedClaims == null)
 					{
-						// read from the validated principal, never by re-parsing the raw token
-						string? mwUserID = GetClaimValue(validatedClaims, "sub");
-						if (String.IsNullOrEmpty(mwUserID))
-						{
-							Response.StatusCode = (int)HttpStatusCode.Unauthorized;
-							return;
-						}
+						return;
+					}
 
-						Int64 user_id = TokenHelper.GetUserID(this);
-						EUserSessionType sessionType = TokenHelper.GetSessionType(this);
-						if (user_id != -1 && SessionHelpers.SessionTypeHasAccessTo(sessionType, ESessionAccessType.Gameplay)) // only game clients should be doing middleware login
-						{
-							UserSession? session = WebSocketManager.GetSessionFromUser(user_id, sessionType);
-							if (session != null)
-							{
-								session.SetMiddlewareID(mwUserID);
-							}
-						}
+					// read from the validated principal, never by re-parsing the raw token
+					string? mwUserID = GetClaimValue(validatedClaims, "sub");
+					if (String.IsNullOrEmpty(mwUserID))
+					{
+						Response.StatusCode = (int)HttpStatusCode.Unauthorized;
+						return;
+					}
+
+					Int64 user_id = TokenHelper.GetUserID(this);
+					EUserSessionType sessionType = TokenHelper.GetSessionType(this);
+					if (user_id != -1 && SessionHelpers.SessionTypeHasAccessTo(sessionType, ESessionAccessType.Gameplay)) // only game clients should be doing middleware login
+					{
+						// stored per user (not per session) so it survives session churn and lobby members can resolve it live
+						// if the player is already in a lobby, peers were signalled before the ID was known, so the manager tells
+						// them (serialized under the user's membership gate and the lobby gate, and only when the value changed).
+						// A rejected change (different ID while in a lobby) is not reported to the client: the response is the same.
+						LobbyManager lobbyManager = ServiceLocator.Services.GetRequiredService<LobbyManager>();
+						await lobbyManager.ApplyMiddlewareIDAsync(user_id, sessionType, mwUserID);
 					}
 				}
 			}

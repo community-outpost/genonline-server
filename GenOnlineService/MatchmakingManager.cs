@@ -26,6 +26,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Net;
 using System.Net.WebSockets;
 using System.Security.Claims;
@@ -332,7 +333,7 @@ static class MatchmakingManager
 		{
 			lock (m_StateLock)
 			{
-				return m_bHasStartedCountdown || m_bWaitingOnLobbyJoins || m_bWaitingOnMeshConnectivityChecks || m_bPendingDeletion;
+				return m_bCreatingLobby || m_bHasStartedCountdown || m_bWaitingOnLobbyJoins || m_bWaitingOnMeshConnectivityChecks || m_bPendingDeletion;
 			}
 		}
 
@@ -380,120 +381,100 @@ static class MatchmakingManager
 			return null;
 		}
 
-		public void DetermineMap(out string strMapName, out string strMapPath)
+		private sealed record Formation(ImmutableArray<UserSession> Players, PlaylistMap Map, bool UsedFallbackMap);
+		private Formation? m_Formation;
+		private bool m_bCreatingLobby;
+		private static long s_NextBucketID;
+		private readonly long m_BucketID = Interlocked.Increment(ref s_NextBucketID);
+
+		private Formation? TryBeginFormation(Playlist playlist, bool graceExpired)
 		{
-			// If they are in this bucket, they had SOME map overlap with the bucket creator, now we need to find the common ground between everyone
-
-			// TODO_QUICKMATCH: what if we cant find a suitable map?
-
-			// first condense the map list doesn to a list that has mutually agreed upon maps/preferences from all participants
-			//var mapSetFromBucketCreator = new HashSet<int>(lstMapIndices);
-
-			var perPlayerMapSet = new List<HashSet<int>>();
-			var finalMapSet = new HashSet<int>(lstMapIndices.ToList()); // we need to check intersection against this, so pre-populate it with the original bucket creation list, because that's the "biggest set" in theory
-
-			// TODO_QUICKMATCH: Optimize this, it's inefficient
-
-			foreach (MatchmakingBucketMember member in m_lstMembers)
+			lock (m_StateLock)
 			{
-				UserSession? memberSession = member.GetAssociatedSession();
-				if (memberSession != null)
+				if (IsLockedForMatchStart() || m_bMergedAway) return null;
+				var players = m_lstMembers.ToList().Select(member => member.GetAssociatedSession()).ToArray();
+				if (players.Length < MinPlayers || players.Length > DesiredPlayers
+					|| (!graceExpired && players.Length < DesiredPlayers)
+					|| players.Any(player => player == null || player.IsRetired || !player.IsRegisteredForMatchmaking)) return null;
+
+				var selectedPlayers = players.Cast<UserSession>().ToArray();
+				var sharedMaps = new HashSet<int>(lstMapIndices.ToList());
+				foreach (var player in selectedPlayers)
+					sharedMaps.IntersectWith(player.MatchmakingMapIndicies.ToList());
+				var exactMaps = playlist.Maps.Where(map => map.MaxPlayers == selectedPlayers.Length).ToArray();
+				var preferredMaps = sharedMaps.Where(index => index >= 0 && index < playlist.Maps.Count)
+					.Select(index => playlist.Maps[index]).Where(map => map.MaxPlayers == selectedPlayers.Length).ToArray();
+				var choices = preferredMaps.Length > 0 ? preferredMaps : exactMaps;
+				if (choices.Length == 0) return null;
+
+				m_Formation = new Formation(selectedPlayers.ToImmutableArray(), choices[Random.Shared.Next(choices.Length)], preferredMaps.Length == 0);
+				m_bCreatingLobby = true;
+				m_bReachedMinPlayers = false;
+				m_timeReachedMinPlayers = -1;
+				return m_Formation;
+			}
+		}
+
+		private bool IsFormationCurrent(Lobby? lobby = null)
+		{
+			lock (m_StateLock)
+			{
+				return m_Formation != null && !m_bAutoStartInvalidated && !m_bPendingDeletion
+					&& CurrentMemberCount() == m_Formation.Players.Length
+					&& m_Formation.Players.All(player => !player.IsRetired && player.IsRegisteredForMatchmaking && HasPlayer(player))
+					&& (lobby == null || (lobby.NumCurrentPlayers == m_Formation.Players.Length
+						&& m_Formation.Players.All(player => lobby.GetMemberFromUserID(player.m_UserID)?.GetSession()
+							.TryGetTarget(out var memberSession) == true && ReferenceEquals(memberSession, player))));
+			}
+		}
+
+		private async Task CreateFormationLobbyAsync(Playlist playlist, Formation formation)
+		{
+			var lobbyManager = ServiceLocator.Services.GetRequiredService<LobbyManager>();
+			try
+			{
+				using var scope = ServiceLocator.Services.CreateScope();
+				var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+				await using var db = await factory.CreateDbContextAsync();
+				foreach (var player in formation.Players)
 				{
-					perPlayerMapSet.Add(new HashSet<int>(memberSession.MatchmakingMapIndicies.ToList()));
+					await Database.Leaderboards.CreateUserEntriesIfNotExists(db, player.m_UserID);
+					await SendMatchmakingMessage(player, $"Creating a {formation.Players.Length}-player QuickMatch on {formation.Map.Name}."
+						+ (formation.Players.Length < playlist.DesiredPlayers ? " Starting below the playlist maximum after the grace period." : "")
+						+ (formation.UsedFallbackMap ? " No shared map preference fits this size; using an exact-size playlist map." : ""));
+				}
+				var host = formation.Players[0];
+				var hostData = GenOnlineService.WebSocketManager.GetSharedDataForUser(host.m_UserID);
+				if (hostData == null) throw new InvalidOperationException("QuickMatch host session disappeared.");
+				if (!IsFormationCurrent()) throw new InvalidOperationException("QuickMatch formation changed.");
+				m_LobbyID = await lobbyManager.CreateLobby(db, host, hostData.m_strDisplayName, "Quickmatch Lobby", formation.Map.Name, formation.Map.Path + ".map",
+					true, formation.Players.Length, "", 12345, false, true, 10000, false, String.Empty, -5, false, Constants.g_DefaultCameraMaxHeight,
+					ExeCRC, IniCRC, ELobbyType.QuickMatch, AnticheatID);
+				var lobby = lobbyManager.GetLobby(m_LobbyID) ?? throw new InvalidOperationException("QuickMatch lobby creation failed.");
+				foreach (var player in formation.Players) lobby.MatchedUserIDs.Add(player.m_UserID);
+				var action = new WebSocketMessage_MatchmakerJoinLobby
+				{
+					msg_id = (int)EWebSocketMessageID.MATCHMAKING_ACTION_JOIN_PREARRANGED_LOBBY,
+					lobby_id = m_LobbyID
+				};
+				var payload = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(action));
+				lock (m_StateLock)
+				{
+					if (!IsFormationCurrent()) throw new InvalidOperationException("QuickMatch formation changed.");
+					m_bWaitingOnLobbyJoins = true;
+					m_timeStartedWaitingOnLobbyJoins = Environment.TickCount64;
+					foreach (var player in formation.Players) player.QueueWebsocketSend(payload);
 				}
 			}
-
-			// Find shared values across all of perPlayerMapSet
-			if (perPlayerMapSet.Count > 0)
+			catch (Exception ex)
 			{
-				for (int i = 0; i < perPlayerMapSet.Count; i++)
-				{
-					finalMapSet.IntersectWith(perPlayerMapSet[i]);
-				}
+				Console.WriteLine($"QuickMatch formation failed: {ex}");
+				await AbortQuickMatchAutoStartAsync("QuickMatch setup failed or a player left during formation.");
 			}
-
-			// remove any maps that aren't big enough (mainly applies to FFA's where maps may be 6 players but bucket could be 8 players)
-			// NOTE: iterate a real copy, we are mutating finalMapSet below
-			var copyMapSetForIter = new HashSet<int>(finalMapSet);
-			foreach (int mapIndex in copyMapSetForIter)
+			finally
 			{
-				if (MatchmakingManager.g_Playlists.TryGetValue(PlaylistID, out Playlist? playlist))
-				{
-					if (mapIndex >= 0 && mapIndex < playlist.Maps.Count)
-					{
-						if (playlist.Maps[mapIndex].MaxPlayers < CurrentMemberCount())
-						{
-							finalMapSet.Remove(mapIndex);
-						}
-					}
-				}
+				lock (m_StateLock) m_bCreatingLobby = false;
 			}
-
-			// Randomly select a map from the map list
-			if (finalMapSet.Count > 0)
-			{
-				// Get the playlist for this bucket
-				if (MatchmakingManager.g_Playlists.TryGetValue(PlaylistID, out Playlist? playlist))
-				{
-					var finalMapIndices = finalMapSet.ToList();
-					int selectedIndex = Random.Shared.Next(finalMapIndices.Count);
-					int mapIndex = finalMapIndices[selectedIndex];
-
-					// Defensive: ensure index is valid for playlist.Maps
-					if (mapIndex >= 0 && mapIndex < playlist.Maps.Count)
-					{
-						strMapName = playlist.Maps[mapIndex].Name;
-						strMapPath = playlist.Maps[mapIndex].Path;
-						return;
-					}
-				}
-			}
-			else
-			{
-				// pick a sensible default (biggest map in playlist), probably not what the players asked for, but we cant play on no map
-				Console.WriteLine("WARNING: No mutually agreed upon map found for matchmaking bucket, falling back to largest map in playlist");
-
-				if (MatchmakingManager.g_Playlists.TryGetValue(PlaylistID, out Playlist? playlist))
-				{
-					int biggestCountSeen = 0;
-					PlaylistMap? mapToUse = null;
-					foreach (var map in playlist.Maps)
-					{
-						if (map.MaxPlayers > biggestCountSeen)
-						{
-							biggestCountSeen = map.MaxPlayers;
-							mapToUse = map;
-						}
-					}
-
-					// TODO_QUICKMATCH: What if it's still null? don't think we can get into that state since we must have some kind of map in the playlist
-					if (mapToUse != null)
-					{
-						strMapName = mapToUse.Name;
-						strMapPath = mapToUse.Path;
-						return;
-					}
-				}
-			}
-
-			// TODO_QUICKMATCH: What happens if you widen when already in a bucket? tell the user htey cant? you would need everyone to expand, or just expand for everyone?
-
-			// Fallback: use first map from bucket creator's list if available
-			if (lstMapIndices.Count > 0 && MatchmakingManager.g_Playlists.TryGetValue(PlaylistID, out Playlist? fallbackPlaylist))
-			{
-				int fallbackIndex = lstMapIndices[0];
-				if (fallbackIndex >= 0 && fallbackIndex < fallbackPlaylist.Maps.Count)
-				{
-					strMapName = fallbackPlaylist.Maps[fallbackIndex].Name;
-					strMapPath = fallbackPlaylist.Maps[fallbackIndex].Path;
-					return;
-				}
-			}
-
-			// If no map found, set to empty
-			strMapName = string.Empty;
-			strMapPath = string.Empty;
-
 		}
 
 		public bool DoMapSelectionsIntersect(ConcurrentList<int> lstRhs)
@@ -580,28 +561,23 @@ static class MatchmakingManager
 			return true;
 		}
 
-		public async Task MergeWithOtherBucket(MatchmakingBucket bucketToMerge)
+		public async Task<bool> MergeWithOtherBucketAsync(MatchmakingBucket bucketToMerge)
 		{
-			// copy over players (skipping anyone already present, and dead sessions)
-			foreach (MatchmakingBucketMember rhsMember in bucketToMerge.m_lstMembers)
+			if (ReferenceEquals(this, bucketToMerge)) return false;
+			var first = m_BucketID < bucketToMerge.m_BucketID ? this : bucketToMerge;
+			var second = ReferenceEquals(first, this) ? bucketToMerge : this;
+			lock (first.m_StateLock)
+			lock (second.m_StateLock)
 			{
-				UserSession? rhsSession = rhsMember.GetAssociatedSession();
-				if (rhsSession == null || HasPlayer(rhsSession))
+				if (!CanMergeWithOtherBucket(bucketToMerge)) return false;
+				foreach (var member in bucketToMerge.m_lstMembers)
 				{
-					continue;
+					var session = member.GetAssociatedSession();
+					if (session != null && !session.IsRetired && !HasPlayer(session)) m_lstMembers.Add(member);
 				}
-
-				this.m_lstMembers.Add(rhsMember);
-			}
-
-			// the source bucket is now empty and flagged so it can never merge/accept players again
-			lock (bucketToMerge.m_StateLock)
-			{
 				bucketToMerge.m_bMergedAway = true;
+				bucketToMerge.m_lstMembers.Clear();
 			}
-			bucketToMerge.m_lstMembers.Clear();
-
-			// nothing else to copy... everything else should match since we were a merge candidate
 
 			// tell all players
 			foreach (MatchmakingBucketMember member in m_lstMembers)
@@ -612,6 +588,7 @@ static class MatchmakingManager
 					await SendMatchmakingMessage(session, String.Format("Your matchmaking bucket was merged with another bucket. Status: {0}/{1} players. ({2} required to start)", CurrentMemberCount(), DesiredPlayers, MinPlayers));
 				}
 			}
+			return true;
 		}
 
 		public bool HasPlayer(UserSession playerSession)
@@ -642,7 +619,7 @@ static class MatchmakingManager
 							return false;
 						}
 
-						if (m_bWaitingOnLobbyJoins || m_bHasStartedCountdown || m_bWaitingOnMeshConnectivityChecks)
+						if (m_bCreatingLobby || m_bWaitingOnLobbyJoins || m_bHasStartedCountdown || m_bWaitingOnMeshConnectivityChecks)
 						{
 							m_bAutoStartInvalidated = true;
 						}
@@ -672,7 +649,7 @@ static class MatchmakingManager
 				{
 					if (member.GetAssociatedSession() == null)
 					{
-						if (m_bWaitingOnLobbyJoins || m_bHasStartedCountdown || m_bWaitingOnMeshConnectivityChecks)
+						if (m_bCreatingLobby || m_bWaitingOnLobbyJoins || m_bHasStartedCountdown || m_bWaitingOnMeshConnectivityChecks)
 						{
 							m_bAutoStartInvalidated = true;
 							bInvalidatedSetup = true;
@@ -803,36 +780,22 @@ static class MatchmakingManager
         }
 
 
-        public async Task<bool> Join(UserSession playerSession)
+		public async Task<bool> JoinAsync(UserSession playerSession)
 		{
-			// already in here? nothing to do (and never add a duplicate member)
-			if (HasPlayer(playerSession))
+			lock (m_StateLock)
 			{
-				return true;
+				if (HasPlayer(playerSession)) return true;
+				if (playerSession.IsRetired || IsJoiningUserBlockedByOrHasBlockedAnyBucketMember(playerSession, playerSession.m_UserID)
+					|| !HasSpaceForUsers(1, playerSession.ExeCRC, playerSession.IniCRC, playerSession.AnticheatID)) return false;
+				m_lstMembers.Add(new MatchmakingBucketMember(playerSession));
 			}
-
-			// cant be blocked by others in this bucket
-			if (!IsJoiningUserBlockedByOrHasBlockedAnyBucketMember(playerSession, playerSession.m_UserID))
-            {
-                if (HasSpaceForUsers(1, playerSession.ExeCRC, playerSession.IniCRC, playerSession.AnticheatID))
-                {
-                    m_lstMembers.Add(new MatchmakingBucketMember(playerSession));
-
-                    // tell everyone
-                    foreach (MatchmakingBucketMember member in m_lstMembers)
-                    {
-						UserSession? memberSession = member.GetAssociatedSession();
-                        if (memberSession != null)
-                        {
-                            await SendMatchmakingMessage(memberSession, String.Format("Status: {0}/{1} players. ({2} required to start)", CurrentMemberCount(), DesiredPlayers, MinPlayers));
-                        }
-                    }
-
-                    return true;
-                }
-            }
-
-            return false;
+			foreach (var member in m_lstMembers)
+			{
+				var session = member.GetAssociatedSession();
+				if (session != null)
+					await SendMatchmakingMessage(session, $"Status: {CurrentMemberCount()}/{DesiredPlayers} players. ({MinPlayers} required to start)");
+			}
+			return true;
 		}
 
 		public MatchmakingBucket(UInt16 playlistID, UserSession owningSession, int minPlayers, int desiredPlayers, ConcurrentList<int> mapIndices, UInt32 exe_crc, UInt32 ini_crc, EKnownAnticheatID anticheatID)
@@ -858,12 +821,12 @@ static class MatchmakingManager
 		Int64 m_timeStartedWaitingOnLobbyJoins = -1;
 
 		// how long we give everyone to actually connect to the QuickMatch lobby before we give up on the stragglers
-		private const Int64 c_LobbyJoinTimeoutMSec = 45000;
-		private const int c_GameStartCountdownMSec = 5000;
-		private const int c_SetupClientTimeoutMarginMSec = 2000;
+		private const Int64 LobbyJoinTimeoutMs = 45000;
+		private const int GameStartCountdownMs = 5000;
+		private const int SetupClientTimeoutMarginMs = 2000;
 
 		// older clients treat any timeout_ms below this as the start countdown
-		private const int c_LegacyClientCountdownThresholdMSec = 10000;
+		private const int LegacyClientCountdownThresholdMs = 10000;
 
 		private async Task StartGameAfterSuccessfulMeshCheck(Lobby lobby)
 		{
@@ -905,9 +868,11 @@ static class MatchmakingManager
 			}
 		}
 
+		private long m_MeshCheckID;
+
 		private async Task TriggerFullMeshConnectivityChecks(Lobby lobby)
 		{
-			await lobby.StartFullMeshConnectivityCheck();
+			m_MeshCheckID = await lobby.StartMeshCheckAsync();
 			lock (m_StateLock)
 			{
 				// Publish the state transition before any notification work. If a send fails, the
@@ -916,9 +881,7 @@ static class MatchmakingManager
 			}
 
 			// kept at or above the legacy threshold so short tuned checks don't show a start countdown on older clients
-			QueueSetupProgress(Math.Max(FullMeshCheckSettings.MaxDurationMS + c_SetupClientTimeoutMarginMSec, c_LegacyClientCountdownThresholdMSec));
-
-			lobby.SendFullMeshConnectivityCheckRequestToMembers();
+			QueueSetupProgress(Math.Max(FullMeshCheckSettings.MaxDurationMs + SetupClientTimeoutMarginMs, LegacyClientCountdownThresholdMs));
 
 			foreach (MatchmakingBucketMember member in m_lstMembers)
 			{
@@ -930,9 +893,10 @@ static class MatchmakingManager
 			}
 		}
 
-		private async Task AbortQuickMatchAutoStart(string reason)
+		private async Task AbortQuickMatchAutoStartAsync(string reason, bool dropNonJoiners = false)
 		{
 			List<UserSession> sessionsToRequeue = new();
+			long abortedLobbyID;
 			lock (m_StateLock)
 			{
 				if (m_bAbortInProgress || m_bStartCommitted)
@@ -941,6 +905,7 @@ static class MatchmakingManager
 				}
 
 				m_bAbortInProgress = true;
+				abortedLobbyID = m_LobbyID;
 				m_bPendingDeletion = true;
 
 				foreach (MatchmakingBucketMember member in m_lstMembers)
@@ -959,9 +924,33 @@ static class MatchmakingManager
 			}
 
 			LobbyManager lobbyManager = ServiceLocator.Services.GetRequiredService<LobbyManager>();
-			Lobby? quickMatchLobby = lobbyManager.GetLobby(m_LobbyID);
+			Lobby? quickMatchLobby = lobbyManager.GetLobby(abortedLobbyID);
 			if (quickMatchLobby != null)
 			{
+				if (dropNonJoiners)
+				{
+					// Close admission before classifying late arrivals; never change a newer registration.
+					await quickMatchLobby.UpdateState(ELobbyState.COMPLETE);
+					foreach (var session in sessionsToRequeue)
+					{
+						if (quickMatchLobby.GetMemberFromUserID(session.m_UserID) != null) continue;
+						bool dropped = false;
+						await session.MatchmakingStateLock.WaitAsync();
+						try
+						{
+							lock (m_StateLock)
+							{
+								if (HasPlayer(session))
+								{
+									session.IsRegisteredForMatchmaking = false;
+									dropped = true;
+								}
+							}
+						}
+						finally { session.MatchmakingStateLock.Release(); }
+						if (dropped) await SendMatchmakingMessage(session, "You failed to join the QuickMatch lobby in time and have been removed from matchmaking.");
+					}
+				}
 				foreach (UserSession memberSession in sessionsToRequeue)
 				{
 					LobbyMember? lobbyMember = quickMatchLobby.GetMemberFromUserID(memberSession.m_UserID);
@@ -970,8 +959,7 @@ static class MatchmakingManager
 						// TODO: Remove this fallback once all supported clients handle MATCHMAKING_ACTION_REQUEUE.
 						// Legacy clients do not understand the requeue action, but they can still tear down
 						// peer and anti-cheat connections before joining the next temporary lobby.
-						quickMatchLobby.SendPeerTeardownToDepartingMember(lobbyMember);
-						await quickMatchLobby.RemoveMember(lobbyMember);
+						await lobbyManager.RemoveMatchmakingMemberAsync(quickMatchLobby, lobbyMember, sendPeerTeardown: true);
 					}
 				}
 
@@ -984,7 +972,7 @@ static class MatchmakingManager
 
 			foreach (UserSession memberSession in sessionsToRequeue)
 			{
-				if (await TryRequeueRegisteredPlayer(memberSession, requeueActionJSON))
+				if (await lobbyManager.TryRequeueMatchmakingAsync(memberSession, abortedLobbyID, requeueActionJSON))
 				{
 					await SendMatchmakingMessage(memberSession, reason);
 					await SendMatchmakingMessage(memberSession, "Re-queueing you into matchmaking...");
@@ -1006,6 +994,7 @@ static class MatchmakingManager
 			bool bHasStartedCountdown;
 			lock (m_StateLock)
 			{
+				if (m_bCreatingLobby) return;
 				bPendingDeletion = m_bPendingDeletion;
 				bAutoStartInvalidated = m_bAutoStartInvalidated;
 				bWaitingOnMeshConnectivityChecks = m_bWaitingOnMeshConnectivityChecks;
@@ -1040,7 +1029,7 @@ static class MatchmakingManager
 
 				if (bAutoStartInvalidated)
 				{
-					await AbortQuickMatchAutoStart("QuickMatch auto-start was aborted because a player left during match setup.");
+					await AbortQuickMatchAutoStartAsync("QuickMatch auto-start was aborted because a player left during match setup.");
 					return;
 				}
 
@@ -1049,13 +1038,13 @@ static class MatchmakingManager
 					Lobby? lobbyDuringMeshCheck = lobbyManager.GetLobby(m_LobbyID);
 					if (lobbyDuringMeshCheck == null)
 					{
-						await AbortQuickMatchAutoStart("QuickMatch auto-start was aborted because the temporary lobby no longer exists.");
+						await AbortQuickMatchAutoStartAsync("QuickMatch auto-start was aborted because the temporary lobby no longer exists.");
 						return;
 					}
 
 					await lobbyDuringMeshCheck.ProcessPendingFullMeshConnectivityChecks();
 
-					if (!lobbyDuringMeshCheck.PendingFullMeshConnectivityChecks)
+					if (await lobbyDuringMeshCheck.GetValidatedMeshCheckResultAsync(m_MeshCheckID) is bool meshComplete)
 					{
 						bool bStartCountdown;
 						bool bAbortStart;
@@ -1071,11 +1060,11 @@ static class MatchmakingManager
 							else
 							{
 								m_bWaitingOnMeshConnectivityChecks = false;
-								bStartCountdown = !bInvalidatedAtDecision && lobbyDuringMeshCheck.LastFullMeshConnectivityCheckOutcome == true;
+								bStartCountdown = IsFormationCurrent(lobbyDuringMeshCheck) && meshComplete;
 								bAbortStart = !bStartCountdown;
 								if (bStartCountdown)
 								{
-									m_StartTime = Environment.TickCount64 + c_GameStartCountdownMSec;
+									m_StartTime = Environment.TickCount64 + GameStartCountdownMs;
 									m_bHasStartedCountdown = true;
 								}
 							}
@@ -1083,13 +1072,13 @@ static class MatchmakingManager
 
 						if (bStartCountdown)
 						{
-							QueueSetupProgress(c_GameStartCountdownMSec + c_SetupClientTimeoutMarginMSec, c_GameStartCountdownMSec);
+							QueueSetupProgress(GameStartCountdownMs + SetupClientTimeoutMarginMs, GameStartCountdownMs);
 							foreach (MatchmakingBucketMember member in m_lstMembers)
 							{
 								UserSession? memberSession = member.GetAssociatedSession();
 								if (memberSession != null)
 								{
-									await SendMatchmakingMessage(memberSession, $"Starting game in {c_GameStartCountdownMSec / 1000} seconds.");
+									await SendMatchmakingMessage(memberSession, $"Starting game in {GameStartCountdownMs / 1000} seconds.");
 								}
 							}
 						}
@@ -1098,7 +1087,7 @@ static class MatchmakingManager
 							string reason = bInvalidatedAtDecision
 								? "QuickMatch auto-start was aborted because a player left during match setup."
 								: "QuickMatch auto-start was aborted because not all players were fully mesh-connected.";
-							await AbortQuickMatchAutoStart(reason);
+							await AbortQuickMatchAutoStartAsync(reason);
 						}
 					}
 
@@ -1115,10 +1104,11 @@ static class MatchmakingManager
 					Lobby? lobbyAfterCountdown = lobbyManager.GetLobby(m_LobbyID);
 					if (lobbyAfterCountdown == null)
 					{
-						await AbortQuickMatchAutoStart("QuickMatch auto-start was aborted because the temporary lobby no longer exists.");
+						await AbortQuickMatchAutoStartAsync("QuickMatch auto-start was aborted because the temporary lobby no longer exists.");
 						return;
 					}
 
+					bool meshStillValid = await lobbyAfterCountdown.GetValidatedMeshCheckResultAsync(m_MeshCheckID) == true;
 					bool bStartGame;
 					bool bAbortStart;
 					lock (m_StateLock)
@@ -1132,7 +1122,7 @@ static class MatchmakingManager
 						{
 							m_bHasStartedCountdown = false;
 							m_StartTime = -1;
-							bStartGame = !m_bAutoStartInvalidated;
+							bStartGame = meshStillValid && IsFormationCurrent(lobbyAfterCountdown);
 							bAbortStart = !bStartGame;
 							if (bStartGame)
 							{
@@ -1148,7 +1138,7 @@ static class MatchmakingManager
 					}
 					else if (bAbortStart)
 					{
-						await AbortQuickMatchAutoStart("QuickMatch auto-start was aborted because a player left during match setup.");
+						await AbortQuickMatchAutoStartAsync("QuickMatch auto-start was aborted because a player left during match setup.");
 					}
 
 					return;
@@ -1214,88 +1204,8 @@ static class MatchmakingManager
 
                     // did we hit the timer OR have enough players to start?
                     bool bMinPlayersCountdownExpired = m_bReachedMinPlayers && (Environment.TickCount64 - m_timeReachedMinPlayers) > playlist.GracePeriodAtMinPlayersMSec;
-					if (bMinPlayersCountdownExpired || CurrentMemberCount() >= DesiredPlayers)
-					{
-						// reset min player countdown
-						m_bReachedMinPlayers = false;
-						m_timeReachedMinPlayers = -1;
-
-						lock (m_StateLock)
-						{
-							m_bWaitingOnLobbyJoins = true;
-							m_timeStartedWaitingOnLobbyJoins = Environment.TickCount64;
-						}
-
-						// tell everyone
-						UserSession? dummyHostUser = null;
-						foreach (MatchmakingBucketMember member in m_lstMembers)
-						{
-							UserSession? memberSession = member.GetAssociatedSession();
-							if (memberSession != null)
-							{
-								// create lb data if necessary
-								using var scope = ServiceLocator.Services.CreateScope();
-								var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-								await using var db = await factory.CreateDbContextAsync();
-
-								await Database.Leaderboards.CreateUserEntriesIfNotExists(db, memberSession.m_UserID);
-
-								if (dummyHostUser == null)
-								{
-									dummyHostUser = memberSession;
-								}
-								await SendMatchmakingMessage(memberSession, "Creating a QuickMatch lobby for everyone...");
-							}
-						}
-
-						// should have a user by now
-						if (dummyHostUser != null)
-						{
-							SharedUserData? dummyHostUserData = GenOnlineService.WebSocketManager.GetSharedDataForUser(dummyHostUser.m_UserID);
-
-							if (dummyHostUserData != null)
-							{
-								// make a lobby
-								DetermineMap(out string strMapName, out string strMapPath);
-
-								using var scope = ServiceLocator.Services.CreateScope();
-								var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-								await using var db = await factory.CreateDbContextAsync();
-
-								m_LobbyID = await lobbyManager.CreateLobby(db, dummyHostUser, dummyHostUserData.m_strDisplayName, "Quickmatch Lobby", strMapName, strMapPath + ".map",
-										true, playlist.DesiredPlayers, "", 12345, false, true, 10000, false, String.Empty, -5, false, Constants.g_DefaultCameraMaxHeight, dummyHostUser.ExeCRC, dummyHostUser.IniCRC, ELobbyType.QuickMatch,
-										dummyHostUser.AnticheatID);
-
-								Lobby? quickMatchLobby = lobbyManager.GetLobby(m_LobbyID);
-								if (quickMatchLobby != null)
-								{
-									foreach (MatchmakingBucketMember member in m_lstMembers)
-									{
-										UserSession? memberSession = member.GetAssociatedSession();
-										if (memberSession != null)
-										{
-											quickMatchLobby.MatchedUserIDs.Add(memberSession.m_UserID);
-										}
-									}
-								}
-
-								// tell both to join our lobby
-								WebSocketMessage_MatchmakerJoinLobby joinAction = new WebSocketMessage_MatchmakerJoinLobby();
-								joinAction.msg_id = (int)EWebSocketMessageID.MATCHMAKING_ACTION_JOIN_PREARRANGED_LOBBY;
-								joinAction.lobby_id = m_LobbyID;
-								byte[] bytesJSON = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(joinAction));
-
-								foreach (MatchmakingBucketMember member in m_lstMembers)
-								{
-									UserSession? memberSession = member.GetAssociatedSession();
-									if (memberSession != null)
-									{
-										memberSession.QueueWebsocketSend(bytesJSON);
-									}
-								}
-							}
-						}
-					}
+					var formation = TryBeginFormation(playlist, bMinPlayersCountdownExpired);
+					if (formation != null) await CreateFormationLobbyAsync(playlist, formation);
 				}
 				else
 				{
@@ -1359,50 +1269,16 @@ static class MatchmakingManager
 
 						// has someone failed to connect? drop them so the rest of the players aren't stuck here forever
 						bool bJoinTimeoutExpired = m_timeStartedWaitingOnLobbyJoins != -1
-							&& (Environment.TickCount64 - m_timeStartedWaitingOnLobbyJoins) > c_LobbyJoinTimeoutMSec;
+							&& (Environment.TickCount64 - m_timeStartedWaitingOnLobbyJoins) > LobbyJoinTimeoutMs;
 
-						if (bJoinTimeoutExpired && lobby.NumCurrentPlayers != CurrentMemberCount())
+						if (bJoinTimeoutExpired && !IsFormationCurrent(lobby))
 						{
-							foreach (MatchmakingBucketMember member in m_lstMembers)
-							{
-								UserSession? memberSession = member.GetAssociatedSession();
-								if (memberSession == null || lobby.GetMemberFromUserID(memberSession.m_UserID) == null)
-								{
-									if (memberSession != null)
-									{
-										Console.WriteLine("User {0} failed to join QuickMatch lobby {1} in time, dropping from bucket", memberSession.m_UserID, m_LobbyID);
-										memberSession.IsRegisteredForMatchmaking = false;
-										await SendMatchmakingMessage(memberSession, "You failed to join the QuickMatch lobby in time and have been removed from matchmaking.");
-									}
-
-									m_lstMembers.Remove(member);
-								}
-							}
-
-							// not enough players survived? tear the whole thing down and let people re-queue
-							if (CurrentMemberCount() < MinPlayers)
-							{
-								foreach (MatchmakingBucketMember member in m_lstMembers)
-								{
-									UserSession? memberSession = member.GetAssociatedSession();
-									if (memberSession != null)
-									{
-										memberSession.IsRegisteredForMatchmaking = false;
-										await SendMatchmakingMessage(memberSession, "Not enough players joined the QuickMatch lobby. Please try matchmaking again.");
-									}
-								}
-
-								m_bWaitingOnLobbyJoins = false;
-								m_timeStartedWaitingOnLobbyJoins = -1;
-
-								await lobbyManager.DeleteLobby(lobby);
-								MatchmakingManager.DestroyBucket(this);
-								return;
-							}
+							await AbortQuickMatchAutoStartAsync("Not all selected players joined the QuickMatch lobby in time.", dropNonJoiners: true);
+							return;
 						}
 
 						{
-							if (lobby.NumCurrentPlayers == CurrentMemberCount()) // everyone is in, lets start for real
+							if (IsFormationCurrent(lobby))
 							{
 								m_timeStartedWaitingOnLobbyJoins = -1;
 
@@ -1451,52 +1327,72 @@ static class MatchmakingManager
 	// Using ConcurrentBag instead of ConcurrentList for lock-free bucket management
 	private static ConcurrentDictionary<UInt16, ConcurrentBag<MatchmakingBucket>> m_dictMatchmakingBuckets = new();
 
+	public static void RemoveInvalidPlaylistsAtStartup()
+	{
+		foreach (var (id, playlist) in g_Playlists.ToArray())
+		{
+			string? error = null;
+			if (playlist.MinPlayers < 2 || playlist.DesiredPlayers > Lobby.MaxLobbySize || playlist.MinPlayers > playlist.DesiredPlayers)
+				error = "player bounds exceed supported lobby capacity";
+			else if (playlist.MinSelectedMaps < 1 || playlist.MinSelectedMaps > playlist.Maps.Count)
+				error = "minimum map selection is outside the playlist map count";
+			else if (playlist.Maps.Any(map => map.MaxPlayers < playlist.MinPlayers || map.MaxPlayers > playlist.DesiredPlayers))
+				error = "a map capacity is outside playlist player bounds";
+			else if (Enumerable.Range(playlist.MinPlayers, playlist.DesiredPlayers - playlist.MinPlayers + 1)
+				.Any(size => !playlist.Maps.Any(map => map.MaxPlayers == size)))
+				error = "an allowed formation size has no exact-size map";
+			if (error == null) continue;
+			Console.WriteLine($"Disabling matchmaking playlist {id} ({playlist.Name}): {error}.");
+			g_Playlists.Remove(id);
+		}
+	}
+
 	// TODO_QUICKMATCH: Read from db or file
 	private static Dictionary<UInt16, Playlist> g_Playlists = new()
 	{
-		{ 0, new Playlist(0, "1v1 (Random Armies)", 2, 2, 8, false, -1, false, 0, new List<PlaylistMap>()
+		{ 0, new Playlist(0, "1v1 (Random Armies)", 2, 2, 1, false, -1, false, 0, new List<PlaylistMap>()
 			{
+				new PlaylistMap("[RANK] Snowy Drought ZH v5 (2)", "[RANK] Snowy Drought ZH v5", true, 2),
+				new PlaylistMap("[RANK] Natural Threats ZH v4 (2)", "[RANK] Natural Threats ZH v4", true, 2),
+				new PlaylistMap("[RANK] Arctic Lagoon ZH v2 (2)", "[RANK] Arctic Lagoon ZH v2", true, 2),
+				new PlaylistMap("[RANK] ZH Carrier is Over v2 (2)", "[RANK] ZH Carrier is Over v2", true, 2),
+				new PlaylistMap("[RANK] Vendetta ZH v1 (2)", "[RANK] Vendetta ZH v1", true, 2),
+				new PlaylistMap("[RANK] TD NoBugsCars ZH v1 (2)", "[RANK] TD NoBugsCars ZH v1", true, 2),
+				new PlaylistMap("[RANK] Sand Scorpion (2)", "[RANK] Sand Scorpion", true, 2),
+				new PlaylistMap("[RANK] Mountain Mayhem v2 (2)", "[RANK] Mountain Mayhem v2", true, 2),
+				new PlaylistMap("[RANK] Liquid Gold ZH v2 (2)", "[RANK] Liquid Gold ZH v2", true, 2),
+				new PlaylistMap("[RANK] Imminent Victory ZH v2 (2)", "[RANK] Imminent Victory ZH v2", true, 2),
+				new PlaylistMap("[RANK] Egyptian Oasis ZH v1 (2)", "[RANK] Egyptian Oasis ZH v1", true, 2),
+				new PlaylistMap("[RANK] Desolated District ZH v1 (2)", "[RANK] Desolated District ZH v1", true, 2),
+				new PlaylistMap("[RANK] Canyon of the Dead ZH v2 (2)", "[RANK] Canyon of the Dead ZH v2", true, 2),
+				new PlaylistMap("[RANK] Blossoming Valley ZH v1 (2)", "[RANK] Blossoming Valley ZH v1", true, 2),
+				new PlaylistMap("[RANK] Barren Badlands Balanced ZH v2 (2)", "[RANK] Barren Badlands Balanced ZH v2", true, 2),
+				new PlaylistMap("Battle Plan ZH v3", "Battle Plan ZH v3", true, 2),
+				new PlaylistMap("Canyon Frost ZH v1", "Canyon Frost ZH v1", true, 2),
+				new PlaylistMap("Koujou Okawa v3", "Koujou Okawa v3", true, 2),
+				new PlaylistMap("Oxygen 1", "Oxygen 1", true, 2),
+				new PlaylistMap("Shivas Paradise v4", "Shivas Paradise v4", true, 2),
+				new PlaylistMap("Thermopylae v5", "Thermopylae v5", true, 2),
+				new PlaylistMap("Tiny Tactics ZH v2", "Tiny Tactics ZH v2", true, 2),
+				new PlaylistMap("yota nation arena v3", "yota nation arena v3", true, 2),
 				new PlaylistMap("[RANK] AKAs Magic ZH v1", "[RANK] AKAs Magic ZH v1", true, 2),
 				new PlaylistMap("[RANK] Arctic Arena ZH v1", "[RANK] Arctic Arena ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] Arctic Lagoon ZH v2 (2)", "[RANK] Arctic Lagoon ZH v2", true, 2),
-// 			    new PlaylistMap("[RANK] Barren Badlands Balanced ZH v2 (2)", "[RANK] Barren Badlands Balanced ZH v2", true, 2),
-// 			    new PlaylistMap("[RANK] Black Hell ZH v1", "[RANK] Black Hell ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] Blossoming Valley ZH v1 (2)", "[RANK] Blossoming Valley ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] Blue Hole ZH v1", "[RANK] Blue Hole ZH v1", true, 2),
-//				new PlaylistMap("[RANK] Canyon of the Dead ZH v2 (2)", "[RANK] Canyon of the Dead ZH v2", true, 2),
-// 			    new PlaylistMap("[RANK] Dammed Scorpion ZH v1", "[RANK] Dammed Scorpion ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] Desolated District ZH v1 (2)", "[RANK] Desolated District ZH v1", true, 2),
+				new PlaylistMap("[RANK] Black Hell ZH v1", "[RANK] Black Hell ZH v1", true, 2),
+				new PlaylistMap("[RANK] Blue Hole ZH v1", "[RANK] Blue Hole ZH v1", true, 2),
+				new PlaylistMap("[RANK] Dammed Scorpion ZH v1", "[RANK] Dammed Scorpion ZH v1", true, 2),
 				new PlaylistMap("[RANK] Drallim Desert ZH v2", "[RANK] Drallim Desert ZH v2", true, 2),
-// 			    new PlaylistMap("[RANK] Egyptian Oasis ZH v1 (2)", "[RANK] Egyptian Oasis ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] Farmlands of the Fallen ZH v1", "[RANK] Farmlands of the Fallen ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] Hanamura Temple ZH v1 (2)", "[RANK] Hanamura Temple ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] Imminent Victory ZH v2 (2)", "[RANK] Imminent Victory ZH v2", true, 2),
-// 			    new PlaylistMap("[RANK] Liquid Gold ZH v2 (2)", "[RANK] Liquid Gold ZH v2", true, 2),
-				new PlaylistMap("[RANK] Mountain Mayhem v2 (2)", "[RANK] Mountain Mayhem v2", true, 2),
-				new PlaylistMap("[RANK] Natural Threats ZH v4 (2)", "[RANK] Natural Threats ZH v4", true, 2),
-// 			    new PlaylistMap("[RANK] Sakura Forest II ZH v1", "[RANK] Sakura Forest II ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] Sand Scorpion (2)", "[RANK] Sand Scorpion", true, 2),
-// 			    new PlaylistMap("[RANK] Snowy Drought ZH v5 (2)", "[RANK] Snowy Drought ZH v5", true, 2),
-// 			    new PlaylistMap("[RANK] Sovereignty ZH v1", "[RANK] Sovereignty ZH v1", true, 2),
-				new PlaylistMap("[RANK] TD NoBugsCars ZH v1 (2)", "[RANK] TD NoBugsCars ZH v1", true, 2),
-				new PlaylistMap("[RANK] Vendetta ZH v1 (2)", "[RANK] Vendetta ZH v1", true, 2),
-// 			    new PlaylistMap("[RANK] ZH Carrier is Over v2 (2)", "[RANK] ZH Carrier is Over v2", true, 2),
+				new PlaylistMap("[RANK] Farmlands of the Fallen ZH v1", "[RANK] Farmlands of the Fallen ZH v1", true, 2),
+				new PlaylistMap("[RANK] Sakura Forest II ZH v1", "[RANK] Sakura Forest II ZH v1", true, 2),
+				new PlaylistMap("[RANK] Sovereignty ZH v1", "[RANK] Sovereignty ZH v1", true, 2),
 				new PlaylistMap("Arabia v2 (2)", "Arabia v2", true, 2),
-// 			    new PlaylistMap("Battle Plan ZH v3", "Battle Plan ZH v3", true, 2),
- 			    new PlaylistMap("Canyon Frost ZH v1", "Canyon Frost ZH v1", true, 2),
-				new PlaylistMap("Forest of Camelot ZH v4 (2)", "Forest of Camelot ZH v4", true, 2),
-				new PlaylistMap("Koujou Okawa v3", "Koujou Okawa v3", true, 2),
-				new PlaylistMap("Mirmulnir v4 (2)", "Mirmulnir v4", true, 2),
-				new PlaylistMap("Oxygen 1", "Oxygen 1", true, 2),
-// 			    new PlaylistMap("SandForest Domination v5 (2)", "SandForest Domination v5", true, 2),
-// 			    new PlaylistMap("Seasonal Conflict Summer V2 (2)", "Seasonal Conflict Summer V2", true, 2),
-// 			    new PlaylistMap("Shivas Paradise v4", "Shivas Paradise v4", true, 2),
-				new PlaylistMap("Terraform v2 (2)", "Terraform v2", true, 2),
-// 			    new PlaylistMap("Thermopylae v5", "Thermopylae v5", true, 2),
-// 			    new PlaylistMap("Tiny Tactics ZH v2", "Tiny Tactics ZH v2", true, 2),
-				new PlaylistMap("Toxic Lake v5 (2)", "Toxic Lake v5", true, 2),
+				new PlaylistMap("SandForest Domination v5 (2)", "SandForest Domination v5", true, 2),
+				new PlaylistMap("Toxic Lake v4 (2)", "Toxic Lake v4", true, 2),
 				new PlaylistMap("Tremble v2 (2)", "Tremble v2", true, 2),
-// 			    new PlaylistMap("yota nation arena v3", "yota nation arena v3", true, 2),
+				new PlaylistMap("[RANK] Hanamura Temple ZH v1 (2)", "[RANK] Hanamura Temple ZH v1", true, 2),
+				new PlaylistMap("Forest of Camelot ZH v4 (2)", "Forest of Camelot ZH v4", true, 2),
+				new PlaylistMap("Mirmulnir v4 (2)", "Mirmulnir v4", true, 2),
+				new PlaylistMap("Terraform v2 (2)", "Terraform v2", true, 2),
+				new PlaylistMap("Toxic Lake v5 (2)", "Toxic Lake v5", true, 2)
 			}
 		) },
 
@@ -1592,14 +1488,22 @@ static class MatchmakingManager
 		// tick mm buckets
 		// TODO_QUICKMATCH: This is slow
 		List<MatchmakingBucket> lstBucketsMergedNeedingDeleted = new();
+		HashSet<MatchmakingBucket> setBucketsMergedNeedingDeleted = new();
 		foreach (var kvPair in m_dictMatchmakingBuckets)
 		{
+			// merging needs at least two buckets in the playlist; the bucket tick itself still runs for a lone bucket
+			bool bCanMergeInPlaylist = kvPair.Value.Count >= 2;
 			foreach (MatchmakingBucket mmBucket in kvPair.Value)
 			{
 				// if we've already been merged and are awaiting delayed deletion, dont process it anymore
-				if (!lstBucketsMergedNeedingDeleted.Contains(mmBucket) && !mmBucket.IsMergedAway())
+				if (!setBucketsMergedNeedingDeleted.Contains(mmBucket) && !mmBucket.IsMergedAway())
 				{
 					await mmBucket.Tick();
+
+					if (!bCanMergeInPlaylist)
+					{
+						continue;
+					}
 
 					// try to merge with any other bucket within this playlist
 					foreach (MatchmakingBucket mmBucketMergeCandidate in kvPair.Value)
@@ -1607,18 +1511,20 @@ static class MatchmakingManager
 						if (mmBucketMergeCandidate != mmBucket)
 						{
 							// if either bucket has already been merged and is awaiting delayed deletion, dont process it anymore
-							if (lstBucketsMergedNeedingDeleted.Contains(mmBucket) || mmBucket.IsMergedAway())
+							if (setBucketsMergedNeedingDeleted.Contains(mmBucket) || mmBucket.IsMergedAway())
 							{
 								break;
 							}
 
-							if (!lstBucketsMergedNeedingDeleted.Contains(mmBucketMergeCandidate) && !mmBucketMergeCandidate.IsMergedAway())
+							if (!setBucketsMergedNeedingDeleted.Contains(mmBucketMergeCandidate) && !mmBucketMergeCandidate.IsMergedAway())
 							{
 								if (mmBucket.CanMergeWithOtherBucket(mmBucketMergeCandidate))
 								{
-									await mmBucket.MergeWithOtherBucket(mmBucketMergeCandidate);
-
-									lstBucketsMergedNeedingDeleted.Add(mmBucketMergeCandidate);
+									if (await mmBucket.MergeWithOtherBucketAsync(mmBucketMergeCandidate)
+										&& setBucketsMergedNeedingDeleted.Add(mmBucketMergeCandidate))
+									{
+										lstBucketsMergedNeedingDeleted.Add(mmBucketMergeCandidate);
+									}
 								}
 							}
 						}
@@ -1659,7 +1565,7 @@ static class MatchmakingManager
 				{
 					// A cancellation can remove the weak reference while this tick is iterating a snapshot.
 					// Re-check registration while holding the per-session gate before assigning any bucket.
-					if (!thisSession.IsRegisteredForMatchmaking || !IsPendingSession(thisSession))
+					if (thisSession.IsRetired || !thisSession.IsRegisteredForMatchmaking || !IsPendingSession(thisSession))
 					{
 						lstDestroy.Add(wrSession);
 						continue;
@@ -1739,7 +1645,7 @@ static class MatchmakingManager
 											// do the maps overlap? if so we can join
 											if (mmBucket.DoMapSelectionsIntersect(thisSession.MatchmakingMapIndicies))
 											{
-												bool bJoined = await mmBucket.Join(thisSession);
+												bool bJoined = await mmBucket.JoinAsync(thisSession);
 
 												if (bJoined)
 												{
@@ -1821,12 +1727,12 @@ static class MatchmakingManager
 		}
 	}
 
-	private static async Task<bool> TryRequeueRegisteredPlayer(UserSession session, byte[] requeueActionJSON)
+	internal static async Task<bool> TryRequeueRegisteredPlayer(UserSession session, byte[] requeueActionJSON)
 	{
 		await session.MatchmakingStateLock.WaitAsync();
 		try
 		{
-			if (!session.IsRegisteredForMatchmaking)
+			if (session.IsRetired || !session.IsRegisteredForMatchmaking)
 			{
 				return false;
 			}
@@ -1836,7 +1742,6 @@ static class MatchmakingManager
 				lstSessions.Add(new WeakReference<UserSession>(session));
 			}
 
-			session.UpdateSessionLobbyID(-1);
 			session.QueueWebsocketSend(requeueActionJSON);
 			return true;
 		}
@@ -1874,16 +1779,16 @@ static class MatchmakingManager
 			return;
 		}
 
-		bool bCancellationRejected;
+		MatchmakingDetachment detached;
 		await plr.MatchmakingStateLock.WaitAsync();
 		try
 		{
-			// A duplicate registration must not leave the player queued twice or in two buckets.
+			if (plr.IsRetired) return;
 			plr.IsRegisteredForMatchmaking = false;
 			RemovePendingSession(plr);
-			bCancellationRejected = await RemovePlayerFromAllBuckets(plr);
+			detached = RemovePlayerFromAllBuckets(plr);
 
-			if (!bCancellationRejected)
+			if (!detached.CancellationRejected)
 			{
 				plr.MatchmakingPlaylistID = playlistID;
 				plr.MatchmakingMapIndicies = new ConcurrentList<int>(validatedMapIndices);
@@ -1899,7 +1804,11 @@ static class MatchmakingManager
 			plr.MatchmakingStateLock.Release();
 		}
 
-		if (bCancellationRejected)
+		var lobbyManager = ServiceLocator.Services.GetRequiredService<LobbyManager>();
+		foreach (var entry in detached.Members)
+			await lobbyManager.RemoveMatchmakingMemberAsync(entry.Lobby, entry.Member);
+
+		if (detached.CancellationRejected)
 		{
 			await SendMatchmakingMessage(plr, "Matchmaking cannot be restarted because your game is already starting.");
 			return;
@@ -1908,66 +1817,47 @@ static class MatchmakingManager
         await SendMatchmakingMessage(plr, "Started matchmaking... Searching for players...");
 	}
 
-	private static async Task<bool> RemovePlayerFromAllBuckets(UserSession plr)
+	internal sealed record MatchmakingDetachment(bool CancellationRejected, List<(Lobby Lobby, LobbyMember Member)> Members);
+
+	private static MatchmakingDetachment RemovePlayerFromAllBuckets(UserSession player)
 	{
-		var lobbyManager = ServiceLocator.Services.GetRequiredService<LobbyManager>();
-		bool bCancellationRejected = false;
-
-		// also remove from any bucket we are in to avoid ghost buckets
-		foreach (var kvPair in m_dictMatchmakingBuckets)
+		var lobbies = ServiceLocator.Services.GetRequiredService<LobbyManager>();
+		bool rejected = false;
+		List<(Lobby, LobbyMember)> members = new();
+		foreach (var buckets in m_dictMatchmakingBuckets.Values)
 		{
-			foreach (MatchmakingBucket mmBucket in kvPair.Value)
+			foreach (var bucket in buckets)
 			{
-				bool bRemoved = mmBucket.RemovePlayer(plr, out bool bBucketCancellationRejected);
-				bCancellationRejected |= bBucketCancellationRejected;
-
-				if (bRemoved)
-				{
-					// remove from QM lobby too
-					Lobby? lobby = lobbyManager.GetLobby(mmBucket.GetLobbyID());
-					if (lobby != null)
-					{
-						LobbyMember? lobbyMember = lobby.GetMemberFromUserID(plr.m_UserID);
-						if (lobbyMember != null)
-						{
-							Console.WriteLine("User {0} Leave MM Lobby", plr.m_UserID);
-							await lobby.RemoveMember(lobbyMember);
-						}
-					}
-
-					// if we're the last player, destroy the bucket
-					if (mmBucket.CurrentMemberCount() == 0)
-					{
-						DestroyBucket(mmBucket);
-					}
-				}
+				bool removed = bucket.RemovePlayer(player, out bool cancellationRejected);
+				rejected |= cancellationRejected;
+				if (!removed) continue;
+				var lobby = lobbies.GetLobby(bucket.GetLobbyID());
+				var member = lobby?.GetMemberFromUserID(player.m_UserID);
+				if (member != null && member.GetSession().TryGetTarget(out var memberSession) && ReferenceEquals(memberSession, player))
+					members.Add((lobby!, member));
+				if (bucket.CurrentMemberCount() == 0) DestroyBucket(bucket);
 			}
 		}
-
-		return bCancellationRejected;
+		return new(rejected, members);
 	}
 
-	public static async Task DeregisterPlayer(UserSession plr)
+	// Only matchmaking state is changed here. Membership effects run after releasing
+	// this lock, so lifecycle operations can acquire user gate -> matchmaking lock.
+	internal static async Task<MatchmakingDetachment> DetachSessionAsync(UserSession player)
 	{
-		var lobbyManager = ServiceLocator.Services.GetRequiredService<LobbyManager>();
-		bool bCancellationRejected;
-		await plr.MatchmakingStateLock.WaitAsync();
+		await player.MatchmakingStateLock.WaitAsync();
 		try
 		{
-			plr.IsRegisteredForMatchmaking = false;
-			RemovePendingSession(plr);
-			bCancellationRejected = await RemovePlayerFromAllBuckets(plr);
+			player.IsRegisteredForMatchmaking = false;
+			RemovePendingSession(player);
+			return RemovePlayerFromAllBuckets(player);
 		}
 		finally
 		{
-			plr.MatchmakingStateLock.Release();
-		}
-
-		// leave QM lobby too
-		if (!bCancellationRejected)
-		{
-			Console.WriteLine("[Source 4] User {0} Leave Any Lobby", plr.m_UserID);
-			await lobbyManager.LeaveAnyLobby(plr.m_UserID);
+			player.MatchmakingStateLock.Release();
 		}
 	}
+
+	public static Task DeregisterPlayerAsync(UserSession player) =>
+		ServiceLocator.Services.GetRequiredService<LobbyManager>().CancelMatchmakingAsync(player);
 }

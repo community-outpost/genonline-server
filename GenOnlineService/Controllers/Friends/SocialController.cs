@@ -575,7 +575,7 @@ namespace GenOnlineService.Controllers
 
             if (targetData != null) // user is online
 			{
-				// - Remove from target friends, cache  (if present - Remove checks Contains)
+				// - Remove from target friends, cache (if present - Remove checks Contains)
 				targetData.GetSocialContainer().Friends.Remove(requester_user_id);
             }
 
