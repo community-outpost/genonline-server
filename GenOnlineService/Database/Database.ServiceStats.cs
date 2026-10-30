@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using GenOnlineService;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using System.Text.Json;
@@ -55,6 +56,8 @@ namespace Database
 {
 	public static class ServiceStats
 	{
+		private static readonly ILogger s_log = AppLog.For(typeof(ServiceStats));
+
 		public static async Task CommitStats(
 			AppDbContext db,
 			int day_of_year,
@@ -93,8 +96,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] CommitStats failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "CommitStats failed");
 			}
 		}
 

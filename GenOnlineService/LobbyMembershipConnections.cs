@@ -20,6 +20,8 @@ namespace GenOnlineService;
 
 public sealed class LobbyMembershipConnections
 {
+	private static readonly ILogger s_log = AppLog.For(typeof(LobbyMembershipConnections));
+
 	public UserSession? GetSession(long userID, EUserSessionType sessionType) =>
 		WebSocketManager.GetSessionFromUser(userID, sessionType);
 
@@ -36,7 +38,7 @@ public sealed class LobbyMembershipConnections
 		catch (Exception ex)
 		{
 			// Relay failure does not undo a successful lobby join.
-			SentrySdk.CaptureException(ex);
+			s_log.LogError(ex, "Creating relay credentials for user {UserId} failed", userID);
 			return ("", "");
 		}
 	}

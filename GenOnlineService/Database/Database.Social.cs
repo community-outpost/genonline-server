@@ -97,6 +97,8 @@ namespace Database
 {
 	public static class Social
 	{
+		private static readonly ILogger s_log = AppLog.For(typeof(Social));
+
 		private static readonly Func<AppDbContext, long, IAsyncEnumerable<FriendEntry>> _getFriends =
 		EF.CompileAsyncQuery(
 			(AppDbContext db, long userId) =>
@@ -142,8 +144,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] GetFriends failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "GetFriends failed");
 			}
 
 			return result;
@@ -158,8 +159,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] CountFriends failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "CountFriends failed");
 
 				// Treat an unreadable count as full so the friends limit is never bypassed.
 				return int.MaxValue;
@@ -178,8 +178,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] GetBlocked failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "GetBlocked failed");
 			}
 
 			return result;
@@ -197,8 +196,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] GetPendingFriendsRequests failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "GetPendingFriendsRequests failed");
 			}
 
 			return result;
@@ -217,8 +215,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] RemovePendingFriendRequest failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "RemovePendingFriendRequest failed");
 			}
 		}
 
@@ -247,8 +244,7 @@ namespace Database
 				if (DbHelpers.IsUniqueViolation(ex))
 					return;
 
-				Console.WriteLine($"[ERROR] CreateFriendship failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "CreateFriendship failed");
 			}
 		}
 
@@ -264,8 +260,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] RemoveFriendship failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "RemoveFriendship failed");
 			}
 		}
 
@@ -283,8 +278,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] AddBlock failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "AddBlock failed");
 			}
 		}
 
@@ -298,8 +292,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] RemoveBlock failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "RemoveBlock failed");
 			}
 		}
 
@@ -317,8 +310,7 @@ namespace Database
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] AddPendingFriendRequest failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				s_log.LogError(ex, "AddPendingFriendRequest failed");
 			}
 		}
 

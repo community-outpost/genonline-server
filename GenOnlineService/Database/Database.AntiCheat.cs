@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using GenOnlineService;
 using Microsoft.EntityFrameworkCore;		
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.Extensions.Primitives;
@@ -258,6 +259,17 @@ namespace Database
 {
 	public static class AntiCheat
 	{
+		private static readonly ILogger s_log = AppLog.For(typeof(AntiCheat));
+
+		// Column limits of ac_reviews_modules (module_name varchar(128), module_path varchar(512))
+		public const int ModuleNameMaxLength = 128;
+		public const int ModulePathMaxLength = 512;
+
+		public static string CleanModuleText(string? value, int maxLength)
+		{
+			return TextSanitizer.Clean(value, maxLength);
+		}
+
 		private static DbParameter CreateParameter(bool postgres, string name, object value)
 		{
 			return postgres ? new NpgsqlParameter(name, value) : new MySqlParameter(name, value);
@@ -276,11 +288,12 @@ namespace Database
 						.SetProperty(u => u.BanVerifiedBy, "x64")
 						.SetProperty(u => u.BanAliases, "")
 					);
+				AppMetrics.RecordSecurityAction("anticheat_", "success");
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] AC_BanUser failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				AppMetrics.RecordSecurityAction("anticheat_", "error");
+				s_log.LogError(ex, "AC_BanUser failed");
 			}
 		}
 
@@ -311,6 +324,7 @@ namespace Database
 						ON DUPLICATE KEY UPDATE user_id = user_id");
 				}
 
+				AppMetrics.RecordSecurityAction("anticheat_", "success");
 			}
 			catch (Exception ex)
 			{
@@ -319,8 +333,8 @@ namespace Database
 					return;
 				}
 
-				Console.WriteLine($"[ERROR] FlagAccountForReview failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				AppMetrics.RecordSecurityAction("anticheat_", "error");
+				s_log.LogError(ex, "FlagAccountForReview failed");
 			}
 		}
 
@@ -375,6 +389,7 @@ namespace Database
 					await db.Database.ExecuteSqlRawAsync(sql.ToString(), parameters);
 				}
 
+				AppMetrics.RecordSecurityAction("anticheat_", "success");
 				return true;
 			}
 			catch (Exception ex)
@@ -384,8 +399,8 @@ namespace Database
 					return true;
 				}
 
-				Console.WriteLine($"[ERROR] FlagAccountForReview_Modules failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				AppMetrics.RecordSecurityAction("anticheat_", "error");
+				s_log.LogError(ex, "FlagAccountForReview_Modules failed");
 				return false;
 			}
 		}
@@ -408,11 +423,12 @@ namespace Database
 				});
 
 				await db.SaveChangesAsync();
+				AppMetrics.RecordSecurityAction("anticheat_", "success");
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] FlagAccountForReview_SuspectProbes failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				AppMetrics.RecordSecurityAction("anticheat_", "error");
+				s_log.LogError(ex, "FlagAccountForReview_SuspectProbes failed");
 			}
 		}
 
@@ -431,11 +447,12 @@ namespace Database
 				});
 
 				await db.SaveChangesAsync();
+				AppMetrics.RecordSecurityAction("anticheat_", "success");
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($"[ERROR] FlagAccountForReview_NewAccount_FirstMatches failed: {ex.Message}");
-				SentrySdk.CaptureException(ex);
+				AppMetrics.RecordSecurityAction("anticheat_", "error");
+				s_log.LogError(ex, "FlagAccountForReview_NewAccount_FirstMatches failed");
 			}
 		}
 
