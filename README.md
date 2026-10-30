@@ -1,43 +1,29 @@
-# Services
-GeneralsOnline Game Services Code provides RESTful web services which act as a replacement and modernization of the GameSpy functionality found in the original release of Command & Conquer: Generals - Zero Hour
+# GenOnline Server
 
-# Build Status: Windows
-[![Windows (x64 + arm64)](https://github.com/GeneralsOnlineDevelopmentTeam/Services/actions/workflows/Windows.yml/badge.svg)](https://github.com/GeneralsOnlineDevelopmentTeam/Services/actions/workflows/Windows.yml)
+The game services behind Command & Conquer: Generals Online (Zero Hour): sign-in, lobbies, quick match, chat, friends, stats and ladders. They replace what GameSpy did for the original game.
 
-# Build Status: Linux
-[![Linux (x64 + arm64)](https://github.com/GeneralsOnlineDevelopmentTeam/Services/actions/workflows/Linux-MUSL.yml/badge.svg)](https://github.com/GeneralsOnlineDevelopmentTeam/Services/actions/workflows/Linux-MUSL.yml)
-[![Linux MUSL (x64 + arm64)](https://github.com/GeneralsOnlineDevelopmentTeam/Services/actions/workflows/Linux.yml/badge.svg)](https://github.com/GeneralsOnlineDevelopmentTeam/Services/actions/workflows/Linux.yml)
+[![Windows](https://github.com/community-outpost/genonline-server/actions/workflows/Windows.yml/badge.svg)](https://github.com/community-outpost/genonline-server/actions/workflows/Windows.yml)
+[![Linux](https://github.com/community-outpost/genonline-server/actions/workflows/Linux.yml/badge.svg)](https://github.com/community-outpost/genonline-server/actions/workflows/Linux.yml)
+[![macOS](https://github.com/community-outpost/genonline-server/actions/workflows/MacOS.yml/badge.svg)](https://github.com/community-outpost/genonline-server/actions/workflows/MacOS.yml)
 
-# Build Status: MacOS
-[![MacOS (x64 + arm64)](https://github.com/GeneralsOnlineDevelopmentTeam/Services/actions/workflows/MacOS.yml/badge.svg)](https://github.com/GeneralsOnlineDevelopmentTeam/Services/actions/workflows/MacOS.yml)
+## Requirements
 
-# Original Game Functionality Implemented
-- Quick Match
-- Custom Match
-- Ladders
-- Rooms & Chat
-- Profiles
-- Player Stats
-- Friends / Buddies / Social System
-- Global / Daily Stats
-- Auto-update
+- .NET 10 SDK
+- PostgreSQL 15 or newer (MariaDB 12.1.2 or newer works for a single copy)
 
-# Required Dependencies
-- Microsoft Visual Studio (2026 Community Edition recommended)
-- MySQL/MariaDB server (MariaDB 12.1.2 or higher recommended)
-- MySQL management tool or command line (e.g. HeidiSQL)
-- .NET SDK 10
+## Getting started
 
-# Optional Dependencies (not required for development, required for live)
-- Discord App ID
-- S3 compatible storage
-- STUN + TURN servers
+1. Build with `dotnet build GenServices.sln`.
+2. Fill in `appsettings.json`, including the `Database` section (`db_provider` is `postgres` or `mysql`).
+3. Create the schema with `GenOnlineService migrate`. The service never migrates on its own.
+4. Run `GenOnlineService`.
 
-# How To Build
-- Sync the repository
-- Open GenServices.sln
-- Build the solution for x64, Windows (or your architecture & OS if different)
-- Edit appsettings.json and fill out any TODO sections (e.g. token settings, database settings)
-- Import the SQL structure to your database (GenOnlineService\Database_Structure\structure.sql)
-- When upgrading an existing database, apply new `GenOnlineService\Database_Structure\upgrade_*.sql` files in date order before starting the updated service
-- Run GenOnlineService.exe
+To upgrade, stop the service, run `GenOnlineService migrate --yes` and start the new version.
+
+## Contributing
+
+Changes land on `main` through pull requests. A model change needs an EF Core migration for both `PostgresAppDbContext` and `MySqlAppDbContext`.
+
+## License
+
+AGPL-3.0, see [LICENSE](LICENSE).
