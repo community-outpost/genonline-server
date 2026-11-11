@@ -443,6 +443,7 @@ namespace GenOnlineService.Controllers
 				&& field != ELobbyUpdateField.HOST_ACTION_KICK_USER)
 			{
 				lobby.ResetReadyStates();
+				lobby.CancelStartForSettingsChangeLocked();
 			}
 
 			if (field == ELobbyUpdateField.LOBBY_MAP)
