@@ -26,23 +26,14 @@ using System.Data.Common;
 using System.Text;
 using System.Text.Json;
 
-// TODO_EFCORE: When updating this, make sure we preserve old ON DUPLICATE behavior, to overwrite the old data since day_of_year key will be re-used
-public class AcReviewCrc
+public class AnticheatModuleReport
 {
+	public Int64 ReportId { get; set; }
 	public Int64 UserId { get; set; }
-	public string OriginalCrc { get; set; } = null!;
-	public string DiffCrc { get; set; } = null!;
-	public ulong MostRecentMatch { get; set; }
-}
-
-public class AcReviewModule
-{
-	public ulong ReportId { get; set; }
-	public Int64 UserId { get; set; }
-	public ulong MatchId { get; set; }
+	public Int64 MatchId { get; set; }
 	public string ModuleName { get; set; } = null!;
 	public string ModulePath { get; set; } = null!;
-	public ulong ModuleSize { get; set; }
+	public Int64 ModuleSize { get; set; }
 }
 
 // One module reported by an anticheat Type2 probe response
@@ -129,53 +120,27 @@ internal static class AntiCheatModuleAllowList
 	}
 }
 
-public class AcReviewNewAccountGame
+public class AnticheatNewAccountGame
 {
-	public ulong ReportId { get; set; }
+	public Int64 ReportId { get; set; }
 	public Int64 UserId { get; set; }
-	public ulong MatchId { get; set; }
+	public Int64 MatchId { get; set; }
 }
 
-public class AcReviewProbe
+public class AnticheatProbeReport
 {
-	public ulong ReportId { get; set; }
+	public Int64 ReportId { get; set; }
 	public Int64 UserId { get; set; }
-	public ulong MatchId { get; set; }
+	public Int64 MatchId { get; set; }
 	public string Reason { get; set; } = null!;
 }
 
 
-public class AcReviewCrcConfiguration : IEntityTypeConfiguration<AcReviewCrc>
+public class AnticheatModuleReportConfiguration : IEntityTypeConfiguration<AnticheatModuleReport>
 {
-	public void Configure(EntityTypeBuilder<AcReviewCrc> entity)
+	public void Configure(EntityTypeBuilder<AnticheatModuleReport> entity)
 	{
-		entity.ToTable("ac_reviews_crc");
-
-		entity.HasKey(e => new { e.UserId, e.OriginalCrc, e.DiffCrc, e.MostRecentMatch });
-
-		entity.Property(e => e.UserId)
-			.HasColumnName("user_id");
-
-		entity.Property(e => e.OriginalCrc)
-			.HasColumnName("original_crc")
-			.HasMaxLength(64)
-			.IsRequired();
-
-		entity.Property(e => e.DiffCrc)
-			.HasColumnName("diff_crc")
-			.HasMaxLength(64)
-			.IsRequired();
-
-		entity.Property(e => e.MostRecentMatch)
-			.HasColumnName("most_recent_match");
-	}
-}
-
-public class AcReviewModuleConfiguration : IEntityTypeConfiguration<AcReviewModule>
-{
-	public void Configure(EntityTypeBuilder<AcReviewModule> entity)
-	{
-		entity.ToTable("ac_reviews_modules");
+		entity.ToTable("anticheat_module_reports");
 
 		entity.HasKey(e => e.ReportId);
 
@@ -204,15 +169,15 @@ public class AcReviewModuleConfiguration : IEntityTypeConfiguration<AcReviewModu
 
 		entity.HasIndex(e => new { e.UserId, e.MatchId, e.ModuleName })
 			.IsUnique()
-			.HasDatabaseName("user_id_match_id_module_name");
+			.HasDatabaseName("ux_anticheat_module_reports_user_match_module");
 	}
 }
 
-public class AcReviewNewAccountGameConfiguration : IEntityTypeConfiguration<AcReviewNewAccountGame>
+public class AnticheatNewAccountGameConfiguration : IEntityTypeConfiguration<AnticheatNewAccountGame>
 {
-	public void Configure(EntityTypeBuilder<AcReviewNewAccountGame> entity)
+	public void Configure(EntityTypeBuilder<AnticheatNewAccountGame> entity)
 	{
-		entity.ToTable("ac_reviews_new_account_games");
+		entity.ToTable("anticheat_new_account_games");
 
 		entity.HasKey(e => e.ReportId);
 
@@ -228,11 +193,11 @@ public class AcReviewNewAccountGameConfiguration : IEntityTypeConfiguration<AcRe
 	}
 }
 
-public class AcReviewProbeConfiguration : IEntityTypeConfiguration<AcReviewProbe>
+public class AnticheatProbeReportConfiguration : IEntityTypeConfiguration<AnticheatProbeReport>
 {
-	public void Configure(EntityTypeBuilder<AcReviewProbe> entity)
+	public void Configure(EntityTypeBuilder<AnticheatProbeReport> entity)
 	{
-		entity.ToTable("ac_reviews_probes");
+		entity.ToTable("anticheat_probe_reports");
 
 		entity.HasKey(e => e.ReportId);
 
@@ -261,7 +226,6 @@ namespace Database
 	{
 		private static readonly ILogger s_log = AppLog.For(typeof(AntiCheat));
 
-		// Column limits of ac_reviews_modules (module_name varchar(128), module_path varchar(512))
 		public const int ModuleNameMaxLength = 128;
 		public const int ModulePathMaxLength = 512;
 
@@ -274,70 +238,6 @@ namespace Database
 		{
 			return postgres ? new NpgsqlParameter(name, value) : new MySqlParameter(name, value);
 		}
-
-		public static async Task AC_BanUser(AppDbContext db, long userId, string reason)
-		{
-			try
-			{
-				await db.Users
-					.Where(u => u.ID == userId)
-					.ExecuteUpdateAsync(setters => setters
-						.SetProperty(u => u.IsBanned, true)
-						.SetProperty(u => u.BanReason, reason)
-						.SetProperty(u => u.BannedBy, "Anticheat")
-						.SetProperty(u => u.BanVerifiedBy, "x64")
-						.SetProperty(u => u.BanAliases, "")
-					);
-				AppMetrics.RecordSecurityAction("anticheat_", "success");
-			}
-			catch (Exception ex)
-			{
-				AppMetrics.RecordSecurityAction("anticheat_", "error");
-				s_log.LogError(ex, "AC_BanUser failed");
-			}
-		}
-
-
-		public static async Task FlagAccountForReview(
-	AppDbContext db,
-	Int64 userId,
-	string originalCrc,
-	string diffCrc,
-	ulong matchId)
-		{
-			try
-			{
-				// Idempotent insert: every column is part of the primary key, so a duplicate is an identical report
-				// (same match) and is ignored; a new match still records a new row, as before
-				if (db.Database.IsNpgsql())
-				{
-					await db.Database.ExecuteSqlInterpolatedAsync($@"
-						INSERT INTO ac_reviews_crc (user_id, original_crc, diff_crc, most_recent_match)
-						VALUES ({userId}, {originalCrc}, {diffCrc}, {(long)matchId})
-						ON CONFLICT (user_id, original_crc, diff_crc, most_recent_match) DO NOTHING");
-				}
-				else
-				{
-					await db.Database.ExecuteSqlInterpolatedAsync($@"
-						INSERT INTO ac_reviews_crc (user_id, original_crc, diff_crc, most_recent_match)
-						VALUES ({userId}, {originalCrc}, {diffCrc}, {matchId})
-						ON DUPLICATE KEY UPDATE user_id = user_id");
-				}
-
-				AppMetrics.RecordSecurityAction("anticheat_", "success");
-			}
-			catch (Exception ex)
-			{
-				if (DbHelpers.IsUniqueViolation(ex))
-				{
-					return;
-				}
-
-				AppMetrics.RecordSecurityAction("anticheat_", "error");
-				s_log.LogError(ex, "FlagAccountForReview failed");
-			}
-		}
-
 
 		// false on a real database error; true when stored or already there
 		public static async Task<bool> FlagAccountForReview_Modules(
@@ -361,10 +261,10 @@ namespace Database
 					bool postgres = db.Database.IsNpgsql();
 
 					// Only parameter placeholders are concatenated here, all values are bound as parameters
-					StringBuilder sql = new StringBuilder("INSERT INTO ac_reviews_modules (user_id, match_id, module_name, module_path, module_size) VALUES ");
+					StringBuilder sql = new StringBuilder("INSERT INTO anticheat_module_reports (user_id, match_id, module_name, module_path, module_size) VALUES ");
 					List<object> parameters = new List<object>(2 + (count * 3));
 					parameters.Add(CreateParameter(postgres, "@uid", userId));
-					parameters.Add(CreateParameter(postgres, "@mid", postgres ? (long)matchId : (object)matchId));
+					parameters.Add(CreateParameter(postgres, "@mid", (long)matchId));
 
 					for (int i = 0; i < count; ++i)
 					{
@@ -378,7 +278,7 @@ namespace Database
 						sql.Append("(@uid, @mid, @n").Append(i).Append(", @p").Append(i).Append(", @s").Append(i).Append(')');
 						parameters.Add(CreateParameter(postgres, "@n" + i, module.ModuleName));
 						parameters.Add(CreateParameter(postgres, "@p" + i, module.ModulePath));
-						parameters.Add(CreateParameter(postgres, "@s" + i, postgres ? (long)module.ModuleSize : (object)(ulong)module.ModuleSize));
+						parameters.Add(CreateParameter(postgres, "@s" + i, (long)module.ModuleSize));
 					}
 
 					// repeats on the unique key (user_id, match_id, module_name) are ignored (a no-op update on MySQL); other errors surface
@@ -415,10 +315,10 @@ namespace Database
 		{
 			try
 			{
-				db.AcReviewsProbes.Add(new AcReviewProbe
+				db.AnticheatProbeReports.Add(new AnticheatProbeReport
 				{
 					UserId = userId,
-					MatchId = matchId,
+					MatchId = (long)matchId,
 					Reason = reason
 				});
 
@@ -440,10 +340,10 @@ namespace Database
 		{
 			try
 			{
-				db.AcReviewsNewAccountGames.Add(new AcReviewNewAccountGame
+				db.AnticheatNewAccountGames.Add(new AnticheatNewAccountGame
 				{
 					UserId = userId,
-					MatchId = matchId
+					MatchId = (long)matchId
 				});
 
 				await db.SaveChangesAsync();
