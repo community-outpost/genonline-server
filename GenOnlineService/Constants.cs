@@ -387,12 +387,12 @@ namespace GenOnlineService
 			}
 		}
 
-		public static Task<UserWebSocketInstance> CreateSession(AppDbContext _db, EUserSessionType sessionType, bool bIsReconnect, Int64 ownerID, KnownClients.EKnownClients client_id, string ipAddr, string strContinent, string strCountry, double dLatitude, double dLongitude, bool bIsAdmin)
+		public static Task<UserWebSocketInstance> CreateSession(AppDbContext _db, EUserSessionType sessionType, bool bIsReconnect, Int64 ownerID, KnownClients.EKnownClients client_id, string ipAddr, string strContinent, string strCountry, double dLatitude, double dLongitude)
 		{
-			return ServiceLocator.Services.GetRequiredService<LobbyManager>().OpenSessionAsync(_db, sessionType, bIsReconnect, ownerID, client_id, ipAddr, strContinent, strCountry, dLatitude, dLongitude, bIsAdmin);
+			return ServiceLocator.Services.GetRequiredService<LobbyManager>().OpenSessionAsync(_db, sessionType, bIsReconnect, ownerID, client_id, ipAddr, strContinent, strCountry, dLatitude, dLongitude);
 		}
 
-		internal static async Task<UserWebSocketInstance> InstallSession(AppDbContext _db, EUserSessionType sessionType, bool bIsReconnect, Int64 ownerID, KnownClients.EKnownClients client_id, string ipAddr, string strContinent, string strCountry, double dLatitude, double dLongitude, bool bIsAdmin)
+		internal static async Task<UserWebSocketInstance> InstallSession(AppDbContext _db, EUserSessionType sessionType, bool bIsReconnect, Int64 ownerID, KnownClients.EKnownClients client_id, string ipAddr, string strContinent, string strCountry, double dLatitude, double dLongitude)
 		{
 			string strDisplayName = await Database.Users.GetDisplayName(_db, ownerID);
 			await Database.Users.UpdateLastLoginData(_db, ownerID, ipAddr);
@@ -427,7 +427,7 @@ namespace GenOnlineService
 						// get stats
 						PlayerStats GameStats = await Database.UserStats.GetPlayerStats(_db, ownerID);
 
-						m_dictSharedUserData[ownerID] = new SharedUserData(ownerID, socialContainer, strDisplayName, bIsAdmin, GameStats);
+						m_dictSharedUserData[ownerID] = new SharedUserData(ownerID, socialContainer, strDisplayName, GameStats);
 					}
 
 					// clear abandoned flag
@@ -487,7 +487,7 @@ namespace GenOnlineService
 				}
 				else
 				{
-					m_dictSharedUserData[ownerID] = new SharedUserData(ownerID, socialContainer, strDisplayName, bIsAdmin, GameStats);
+					m_dictSharedUserData[ownerID] = new SharedUserData(ownerID, socialContainer, strDisplayName, GameStats);
 				}
 			}
 
@@ -1032,7 +1032,8 @@ namespace GenOnlineService
 					continue;
 				}
 
-				string displayName = sharedUserData.IsAdmin()
+				bool bIsStaff = sharedUserData.HasPermission(Permissions.ChatStaffBadge);
+				string displayName = bIsStaff
 					? $"[★★GO STAFF★★] {sharedUserData.m_strDisplayName}"
 					: sharedUserData.m_strDisplayName;
 
@@ -1045,7 +1046,7 @@ namespace GenOnlineService
 					displayName += " [WEBCHAT]";
 				}
 
-				memberListUpdate.members.Add(new RoomMember(session.m_UserID, displayName, sharedUserData.IsAdmin()));
+				memberListUpdate.members.Add(new RoomMember(session.m_UserID, displayName, bIsStaff));
 			}
 		}
 
@@ -1146,7 +1147,6 @@ namespace GenOnlineService
 
 		public Int64 m_UserID = -1;
 		public string m_strDisplayName = String.Empty;
-		private bool m_bIsAdmin;
 
 		// contains ELO too
 		public PlayerStats? GameStats { get; private set; } = null;
@@ -1155,7 +1155,7 @@ namespace GenOnlineService
 
 		public UserSocialContainer GetSocialContainer() { return m_socialContainer; }
 
-		public bool IsAdmin() { return m_bIsAdmin; }
+		public bool HasPermission(string permission) { return StaffRoles.HasPermission(m_UserID, permission); }
 
 		public bool TryConsumeChatMessage()
 		{
@@ -1199,10 +1199,9 @@ namespace GenOnlineService
 			}
 		}
 
-		public SharedUserData(Int64 ownerID, UserSocialContainer socialContainer, string strDisplayName, bool bIsAdmin, PlayerStats userStats)
+		public SharedUserData(Int64 ownerID, UserSocialContainer socialContainer, string strDisplayName, PlayerStats userStats)
 		{
 			m_strDisplayName = strDisplayName;
-			m_bIsAdmin = bIsAdmin;
 
 			m_UserID = ownerID;
 

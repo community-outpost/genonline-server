@@ -85,6 +85,9 @@ public abstract class AppDbContext : DbContext
 	public DbSet<FriendRequestEntry> FriendRequests => Set<FriendRequestEntry>();
 	public DbSet<ConnectionOutcome> ConnectionOutcomes => Set<ConnectionOutcome>();
 	public DbSet<UserTokenState> UserTokenStates => Set<UserTokenState>();
+	public DbSet<UserRole> UserRoles => Set<UserRole>();
+	public DbSet<Ban> Bans => Set<Ban>();
+	public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
 
 	public DbSet<AcReviewCrc> AcReviewsCrc => Set<AcReviewCrc>();
 	public DbSet<AcReviewModule> AcReviewsModules => Set<AcReviewModule>();
@@ -108,6 +111,7 @@ public abstract class AppDbContext : DbContext
 	{
 		configure(modelBuilder.Entity<DailyStat>().Property(e => e.Stats));
 		configure(modelBuilder.Entity<UserStatsEntry>().Property(e => e.Stats));
+		configure(modelBuilder.Entity<AuditLogEntry>().Property(e => e.Details));
 
 		for (int i = 0; i < 8; i++)
 		{
@@ -136,6 +140,9 @@ public abstract class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new BlockedUserConfiguration());
 		modelBuilder.ApplyConfiguration(new ConnectionOutcomeConfiguration());
 		modelBuilder.ApplyConfiguration(new UserTokenStateConfiguration());
+		modelBuilder.ApplyConfiguration(new UserRoleConfiguration());
+		modelBuilder.ApplyConfiguration(new BanConfiguration());
+		modelBuilder.ApplyConfiguration(new AuditLogConfiguration());
 		modelBuilder.ApplyConfiguration(new AcReviewCrcConfiguration());
 		modelBuilder.ApplyConfiguration(new AcReviewModuleConfiguration());
 		modelBuilder.ApplyConfiguration(new AcReviewNewAccountGameConfiguration());
