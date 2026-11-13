@@ -403,7 +403,7 @@ namespace Database
 				+ "favorite_color, favorite_side, favorite_map, favorite_starting_money, favorite_limit_superweapons, admin, banned, "
 				+ "elo_rating, monthly_elo_rating, elo_num_matches, ban_reason, banned_by, ban_verified_by, ban_aliases, "
 				+ $"{schema.Optional("users", "google_id")}, {schema.Optional("users", "google_email")}, {schema.Optional("users", "permissionslevel")}, "
-				+ $"{schema.Optional("users", "active")}, {schema.Optional("users", "relay_region")}, {schema.Optional("users", "portmapping_tech")} "
+				+ $"{schema.Optional("users", "relay_region")}, {schema.Optional("users", "portmapping_tech")} "
 				+ "FROM users ORDER BY user_id";
 
 			await foreach (var r in Rows(source, sql))
@@ -436,7 +436,6 @@ namespace Database
 					GoogleId = r.String("google_id"),
 					GoogleEmail = r.String("google_email"),
 					PermissionsLevel = r.NullableLong("permissionslevel"),
-					Active = r.NullableLong("active"),
 					RelayRegion = r.NullableLong("relay_region"),
 					PortmappingTech = r.NullableLong("portmapping_tech")
 				});
@@ -644,7 +643,7 @@ namespace Database
 						UsernameNormalized = NameNormalizer.Normalize(kept.Username),
 						Email = kept.Email,
 						EmailNormalized = kept.Email == null ? null : NameNormalizer.Normalize(kept.Email),
-						State = old.Active == null || old.Active > 0 ? UserStates.Active : UserStates.Deactivated,
+						State = UserStates.Active,
 						CreatedAt = _now,
 						UpdatedAt = _now,
 						LastSignInAt = old.LastLogin is { Year: >= 1970 } lastLogin ? Micro(lastLogin) : null
@@ -1205,7 +1204,6 @@ namespace Database
 		public string? GoogleId;
 		public string? GoogleEmail;
 		public long? PermissionsLevel;
-		public long? Active;
 		public long? RelayRegion;
 		public long? PortmappingTech;
 
@@ -1405,7 +1403,6 @@ namespace Database
 			report.Line($"Users: {AllUsers.Count} in the source, {Kept.Count} imported");
 			report.Line($"  dropped Ghost:       {AllUsers.Count(u => u.AccountType == 2)}");
 			report.Line($"  dropped DevAccount:  {AllUsers.Count(u => u.AccountType == 3)}");
-			report.Line($"  imported deactivated (active = 0): {KeptUsers.Values.Count(u => u.Active != null && u.Active <= 0)}");
 			report.Line($"  legacy bans:         {KeptUsers.Values.Count(u => u.Banned)} ({(settings.LegacyBansAsLocal ? "imported as local play bans" : "skipped")})");
 
 			var staff = KeptUsers.Values.Where(u => u.Admin || u.PermissionsLevel > 0).OrderBy(u => u.Id).ToList();

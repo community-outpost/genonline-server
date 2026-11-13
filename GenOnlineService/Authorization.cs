@@ -16,6 +16,10 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
+using System.Security.Claims;
+
 namespace GenOnlineService
 {
 	// Code checks these permissions, never role names, so a new role only changes the mapping below
@@ -30,6 +34,37 @@ namespace GenOnlineService
 		public const string RolesManage = "roles.manage";
 		public const string ServerStats = "server.stats";
 		public const string AnnouncementsSend = "announcements.send";
+		public const string TokensManage = "tokens.manage";
+
+		// Machine permissions are held only by service accounts, never by a staff role
+		public const string UsersRevoke = "users.revoke";
+		public const string OpsDatabase = "ops.database";
+		public const string MatchHistoryRead = "match_history.read";
+		public const string LobbiesRead = "lobbies.read";
+
+		public static readonly IReadOnlySet<string> Human = new HashSet<string>(StringComparer.Ordinal)
+		{
+			ModerationKick, ModerationBan, ModerationMute, ChatStaffBadge, NamesProtected, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage
+		};
+
+		public static readonly IReadOnlySet<string> Machine = new HashSet<string>(StringComparer.Ordinal)
+		{
+			UsersRevoke, OpsDatabase, MatchHistoryRead, LobbiesRead
+		};
+
+		// Privileged permissions act on any user's account and are granted and minted only through the CLI on the host
+		public static readonly IReadOnlySet<string> Privileged = new HashSet<string>(StringComparer.Ordinal)
+		{
+			UsersRevoke, OpsDatabase
+		};
+
+		public static IEnumerable<string> All => Human.Concat(Machine);
+
+		public static bool IsKnown(string permission) => Human.Contains(permission) || Machine.Contains(permission);
+
+		public static bool IsMachine(string permission) => Machine.Contains(permission);
+
+		public static bool IsPrivileged(string permission) => Privileged.Contains(permission);
 	}
 
 	// The in-memory copy is reloaded on the reconcile tick, so a change made in the database applies without a restart
@@ -54,7 +89,8 @@ namespace GenOnlineService
 			Permissions.SocialUnblockable,
 			Permissions.RolesManage,
 			Permissions.ServerStats,
-			Permissions.AnnouncementsSend
+			Permissions.AnnouncementsSend,
+			Permissions.TokensManage
 		}).ToArray();
 
 		private static readonly Dictionary<string, HashSet<string>> s_rolePermissions = new(StringComparer.Ordinal)
@@ -88,7 +124,22 @@ namespace GenOnlineService
 				}
 			}
 
+			// a machine permission on a role is dropped, so no staff role can carry one
+			result.ExceptWith(Permissions.Machine);
 			return result;
+		}
+
+		// Logs a role definition that carries a machine permission; PermissionsFor drops it either way
+		public static void ValidateRoleDefinitions()
+		{
+			foreach ((string role, HashSet<string> permissions) in s_rolePermissions)
+			{
+				string machine = string.Join(", ", permissions.Where(Permissions.IsMachine));
+				if (machine.Length > 0)
+				{
+					s_log.LogError("Staff role {Role} lists machine permission(s) {Permissions}; they are ignored", role, machine);
+				}
+			}
 		}
 
 		public static async Task Reload(AppDbContext db)
@@ -108,6 +159,84 @@ namespace GenOnlineService
 
 			s_lastUnknownRoles = unknown;
 			s_permissionsByUser = next;
+		}
+	}
+
+	public static class PermissionPolicies
+	{
+		public const string Prefix = "perm:";
+
+		public static string For(string permission) => Prefix + permission;
+	}
+
+	// Identities created by the API token scheme use this authentication type and carry their permissions as claims
+	public static class TokenPrincipal
+	{
+		public const string AuthenticationType = "gopat";
+		public const string PermissionClaim = "go_permission";
+	}
+
+	public sealed class PermissionRequirement : IAuthorizationRequirement
+	{
+		public PermissionRequirement(string permission)
+		{
+			Permission = permission;
+		}
+
+		public string Permission { get; }
+	}
+
+	public sealed class PermissionPolicyProvider : IAuthorizationPolicyProvider
+	{
+		private readonly DefaultAuthorizationPolicyProvider m_fallback;
+
+		public PermissionPolicyProvider(IOptions<AuthorizationOptions> options)
+		{
+			m_fallback = new DefaultAuthorizationPolicyProvider(options);
+		}
+
+		public Task<AuthorizationPolicy> GetDefaultPolicyAsync() => m_fallback.GetDefaultPolicyAsync();
+
+		public Task<AuthorizationPolicy?> GetFallbackPolicyAsync() => m_fallback.GetFallbackPolicyAsync();
+
+		public Task<AuthorizationPolicy?> GetPolicyAsync(string policyName)
+		{
+			if (policyName.StartsWith(PermissionPolicies.Prefix, StringComparison.Ordinal) && policyName.Length > PermissionPolicies.Prefix.Length)
+			{
+				AuthorizationPolicy policy = new AuthorizationPolicyBuilder()
+					.RequireAuthenticatedUser()
+					.AddRequirements(new PermissionRequirement(policyName.Substring(PermissionPolicies.Prefix.Length)))
+					.Build();
+				return Task.FromResult<AuthorizationPolicy?>(policy);
+			}
+
+			return m_fallback.GetPolicyAsync(policyName);
+		}
+	}
+
+	public sealed class PermissionHandler : AuthorizationHandler<PermissionRequirement>
+	{
+		protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, PermissionRequirement requirement)
+		{
+			// the identity type is set by the scheme that authenticated it, so a claim inside a token can never fake it
+			ClaimsIdentity? tokenIdentity = context.User.Identities.FirstOrDefault(i => i.IsAuthenticated && i.AuthenticationType == TokenPrincipal.AuthenticationType);
+			if (tokenIdentity != null)
+			{
+				if (tokenIdentity.HasClaim(TokenPrincipal.PermissionClaim, requirement.Permission))
+				{
+					context.Succeed(requirement);
+				}
+
+				return Task.CompletedTask;
+			}
+
+			string? subject = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			if (Int64.TryParse(subject, out Int64 userID) && userID > 0 && StaffRoles.HasPermission(userID, requirement.Permission))
+			{
+				context.Succeed(requirement);
+			}
+
+			return Task.CompletedTask;
 		}
 	}
 }

@@ -18,7 +18,6 @@
 
 using MaxMind.GeoIP2;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http.Extensions;
@@ -53,6 +52,7 @@ using System.Text.Json;
 using System.Threading.RateLimiting;
 using System.Threading.Tasks;
 using System.Xml;
+using GenOnlineService.Identity;
 
 namespace GenOnlineService
 {
@@ -86,216 +86,17 @@ namespace GenOnlineService
 		}
 	}
 
-	public static class SecretComparer
+	public static class AuthRateLimitPolicies
 	{
-		// Constant-time string comparison so an attacker can't learn a secret from response timing.
-		public static bool FixedTimeEquals(string? a, string? b)
-		{
-			if (a == null || b == null)
-			{
-				return false;
-			}
-
-			byte[] bytesA = Encoding.UTF8.GetBytes(a);
-			byte[] bytesB = Encoding.UTF8.GetBytes(b);
-
-			return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(bytesA, bytesB);
-		}
-	}
-
-	public enum EApiKeyType
-	{
-		PartnerKey,
-		WebServerKey
-	}
-
-
-	public static class APIKeyHelpers
-	{
-		private static string? s_cachedWebServerAPIKey = null;
-		private static List<string>? s_cachedApiKeys = null;
-		private static readonly object s_cacheLock = new object();
-
-		public static bool ValidateKey(string strKey, EApiKeyType keyType)
-		{
-			if (Program.g_Config == null)
-			{
-				return false;
-			}
-
-			if (keyType == EApiKeyType.PartnerKey)
-			{
-				if (s_cachedApiKeys == null)
-				{
-					lock (s_cacheLock)
-					{
-						if (s_cachedApiKeys == null)
-						{
-							IConfiguration? apiSettings = Program.g_Config.GetSection("API");
-							if (apiSettings == null)
-							{
-								return false;
-							}
-							List<string>? api_keys = apiSettings.GetSection("keys").Get<List<string>>();
-							if (api_keys == null)
-							{
-								return false;
-							}
-
-							s_cachedApiKeys = api_keys.Select(k => k.ToUpperInvariant()).ToList();
-						}
-					}
-				}
-
-				string strKeyUpper = strKey.ToUpperInvariant();
-
-				// Compare against every key without short-circuiting, so timing doesn't leak which key
-				// (or how much of a key) matched.
-				bool bMatched = false;
-				foreach (string strKnownKey in s_cachedApiKeys)
-				{
-					bMatched |= SecretComparer.FixedTimeEquals(strKnownKey, strKeyUpper);
-				}
-
-				return bMatched;
-			}
-			else if (keyType == EApiKeyType.WebServerKey)
-			{
-				if (s_cachedWebServerAPIKey == null)
-				{
-					lock (s_cacheLock)
-					{
-						if (s_cachedWebServerAPIKey == null)
-						{
-							IConfiguration? apiSettings = Program.g_Config.GetSection("API");
-							if (apiSettings == null)
-							{
-								return false;
-							}
-							string? webserverkey = apiSettings.GetSection("webserver_key").Get<string>();
-							if (webserverkey == null)
-							{
-								return false;
-							}
-
-							s_cachedWebServerAPIKey = webserverkey.ToUpper();
-						}
-					}
-				}
-
-				string strKeyUpper = strKey.ToUpperInvariant();
-				return strKeyUpper == s_cachedWebServerAPIKey;
-			}
-
-			return false;
-		}
-	}
-	public class BasicAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
-	{
-		public BasicAuthenticationHandler(
-			IOptionsMonitor<AuthenticationSchemeOptions> options,
-			ILoggerFactory logger,
-			UrlEncoder encoder,
-			TimeProvider timeProvider)
-			: base(options, logger, encoder) { }
-
-		protected override Task<AuthenticateResult> HandleAuthenticateAsync()
-		{
-			if (!Request.Headers.ContainsKey("Authorization"))
-				return Task.FromResult(AuthenticateResult.Fail("Missing Authorization Header"));
-
-			try
-			{
-				var authType = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").First();
-				var token = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
-
-				if (authType != null && token != null)
-				{
-					// monitor (basic auth)
-					if (authType.ToLower() == "basic")
-					{
-						var decodedBytes = Convert.FromBase64String(token);
-						var decodedCredentials = Encoding.UTF8.GetString(decodedBytes);
-
-						var parts = decodedCredentials.Split(':', 2);
-						if (parts.Length == 2)
-						{
-							string strUsername = parts[0];
-							string strPassword = parts[1];
-
-							IConfigurationSection? monitorSettings = Program.g_Config.GetSection("Monitor");
-
-							if (monitorSettings == null)
-							{
-								throw new Exception("Monitor section missing in config");
-							}
-
-							string? monitorUsername = monitorSettings.GetValue<string>("username");
-							string? monitorPassword = monitorSettings.GetValue<string>("password");
-
-							if (monitorUsername == null)
-							{
-								throw new Exception("Monitor Username missing in config");
-							}
-
-							if (monitorPassword == null)
-							{
-								throw new Exception("Monitor Password missing in config");
-							}
-
-							if (SecretComparer.FixedTimeEquals(monitorUsername, strUsername)
-								& SecretComparer.FixedTimeEquals(monitorPassword, strPassword))
-							{
-								var claims = new[] { new Claim(ClaimTypes.Name, strUsername), new Claim(ClaimTypes.Role, "Monitor") };
-								var identity = new ClaimsIdentity(claims, "MonitorToken");
-								var principal = new ClaimsPrincipal(identity);
-								var ticket = new AuthenticationTicket(principal, Scheme.Name);
-
-								return Task.FromResult(AuthenticateResult.Success(ticket));
-							}
-							else
-							{
-								Response.StatusCode = 401;
-								return Task.FromResult(AuthenticateResult.Fail("Invalid Authorization Header"));
-							}
-						}
-					}
-
-					// shouldnt get here
-					Response.StatusCode = 401;
-					return Task.FromResult(AuthenticateResult.Fail("Authorization Failed"));
-				}
-				else
-				{
-					Response.StatusCode = 401;
-					return Task.FromResult(AuthenticateResult.Fail("Invalid Authorization Data"));
-				}
-			}
-			catch
-			{
-				Response.StatusCode = 401;
-				return Task.FromResult(AuthenticateResult.Fail("Invalid Authorization Header"));
-			}
-		}
-	}
-
-	// Marks the endpoints that accept refresh tokens (LoginWithToken and RefreshToken). Used instead
-	// of matching on the request path so a future route whose path happens to contain "loginwithtoken"
-	// can't silently accept them.
-	[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
-	public sealed class RefreshTokenEndpointAttribute : Attribute
-	{
+		public const string SignIn = "auth_sign_in";
+		public const string Token = "auth_token";
+		public const string Session = "auth_session";
 	}
 
 	public static class TokenHelper
 	{
 		public static Int64 GetUserID(ControllerBase controller)
 		{
-			if (controller.User.IsInRole("Monitor"))
-			{
-				return -1;
-			}
-
 			var claim = controller.User.FindFirst(ClaimTypes.NameIdentifier);
 			if (claim == null || !Int64.TryParse(claim.Value, out Int64 userId))
 				return -1;
@@ -309,24 +110,11 @@ namespace GenOnlineService
 			return roles;
 		}
 
+		// The OAuth client id of the access token, by name
 		public static KnownClients.EKnownClients GetClientID(ControllerBase controller)
 		{
-			var first = controller.User.FindFirst("client_id");
-
-			if (first == null)
-				return KnownClients.EKnownClients.unknown;
-
-			if (int.TryParse(first.Value, out int clientIDInt32))
-			{
-				// Validate if the int corresponds to a defined enum value
-				if (System.Enum.IsDefined(typeof(KnownClients.EKnownClients), clientIDInt32))
-				{
-					KnownClients.EKnownClients knownClientID = (KnownClients.EKnownClients)clientIDInt32;
-					return knownClientID;
-				}
-			}
-
-			return KnownClients.EKnownClients.unknown;
+			string? clientID = controller.User.FindFirst(SessionTokenHandler.ClientIDClaim)?.Value;
+			return SessionRevocation.TryParseKnownClient(clientID, out KnownClients.EKnownClients known) ? known : KnownClients.EKnownClients.unknown;
 		}
 
 		public static EUserSessionType GetSessionType(ControllerBase controller)
@@ -611,7 +399,8 @@ namespace GenOnlineService
 
 	public class Program
 	{
-		private const string BannedUserContextKey = "GenOnlineService.BannedUserID";
+		private const string BearerSchemeSelector = "go_bearer";
+
 
 		private const int c_LobbyTickIntervalMS = 50;
 
@@ -835,6 +624,11 @@ namespace GenOnlineService
 			}
 		}
 
+		internal static IConfiguration OpenConfiguration()
+		{
+			return WebApplication.CreateBuilder(Array.Empty<string>()).Configuration;
+		}
+
 		internal static AppDbContext OpenConfiguredDbContext()
 		{
 			var config = WebApplication.CreateBuilder(Array.Empty<string>()).Configuration;
@@ -966,310 +760,43 @@ namespace GenOnlineService
 			}
 		}
 
-		// The signing key is the only thing standing between a user and a forged token, so refuse to
-		// start with a placeholder or a key too short for HS256.
-		private static void ValidateSigningKey(string strKey)
+		// Authenticated callers are partitioned by user id and anonymous callers by client address.
+		private static string RateLimitPartitionKey(HttpContext httpContext, bool bPreferUser)
 		{
-			int keyBytes = Encoding.UTF8.GetByteCount(strKey);
-
-			if (keyBytes < 32)
+			Int64? tokenID = ApiTokenPrincipals.TokenID(httpContext.User);
+			if (tokenID != null)
 			{
-				throw new Exception($"JwtSettings:Key is only {keyBytes} bytes; HS256 requires at least 32 bytes of key material.");
+				return "token:" + tokenID;
 			}
 
-			if (strKey.Contains("TODO", StringComparison.OrdinalIgnoreCase))
+			string? userID = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			if (bPreferUser && httpContext.User.Identity?.IsAuthenticated == true && !String.IsNullOrEmpty(userID))
 			{
-				throw new Exception("JwtSettings:Key is still set to the placeholder value. Set a real secret before starting the service.");
+				return "user:" + userID;
 			}
+
+			return "ip:" + (httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous");
 		}
 
-		private static bool IsRefreshTokenEndpoint(HttpContext httpContext)
+		// A limit of zero or less leaves the policy unlimited.
+		private static void AddAuthRateLimitPolicy(RateLimiterOptions options, string policyName, int permitsPerMinute, bool bPreferUser)
 		{
-			Endpoint? endpoint = httpContext.GetEndpoint();
-			if (endpoint != null)
+			options.AddPolicy(policyName, httpContext =>
 			{
-				return endpoint.Metadata.GetMetadata<RefreshTokenEndpointAttribute>() != null;
-			}
-
-			// Routing hasn't resolved an endpoint yet. Fall back to an exact final-segment match
-			// rather than a substring search over the whole path.
-			string path = httpContext.Request.Path.ToString().TrimEnd('/');
-			int lastSlash = path.LastIndexOf('/');
-			string lastSegment = lastSlash >= 0 ? path.Substring(lastSlash + 1) : path;
-			return String.Equals(lastSegment, "loginwithtoken", StringComparison.OrdinalIgnoreCase)
-				|| String.Equals(lastSegment, "refreshtoken", StringComparison.OrdinalIgnoreCase);
-		}
-
-		private static Task AdditionalValidation(TokenValidatedContext context)
-		{
-			try
-			{
-				if (context.Principal == null || context.Principal.Claims == null)
+				if (permitsPerMinute <= 0)
 				{
-					context.Fail("Failed Validation #1");
-					return Task.CompletedTask;
+					return RateLimitPartition.GetNoLimiter("unlimited");
 				}
 
-				Claim? userIdClaim = context.Principal.FindFirst(ClaimTypes.NameIdentifier);
-				if (userIdClaim == null || !Int64.TryParse(userIdClaim.Value, out Int64 userID))
+				return RateLimitPartition.GetSlidingWindowLimiter(policyName + ":" + RateLimitPartitionKey(httpContext, bPreferUser), _ => new SlidingWindowRateLimiterOptions
 				{
-					context.Fail("Failed Validation #2");
-					return Task.CompletedTask;
-				}
-
-				Claim? nameClaim = context.Principal.FindFirst(JwtRegisteredClaimNames.Name);
-				if (nameClaim == null || String.IsNullOrEmpty(nameClaim.Value))
-				{
-					context.Fail("Failed Validation #3");
-					return Task.CompletedTask;
-				}
-
-				// refresh tokens are only valid on endpoints marked [RefreshTokenEndpoint]
-				Claim? firstType = context.Principal.FindFirst(JwtRegisteredClaimNames.Typ);
-
-				if (firstType == null || String.IsNullOrEmpty(firstType.Value))
-				{
-					context.Fail("Failed Validation #4");
-					return Task.CompletedTask;
-				}
-
-				if (!int.TryParse(firstType.Value, out int tokenTypeValue)
-					|| !System.Enum.IsDefined(typeof(JwtTokenGenerator.ETokenType), tokenTypeValue))
-				{
-					context.Fail("Failed Validation #10 - Unknown token type");
-					return Task.CompletedTask;
-				}
-
-				JwtTokenGenerator.ETokenType tokenType = (JwtTokenGenerator.ETokenType)tokenTypeValue;
-
-				bool bIsRefreshEndpoint = IsRefreshTokenEndpoint(context.HttpContext);
-
-				if (tokenType == JwtTokenGenerator.ETokenType.Refresh)
-				{
-					if (!bIsRefreshEndpoint)
-					{
-						context.Fail("Failed Validation #5 - Refresh token used on non-refresh endpoint");
-						return Task.CompletedTask;
-					}
-				}
-				else if (tokenType == JwtTokenGenerator.ETokenType.Session)
-				{
-					if (bIsRefreshEndpoint)
-					{
-						context.Fail("Failed Validation #6 - Session token used on refresh endpoint");
-						return Task.CompletedTask;
-					}
-				}
-
-				Claim? addressClaim = context.Principal.FindFirst(JwtRegisteredClaimNames.Address);
-				if (addressClaim == null)
-				{
-					context.Fail("Failed Validation #7");
-					return Task.CompletedTask;
-				}
-
-				EUserSessionType sessionType;
-				{
-					Claim? sessionTypeClaim = context.Principal.FindFirst("session_type");
-					if (sessionTypeClaim == null
-						|| !int.TryParse(sessionTypeClaim.Value, out int sessionTypeValue)
-						|| !System.Enum.IsDefined(typeof(EUserSessionType), sessionTypeValue))
-					{
-						context.Fail("Failed Validation #11 - Missing or invalid session type");
-						return Task.CompletedTask;
-					}
-
-					sessionType = (EUserSessionType)sessionTypeValue;
-				}
-
-				// Revocation checks. All in-memory, no database access per request.
-				if (TokenRevocationManager.IsUserBanned(userID))
-				{
-					context.HttpContext.Items[BannedUserContextKey] = userID;
-					context.Fail("Failed Validation #12 - User is banned");
-					return Task.CompletedTask;
-				}
-
-				{
-					// Tokens issued before this claim existed are treated as generation 0, so a deploy
-					// doesn't force every live client to re-login. They still get rejected once that
-					// user's generation is bumped by a revocation.
-					int tokenGeneration = 0;
-
-					Claim? generationClaim = context.Principal.FindFirst(JwtTokenGenerator.TokenGenerationClaim);
-					if (generationClaim != null && !int.TryParse(generationClaim.Value, out tokenGeneration))
-					{
-						context.Fail("Failed Validation #13 - Invalid token generation");
-						return Task.CompletedTask;
-					}
-
-					if (tokenGeneration != TokenRevocationManager.GetGeneration(userID, sessionType))
-					{
-						context.Fail("Failed Validation #14 - Token has been revoked");
-						return Task.CompletedTask;
-					}
-				}
-
-				// Refresh tokens are single use - only the most recently issued one is accepted.
-				if (tokenType == JwtTokenGenerator.ETokenType.Refresh)
-				{
-					Claim? jtiClaim = context.Principal.FindFirst(JwtRegisteredClaimNames.Jti);
-					if (jtiClaim == null || !TokenRevocationManager.IsCurrentRefreshToken(userID, sessionType, jtiClaim.Value))
-					{
-						context.Fail("Failed Validation #15 - Refresh token has been superseded");
-						return Task.CompletedTask;
-					}
-				}
-
-				if (Program.g_Config != null)
-				{
-					IConfiguration? jwtSettings = Program.g_Config.GetSection("JwtSettings");
-
-					if (jwtSettings != null)
-					{
-						if (jwtSettings.GetValue<bool>("enforce_ip_match"))
-						{
-							string strExpectedIP = addressClaim.Value;
-							string currentIP = IPHelpers.NormalizeIP(context.HttpContext.Connection.RemoteIpAddress?.ToString());
-							if (strExpectedIP != currentIP)
-							{
-								context.Fail("Failed Validation #8 - IP mismatch");
-								return Task.CompletedTask;
-							}
-						}
-					}
-				}
-			}
-			catch
-			{
-				context.Fail("Failed Validation #9");
-			}
-
-			return Task.CompletedTask;
-		}
-
-		private static async Task HandleJwtChallenge(JwtBearerChallengeContext context)
-		{
-			if (!context.HttpContext.Items.TryGetValue(BannedUserContextKey, out object? value)
-				|| value is not Int64 userID)
-			{
-				return;
-			}
-
-			IDbContextFactory<AppDbContext> dbFactory = context.HttpContext.RequestServices.GetRequiredService<IDbContextFactory<AppDbContext>>();
-			await using var db = await dbFactory.CreateDbContextAsync();
-			UserBanStatus? banStatus = await Database.Users.GetUserBanStatus(db, userID);
-
-			if (banStatus?.IsBanned != true)
-			{
-				return;
-			}
-
-			context.HandleResponse();
-			context.Response.StatusCode = StatusCodes.Status423Locked;
-			await context.Response.WriteAsJsonAsync(new { ban_reason = banStatus.BanReason });
-		}
-
-		public class JwtTokenGenerator
-		{
-			private readonly IConfiguration _configuration;
-
-			public JwtTokenGenerator(IConfiguration configuration)
-			{
-				_configuration = configuration;
-			}
-
-			public enum ETokenType
-			{
-				Session,
-				Refresh
-			}
-
-			public const string TokenGenerationClaim = "tgen";
-
-			public string GenerateToken(string displayname, Int64 userID, string ipAddr, ETokenType tokenType, KnownClients.EKnownClients knownClientID, EUserSessionType sessionType, IReadOnlyCollection<string> staffRoles)
-			{
-				return GenerateToken(displayname, userID, ipAddr, tokenType, knownClientID, sessionType, staffRoles, out _);
-			}
-
-			public string GenerateToken(string displayname, Int64 userID, string ipAddr, ETokenType tokenType, KnownClients.EKnownClients knownClientID, EUserSessionType sessionType, IReadOnlyCollection<string> staffRoles, out string jti)
-			{
-				var jwtSettings = _configuration.GetSection("JwtSettings");
-
-				if (jwtSettings == null)
-				{
-					throw new Exception("JWT Settings not found in configuration");
-				}
-
-				string? strKey = jwtSettings["Key"];
-				if (strKey == null)
-				{
-					throw new Exception("JWT Key not found in configuration");
-				}
-
-				var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(strKey));
-				var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-				jti = Guid.NewGuid().ToString();
-
-				List<Claim> claims = new List<Claim>
-				{
-					new Claim(JwtRegisteredClaimNames.Sub, userID.ToString()),
-					new Claim(JwtRegisteredClaimNames.Jti, jti),
-					new Claim(JwtRegisteredClaimNames.Name, displayname),
-					new Claim(JwtRegisteredClaimNames.Address, ipAddr),
-					new Claim(JwtRegisteredClaimNames.Typ, ((int)tokenType).ToString()),
-					new Claim("client_id", ((int)knownClientID).ToString()),
-					new Claim("session_type", ((int)sessionType).ToString()),
-
-					// Token generation, checked against the revocation manager on every request so
-					// that bans/logouts can invalidate tokens before they naturally expire.
-					new Claim(TokenGenerationClaim, TokenRevocationManager.GetGeneration(userID, sessionType).ToString())
-				};
-
-				// everyone gets the player role
-				claims.Add(new Claim(ClaimTypes.Role, "Player"));
-
-				if (sessionType == EUserSessionType.GameClient)
-				{
-					claims.Add(new Claim(ClaimTypes.Role, "GameClient"));
-				}
-				else if (sessionType == EUserSessionType.ChatClient)
-				{
-					claims.Add(new Claim(ClaimTypes.Role, "ChatClient"));
-				}
-				else if (sessionType == EUserSessionType.GameLauncher)
-				{
-					claims.Add(new Claim(ClaimTypes.Role, "GameLauncher"));
-				}
-				else
-				{
-					throw new Exception("Unhandled session type: " + sessionType);
-				}
-
-				// the claims only inform clients, the service decides with StaffRoles
-				if (staffRoles.Contains(StaffRoles.Admin))
-				{
-					claims.Add(new Claim(ClaimTypes.Role, "Admin"));
-				}
-
-				// an admin has every moderator permission, so clients see both claims
-				if (staffRoles.Contains(StaffRoles.Moderator) || staffRoles.Contains(StaffRoles.Admin))
-				{
-					claims.Add(new Claim(ClaimTypes.Role, "Moderator"));
-				}
-
-
-				var token = new JwtSecurityToken(
-					issuer: jwtSettings["Issuer"],
-					audience: jwtSettings["Audience"],
-					claims: claims,
-					expires: DateTime.Now.AddMinutes(Convert.ToDouble(tokenType == ETokenType.Session ? jwtSettings["ExpiresInMinutes_Session"] : jwtSettings["ExpiresInMinutes_Refresh"])),
-					signingCredentials: credentials
-				);
-
-				return new JwtSecurityTokenHandler().WriteToken(token);
-			}
+					PermitLimit = permitsPerMinute,
+					Window = TimeSpan.FromMinutes(1),
+					SegmentsPerWindow = 6,
+					QueueLimit = 0,
+					AutoReplenishment = true
+				});
+			});
 		}
 
 		private static CorsPolicy BuildCorsPolicy(IConfiguration configuration)
@@ -1454,6 +981,18 @@ namespace GenOnlineService
 				return;
 			}
 
+			if (args.Length > 0 && args[0].Equals("service-accounts", StringComparison.OrdinalIgnoreCase))
+			{
+				Environment.ExitCode = await ApiTokensCli.RunServiceAccounts(args);
+				return;
+			}
+
+			if (args.Length > 0 && args[0].Equals("tokens", StringComparison.OrdinalIgnoreCase))
+			{
+				Environment.ExitCode = await ApiTokensCli.RunTokens(args);
+				return;
+			}
+
 #if !DEBUG
 			AppDomain.CurrentDomain.UnhandledException += GlobalExceptionHandler;
 #endif
@@ -1620,21 +1159,33 @@ namespace GenOnlineService
 			var rateLimitingSettings = Program.g_Config.GetSection("RateLimiting");
 			bool bUseBuiltinRateLimiter = rateLimitingSettings.GetValue<bool>("use_builtin_ratelimiter"); // use built in Kestrel/dotnet rate limiting if you do not have a reverse proxy or other rate limiter in front of service
 
-			if (bUseBuiltinRateLimiter)
+			// The auth endpoint limits apply even when the global limiter is off, because a proxy limiter does not know these endpoints.
+			bool bUseAuthRateLimits = rateLimitingSettings.GetValue<bool?>("auth_limits_enabled") ?? true;
+			builder.Services.AddRateLimiter(options =>
 			{
-				builder.Services.AddRateLimiter(options =>
+				options.OnRejected = (context, cancellationToken) =>
 				{
-					options.OnRejected = (context, cancellationToken) =>
+					// The auth policies answer 429, the global limiter keeps its existing 503.
+					string? policyName = context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+					if (policyName != null && policyName.StartsWith("auth_", StringComparison.Ordinal))
 					{
-						AppMetrics.RecordSecurityAction("http_rate_limit", "rejected");
-						return ValueTask.CompletedTask;
-					};
+						context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+					}
+
+					AppMetrics.RecordSecurityAction("http_rate_limit", "rejected");
+					return ValueTask.CompletedTask;
+				};
+
+				AddAuthRateLimitPolicy(options, AuthRateLimitPolicies.SignIn, bUseAuthRateLimits ? rateLimitingSettings.GetValue<int?>("sign_in_per_minute") ?? 30 : 0, false);
+				AddAuthRateLimitPolicy(options, AuthRateLimitPolicies.Token, bUseAuthRateLimits ? rateLimitingSettings.GetValue<int?>("token_per_minute") ?? 30 : 0, false);
+				AddAuthRateLimitPolicy(options, AuthRateLimitPolicies.Session, bUseAuthRateLimits ? rateLimitingSettings.GetValue<int?>("session_per_minute") ?? 20 : 0, true);
+
+				if (bUseBuiltinRateLimiter)
+				{
 					options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
 					{
 						// Use authenticated user ID or fallback to IP address
-						var userKey = httpContext.User.Identity?.IsAuthenticated == true
-							? httpContext.User.Identity.Name
-							: httpContext.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+						string userKey = RateLimitPartitionKey(httpContext, true);
 
 						return RateLimitPartition.GetTokenBucketLimiter(userKey, _ => new TokenBucketRateLimiterOptions
 						{
@@ -1646,8 +1197,8 @@ namespace GenOnlineService
 							QueueLimit = 10
 						});
 					});
-				});
-			}
+				}
+			});
 
 			CorsPolicy corsPolicy = BuildCorsPolicy(builder.Configuration);
 
@@ -1657,110 +1208,38 @@ namespace GenOnlineService
 			});
 
 
-			var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+			AccountsSettings accountsSettings = AccountsSettings.Read(builder.Configuration);
+			builder.Services.AddSingleton(accountsSettings);
+
 			builder.Services.AddAuthentication(options =>
 			{
-				options.DefaultScheme = "JwtOrBasic"; // Custom policy scheme
+				options.DefaultScheme = BearerSchemeSelector;
 			})
-			.AddPolicyScheme("JwtOrBasic", "JWT or Basic", options =>
+			// gopat- bearer values go to the API token handler, every other bearer value to the OpenIddict access token handler
+			.AddPolicyScheme(BearerSchemeSelector, "Bearer", options =>
 			{
-				options.ForwardDefaultSelector = context =>
-				{
-					var authHeader = context.Request.Headers["Authorization"].ToString();
-					if (authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-						return JwtBearerDefaults.AuthenticationScheme;
-					else if (authHeader.StartsWith("Basic ", StringComparison.OrdinalIgnoreCase))
-						return "Basic";
-					return JwtBearerDefaults.AuthenticationScheme; // fallback
-				};
+				options.ForwardDefaultSelector = context => ApiTokenHandler.HasApiToken(context.Request) ? ApiTokenHandler.SchemeName : SessionTokenHandler.SchemeName;
 			})
-			.AddJwtBearer(options =>
-			{
-				var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+			.AddScheme<AuthenticationSchemeOptions, ApiTokenHandler>(ApiTokenHandler.SchemeName, null)
+			.AddScheme<AuthenticationSchemeOptions, SessionTokenHandler>(SessionTokenHandler.SchemeName, null);
 
-				string? strKey = jwtSettings["Key"];
-				if (strKey == null)
-				{
-					throw new Exception("JWT Key not found in configuration");
-				}
+			builder.Services.AddGenOnlineIdentity(accountsSettings);
 
-				ValidateSigningKey(strKey);
-
-				options.TokenValidationParameters = new TokenValidationParameters
-				{
-					ValidateIssuer = true,
-					ValidateAudience = true,
-					ValidateLifetime = true,
-					ValidateIssuerSigningKey = true,
-					ValidIssuer = jwtSettings["Issuer"],
-					ValidAudience = jwtSettings["Audience"],
-					IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(strKey)),
-
-					// Pin the algorithm so only tokens signed the way we sign them are accepted.
-					ValidAlgorithms = new[] { SecurityAlgorithms.HmacSha256 },
-
-					// Default is 5 minutes, which keeps expired tokens usable for that long.
-					ClockSkew = TimeSpan.FromSeconds(30)
-				};
-
-				options.Events = new JwtBearerEvents
-				{
-					OnTokenValidated = AdditionalValidation,
-					OnChallenge = HandleJwtChallenge
-				};
-			}).AddScheme<AuthenticationSchemeOptions, BasicAuthenticationHandler>("Basic", null);
+			builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+			builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionHandler>();
 
 			builder.Services.AddAuthorization(options =>
 			{
-				options.AddPolicy("MonitorOrApiKey", policy =>
+				options.AddPolicy(AuthPolicies.PlayerSessionOrLobbiesRead, policy =>
 					policy.RequireAssertion(context =>
-					{
-						// Check role
-						if (context.User.IsInRole("Monitor"))
-							return true;
-
-						// Check x-api-key header
-						var httpContext = context.Resource as HttpContext;
-						if (httpContext?.Request.Headers.TryGetValue("x-api-key", out var apiKey) == true)
-						{
-							return APIKeyHelpers.ValidateKey(apiKey, EApiKeyType.PartnerKey) || APIKeyHelpers.ValidateKey(apiKey, EApiKeyType.WebServerKey);
-						}
-
-						return false;
-					}));
-
-				options.AddPolicy("AnyClientOrMonitorOrApiKey", policy =>
-					policy.RequireAssertion(context =>
-					{
-						// Check roles
-						if (context.User.IsInRole("GameClient"))
-							return true;
-
-						if (context.User.IsInRole("ChatClient"))
-							return true;
-
-						if (context.User.IsInRole("GameLauncher"))
-							return true;
-
-						if (context.User.IsInRole("Monitor"))
-							return true;
-
-						// Check x-api-key header
-						var httpContext = context.Resource as HttpContext;
-						if (httpContext?.Request.Headers.TryGetValue("x-api-key", out var apiKey) == true)
-						{
-							return APIKeyHelpers.ValidateKey(apiKey, EApiKeyType.PartnerKey) || APIKeyHelpers.ValidateKey(apiKey, EApiKeyType.WebServerKey);
-						}
-
-						return false;
-					}));
+						context.User.IsInRole("GameClient")
+						|| context.User.IsInRole("ChatClient")
+						|| context.User.IsInRole("GameLauncher")
+						|| ApiTokenPrincipals.HasPermission(context.User, Permissions.LobbiesRead)));
 			});
 
-			// Add in-memory caching for performance optimization
-			builder.Services.AddMemoryCache(options =>
-			{
-				options.SizeLimit = 10000; // Limit cache entries
-			});
+			// OpenIddict stores cache entries without a size, so the cache has no size limit
+			builder.Services.AddMemoryCache();
 
 			// Add response compression for bandwidth optimization (60-80% reduction)
 			builder.Services.AddResponseCompression(options =>
@@ -1947,11 +1426,6 @@ namespace GenOnlineService
 				app.UseForwardedHeaders();
 			}
 
-			if (bUseBuiltinRateLimiter)
-			{
-				app.UseRateLimiter();
-			}
-
 			// Enable response compression (must be early in pipeline)
 			app.UseResponseCompression();
 
@@ -2016,6 +1490,15 @@ namespace GenOnlineService
 
 			app.UseCors();
 			app.UseAuthentication();
+			bool bTrustedProxiesConfigured = (builder.Configuration.GetSection("TrustedProxies").Get<string[]>() ?? Array.Empty<string>()).Any(v => !string.IsNullOrWhiteSpace(v));
+			app.Use((context, next) =>
+			{
+				ApiTokenCache.CheckAllowListBehindProxy(context, bTrustedProxiesConfigured);
+				return next(context);
+			});
+
+			// The limiter runs after authentication so authenticated callers are partitioned by user id.
+			app.UseRateLimiter();
 			app.UseAuthorization();
 
 			app.MapControllers();
@@ -2045,11 +1528,6 @@ namespace GenOnlineService
 						AppMetrics.RecordServiceSnapshot(numLobbies, WebSocketManager.GetNumberOfUsersOnline());
 						await lobbyManager.Cleanup();
 
-						int expiredLoginCount = PendingLoginManager.CleanupExpiredLogins();
-						if (expiredLoginCount > 0)
-						{
-							app.Logger.LogDebug("Removed {ExpiredLoginCount} expired pending logins", expiredLoginCount);
-						}
 					});
 				}
 				finally
@@ -2192,12 +1670,12 @@ namespace GenOnlineService
 				{
 					try
 					{
-						await RunObservedBackgroundJobAsync("token_revocation_reconcile", app.Logger, async () =>
+						await RunObservedBackgroundJobAsync("access_control_reload", app.Logger, async () =>
 						{
 							using var scope = app.Services.CreateScope();
 							var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
 							await using var db = await factory.CreateDbContextAsync();
-							await TokenRevocationManager.ReconcileBans(db);
+							await AccessControl.Reload(db);
 						});
 
 						// a separate job, so a failed ban reconcile never keeps a revoked role in place
@@ -2208,6 +1686,18 @@ namespace GenOnlineService
 							await using var db = await factory.CreateDbContextAsync();
 							await StaffRoles.Reload(db);
 						});
+
+						await RunObservedBackgroundJobAsync("api_tokens_reload", app.Logger, async () =>
+						{
+							using var scope = app.Services.CreateScope();
+							var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+							await using var db = await factory.CreateDbContextAsync();
+							await ApiTokenCache.Reload(db);
+							await ApiTokenCache.FlushLastUsed(db);
+							await ApiTokenCache.Housekeeping(db, ApiTokenSettings.Read(builder.Configuration));
+						});
+
+						await RunObservedBackgroundJobAsync("oauth_prune", app.Logger, () => OAuthMaintenance.PruneDaily(app.Services));
 					}
 					finally
 					{
@@ -2222,10 +1712,6 @@ namespace GenOnlineService
 				app.Logger.LogInformation("Exit requested");
 			};
 
-			// create a token
-			g_tokenGenerator = new JwtTokenGenerator(builder.Configuration);
-
-			// load daily stats
 			using (var scope = app.Services.CreateScope())
 			{
 				var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
@@ -2233,9 +1719,16 @@ namespace GenOnlineService
 
 				await Database.FactionStats.Refresh(db, DateTime.UtcNow);
 
-				// must happen before any token is issued or validated
-				await TokenRevocationManager.Initialize(factory, db);
+				// seeds user state and bans before any token is validated
+				await AccessControl.Reload(db);
 				await StaffRoles.Reload(db);
+				StaffRoles.ValidateRoleDefinitions();
+				await ApiTokenCache.Reload(db);
+			}
+
+			if (accountsSettings.Enabled)
+			{
+				await AccountsSetup.SeedClients(app.Services, accountsSettings);
 			}
 
 			app.Run();
@@ -2280,7 +1773,6 @@ namespace GenOnlineService
 		}
 
 		public static DateTime g_LastStartTime = DateTime.Now;
-		public static JwtTokenGenerator? g_tokenGenerator = null;
 
 		public static void GlobalExceptionHandler(object sender, UnhandledExceptionEventArgs e)
 		{
