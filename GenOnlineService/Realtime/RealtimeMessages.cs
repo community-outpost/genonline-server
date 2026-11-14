@@ -34,6 +34,7 @@ namespace GenOnlineService.Realtime
 	public enum LobbyLeftReason { Left, Kicked, Closed }
 	public enum CountdownCancelReason { PlayerNotReady, MeshIncomplete, PlayerLeft, SettingsChanged }
 	public enum MatchRequeueReason { PlayerLeft, LobbyGone, MeshIncomplete, JoinTimeout, SetupFailed }
+	public enum GroupRemovedReason { Left, Removed }
 
 	public sealed record Empty
 	{
@@ -185,6 +186,7 @@ namespace GenOnlineService.Realtime
 		public AnticheatKind Anticheat { get; init; }
 		public LobbySettings Settings { get; init; } = new LobbySettings();
 		public long? MatchId { get; init; }
+		public LobbyStart? Start { get; init; }
 		public DateTime CreatedAt { get; init; }
 		public IReadOnlyList<Slot> Slots { get; init; } = [];
 	}
@@ -232,6 +234,17 @@ namespace GenOnlineService.Realtime
 		public ChatRate ChatRate { get; init; } = new ChatRate();
 		public int NameMinLength { get; init; }
 		public int NameMaxLength { get; init; }
+		public int GroupMaxMembers { get; init; }
+	}
+
+	// A group chat, members in join order with the owner included
+	public sealed record Group
+	{
+		public long Id { get; init; }
+		public string? Name { get; init; }
+		public long OwnerId { get; init; }
+		public IReadOnlyList<Member> Members { get; init; } = [];
+		public DateTime CreatedAt { get; init; }
 	}
 
 	public sealed record MeshPair
@@ -268,20 +281,6 @@ namespace GenOnlineService.Realtime
 	public sealed record MarkReadRequest
 	{
 		public string ChannelId { get; init; } = "";
-		public string MessageId { get; init; } = "";
-	}
-
-	// DeleteMessage and ReportMessage
-	public sealed record MessageActionRequest
-	{
-		public string MessageId { get; init; } = "";
-		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-		public string? Reason { get; init; }
-	}
-
-	public sealed record SetDisplayNameRequest
-	{
-		public string Name { get; init; } = "";
 	}
 
 	public sealed record CreateLobbyRequest
@@ -393,43 +392,10 @@ namespace GenOnlineService.Realtime
 		public long TotalMoney { get; init; }
 	}
 
-	public sealed record ReportMatchOutcomeRequest
-	{
-		public long MatchId { get; init; }
-		public bool Won { get; init; }
-		public bool Desynced { get; init; }
-		public int Side { get; init; }
-		public int DurationS { get; init; }
-		public MatchStats Stats { get; init; } = new MatchStats();
-	}
-
 	public sealed record JoinQueueRequest
 	{
 		public int PlaylistId { get; init; }
 		public IReadOnlyList<int> MapIndexes { get; init; } = [];
-	}
-
-	public sealed record ModerationRequest
-	{
-		public long UserId { get; init; }
-		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-		public string? Reason { get; init; }
-	}
-
-	public sealed record MuteRequest
-	{
-		public long UserId { get; init; }
-		public long? DurationS { get; init; }
-		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-		public string? Reason { get; init; }
-	}
-
-	public sealed record BanRequest
-	{
-		public long UserId { get; init; }
-		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-		public long? DurationS { get; init; }
-		public string? Reason { get; init; }
 	}
 
 	public sealed record RequestSignallingRequest
@@ -495,18 +461,16 @@ namespace GenOnlineService.Realtime
 		public TurnCredentials Turn { get; init; } = new TurnCredentials();
 	}
 
-	public sealed record ReportMatchOutcomeData
+	// a server.switching close follows
+	public sealed record ServerSwitchingEvent
 	{
-		public string ScreenshotUrl { get; init; } = "";
-		public string ReplayUrl { get; init; } = "";
+		public int RetryAfterMs { get; init; }
 	}
 
-	public sealed record GetPlaylistsData
+	public sealed record FeaturesUpdateEvent
 	{
-		public IReadOnlyList<Playlist> Playlists { get; init; } = [];
+		public IReadOnlyList<string> Features { get; init; } = [];
 	}
-
-	// Events (one argument object per event)
 
 	public sealed record ReadyEvent
 	{
@@ -514,6 +478,7 @@ namespace GenOnlineService.Realtime
 		public ClientType SessionType { get; init; }
 		public Member User { get; init; } = new Member();
 		public IReadOnlyList<string> Permissions { get; init; } = [];
+		public IReadOnlyList<string> Features { get; init; } = [];
 		public IReadOnlyDictionary<string, BadgeDefinition> Badges { get; init; } = new Dictionary<string, BadgeDefinition>();
 		public IReadOnlyList<ChannelInfo> Channels { get; init; } = [];
 		public Limits Limits { get; init; } = new Limits();
@@ -569,23 +534,40 @@ namespace GenOnlineService.Realtime
 		public bool HasMore { get; init; }
 	}
 
-	// MessageDelete and ReadMarker
 	public sealed record MessageRefEvent
 	{
 		public string ChannelId { get; init; } = "";
 		public string MessageId { get; init; } = "";
 	}
 
-	public sealed record DirectConversationInfo
+	public sealed record ReadMarkerEvent
 	{
-		public long UserId { get; init; }
-		public int Unread { get; init; }
-		public Message Last { get; init; } = new Message();
+		public string ChannelId { get; init; } = "";
 	}
 
-	public sealed record DirectMessagesEvent
+	// One direct or group conversation, channel_id is dm:<user_id> or group:<group_id>
+	public sealed record ConversationInfo
 	{
-		public IReadOnlyList<DirectConversationInfo> Conversations { get; init; } = [];
+		public string ChannelId { get; init; } = "";
+		public int Unread { get; init; }
+		public Message? Last { get; init; }
+	}
+
+	public sealed record ConversationsEvent
+	{
+		public IReadOnlyList<ConversationInfo> Conversations { get; init; } = [];
+		public IReadOnlyList<Group> Groups { get; init; } = [];
+	}
+
+	public sealed record GroupEvent
+	{
+		public Group Group { get; init; } = new Group();
+	}
+
+	public sealed record GroupRemovedEvent
+	{
+		public long GroupId { get; init; }
+		public GroupRemovedReason Reason { get; init; }
 	}
 
 	public sealed record LobbyListUpsertEvent
@@ -621,6 +603,14 @@ namespace GenOnlineService.Realtime
 		public CountdownCancelReason Reason { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public IReadOnlyList<long>? Missing { get; init; }
+	}
+
+	// The start data of GameStart, kept in LobbyState once the game started
+	public sealed record LobbyStart
+	{
+		public long MatchId { get; init; }
+		public int RngSeed { get; init; }
+		public string? ScreenshotUrl { get; init; }
 	}
 
 	public sealed record GameStartEvent
