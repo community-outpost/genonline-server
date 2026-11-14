@@ -119,12 +119,18 @@ namespace GenOnlineService.Identity
 			EUserSessionType sessionType = TokenHelper.GetSessionType(this);
 			string? authorizationID = User.FindFirst(SessionTokenHandler.AuthorizationIDClaim)?.Value;
 
-			// closing first tells the client auth.revoked before the session is cleared
-			GameSessions.Remove(userID, sessionType);
-			await SessionRevocation.CloseRealtime(userID, sessionType);
-			await WebSocketManager.ClearDataFromUser(userID, sessionType);
+			// only this sign-in ends, another install of the same session type keeps its session
+			if (String.IsNullOrEmpty(authorizationID))
+			{
+				GameSessions.Remove(userID, sessionType);
+				await SessionRevocation.CloseRealtime(userID, sessionType);
+				await WebSocketManager.ClearDataFromUser(userID, sessionType);
+				return NoContent();
+			}
 
-			if (!String.IsNullOrEmpty(authorizationID))
+			// the registration goes first and the revocation before the close, so a connection still opening is refused when it checks again
+			GameSessions.RemoveSignIn(authorizationID);
+			try
 			{
 				object? authorization = await m_authorizations.FindByIdAsync(authorizationID);
 				if (authorization != null && await m_authorizations.GetSubjectAsync(authorization) == userID.ToString())
@@ -132,6 +138,10 @@ namespace GenOnlineService.Identity
 					await m_authorizations.TryRevokeAsync(authorization);
 					await m_tokens.RevokeByAuthorizationIdAsync(authorizationID);
 				}
+			}
+			finally
+			{
+				await SignInRevocation.EndAsync(authorizationID);
 			}
 
 			return NoContent();

@@ -265,6 +265,14 @@ namespace GenOnlineService.Identity
 			return s_sessions.TryRemove((userID, sessionType), out _);
 		}
 
+		public static void RemoveSignIn(string authorizationID)
+		{
+			foreach (var entry in s_sessions.Where(e => e.Value.AuthorizationID == authorizationID))
+			{
+				s_sessions.TryRemove(entry);
+			}
+		}
+
 		public static void RemoveUser(Int64 userID, bool bOnlyForAuthorizations, IReadOnlySet<string>? authorizationIDs = null)
 		{
 			foreach (var key in s_sessions.Keys.Where(k => k.Item1 == userID))
@@ -302,6 +310,12 @@ namespace GenOnlineService.Identity
 		public static async Task<int> RevokeUser(Int64 userID, bool bOnlyGameClients, string reason, PlayBan? ban = null)
 		{
 			var revoked = new HashSet<string>(StringComparer.Ordinal);
+
+			// a ban is announced before the revocation, which would otherwise close the game connections with auth.revoked first
+			if (ban != null)
+			{
+				await ModerationManager.DisconnectUser(userID, EModerationAction.Ban, ban.Reason, ban.Until);
+			}
 
 			try
 			{
@@ -349,11 +363,7 @@ namespace GenOnlineService.Identity
 
 			GameSessions.RemoveUser(userID, bOnlyGameClients, revoked);
 
-			if (ban != null)
-			{
-				await ModerationManager.DisconnectUser(userID, EModerationAction.Ban, ban.Reason, ban.Until);
-			}
-			else
+			if (ban == null)
 			{
 				await CloseRealtime(userID, null);
 			}
