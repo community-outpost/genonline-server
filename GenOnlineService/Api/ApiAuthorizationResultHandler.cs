@@ -46,6 +46,11 @@ namespace GenOnlineService.Api
 
 		private static bool IsApiEndpoint(HttpContext context)
 		{
+			if (Rest.RestResults.IsRestPath(context.Request.Path))
+			{
+				return true;
+			}
+
 			ControllerActionDescriptor? action = context.GetEndpoint()?.Metadata.GetMetadata<ControllerActionDescriptor>();
 			return action != null && typeof(ApiControllerBase).IsAssignableFrom(action.ControllerTypeInfo);
 		}

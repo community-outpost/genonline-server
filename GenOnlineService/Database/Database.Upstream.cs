@@ -22,6 +22,7 @@ using System.Text.Json;
 
 namespace Database
 {
+	// The application settings rows, read and written by key
 	public static class Upstream
 	{
 		public static async Task<string?> GetSetting(AppDbContext db, string key)
@@ -44,6 +45,19 @@ namespace Database
 			}
 
 			await db.SaveChangesAsync();
+		}
+
+		public static async Task<bool> DeleteSetting(AppDbContext db, string key)
+		{
+			ApplicationSetting? row = await db.ApplicationSettings.AsTracking().FirstOrDefaultAsync(s => s.Key == key);
+			if (row == null)
+			{
+				return false;
+			}
+
+			db.ApplicationSettings.Remove(row);
+			await db.SaveChangesAsync();
+			return true;
 		}
 	}
 }

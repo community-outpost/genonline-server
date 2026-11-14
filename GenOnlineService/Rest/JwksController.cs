@@ -16,26 +16,29 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-namespace GenOnlineService.Controllers
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace GenOnlineService.Rest
 {
-	// Results of the read only match history routes in MatchUpdateController
-	public class RouteHandler_Get_MatchHistory_HighestMatchID_Result : APIResult
+	[ApiController]
+	[AllowAnonymous]
+	public sealed class JwksController : ControllerBase
 	{
-		public override Type GetReturnType()
+		[HttpGet("/.well-known/jwks.json")]
+		public IActionResult Get()
 		{
-			return this.GetType();
+			EosTokenIssuer.Settings? settings = EosTokenIssuer.GetSettings();
+			if (settings == null)
+			{
+				return NotFound();
+			}
+
+			Response.Headers.CacheControl = "public, max-age=300";
+			return new JsonResult(new
+			{
+				keys = settings.PublishedKeys.Select(k => new { kty = k.Kty, use = k.Use, alg = k.Alg, kid = k.Kid, n = k.N, e = k.E })
+			});
 		}
-
-		public Int64 highest_match_id { get; set; } = -1;
-	}
-
-	public class RouteHandler_Get_MatchHistory_Result : APIResult
-	{
-		public override Type GetReturnType()
-		{
-			return this.GetType();
-		}
-
-		public MatchHistoryCollection matches { get; set; } = new();
 	}
 }

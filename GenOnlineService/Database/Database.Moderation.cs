@@ -54,6 +54,8 @@ public static class AuditTargetKinds
 	public const string Message = "message";
 	public const string Report = "report";
 	public const string Client = "client";
+	public const string Setting = "setting";
+	public const string Announcement = "announcement";
 	public const string Lobby = "lobby";
 }
 
@@ -72,6 +74,8 @@ public static class ModerationActions
 	public const string StaffMessage = "staff_message";
 	public const string ReportView = "report_view";
 	public const string ReportClose = "report_close";
+	public const string SettingUpdate = "setting_update";
+	public const string Announcement = "announcement";
 	public const string ConnectionLookup = "connection_lookup";
 }
 
@@ -81,6 +85,7 @@ public static class ModerationSources
 	public const string Discord = "discord";
 	public const string Cli = "cli";
 	public const string Realtime = "realtime";
+	public const string Api = "api";
 }
 
 public class UserRole
@@ -227,7 +232,7 @@ namespace Database
 			return Entry(actor, action, AuditTargetKinds.User, target, reason, details, now);
 		}
 
-		private static AuditLogEntry Entry(ModerationActor actor, string action, string targetKind, Int64 target, string? reason, object? details, DateTime now)
+		private static AuditLogEntry Entry(ModerationActor actor, string action, string targetKind, Int64? target, string? reason, object? details, DateTime now)
 		{
 			return new AuditLogEntry
 			{
@@ -293,6 +298,29 @@ namespace Database
 				.OrderByDescending(e => e.ID)
 				.Take(limit)
 				.ToListAsync();
+		}
+
+		public static async Task<List<AuditLogEntry>> GetAuditEvents(AppDbContext db, Int64? actorID, Int64? targetID, string? action, Int64? afterID, int limit)
+		{
+			IQueryable<AuditLogEntry> query = db.AuditLog.AsNoTracking();
+			if (actorID != null)
+			{
+				// actor_id names a user; service account and token rows keep other ids in that column
+				query = query.Where(e => e.ActorID == actorID && e.ActorKind == AuditActorKinds.User);
+			}
+			if (targetID != null)
+			{
+				query = query.Where(e => e.TargetID == targetID);
+			}
+			if (action != null)
+			{
+				query = query.Where(e => e.Action == action);
+			}
+			if (afterID != null)
+			{
+				query = query.Where(e => e.ID < afterID);
+			}
+			return await query.OrderByDescending(e => e.ID).Take(limit).ToListAsync();
 		}
 
 		// The role row and its audit row are saved together, so the log never misses a change
@@ -460,7 +488,7 @@ namespace Database
 		}
 
 		// Writes one audit row for a non user target and throws on failure, for actions that must not happen unlogged
-		public static async Task AddAuditEntry(AppDbContext db, ModerationActor actor, string action, string targetKind, Int64 target, string? reason, object? details = null)
+		public static async Task AddAuditEntry(AppDbContext db, ModerationActor actor, string action, string targetKind, Int64? target, string? reason, object? details = null)
 		{
 			db.AuditLog.Add(Entry(actor, action, targetKind, target, reason, details, DateTime.UtcNow));
 			try
