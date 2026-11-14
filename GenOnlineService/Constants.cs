@@ -1489,6 +1489,12 @@ namespace GenOnlineService
 			return true;
 		}
 
+		public void ClearSessionNetworkRoom()
+		{
+			selectedNetworkRoomID = -1;
+			networkRoomID = -1;
+		}
+
 		public void UpdateSessionLobbyID(Int64 newLobbyID)
 		{
 			if (m_sessionType == EUserSessionType.GameClient)
