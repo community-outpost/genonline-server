@@ -44,7 +44,7 @@ public sealed class NameTagsExhaustedException : Exception
 namespace Database
 {
 	// Xbox-style names: the name is not unique, name#tag is. The environment assigns the tag (AssignNewUser) and renames keep it
-	// (RenameKeepingTag); ApplyUpstream copies a name and tag another environment owns (the follow-prod mirror).
+	// (RenameKeepingTag); ApplyUpstream copies a name and tag another environment owns.
 	public static class DisplayNames
 	{
 		public const int MinTag = 1;
