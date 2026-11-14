@@ -146,16 +146,15 @@ public partial class LobbyManager
 		if (lobby != null) await lobby.InvalidateMeshForSessionAsync(session);
 	}
 
-	internal async Task StartMeshCheckAsync(UserSession session, RealtimeConnection socket)
+	internal async Task<long> StartMeshCheckAsync(UserSession session, RealtimeConnection socket)
 	{
 		using var membership = await AcquireMembershipGateAsync(session.m_UserID);
-		if (!IsCurrentSession(session) || session.IsRetired || !ReferenceEquals(WebSocketManager.GetWebSocketForSession(session), socket)) return;
+		if (!IsCurrentSession(session) || session.IsRetired || !ReferenceEquals(WebSocketManager.GetWebSocketForSession(session), socket)) return 0;
 		var lobby = GetLobby(session.currentLobbyID);
-		if (lobby != null) await lobby.StartMeshCheckAsync(session, socket);
+		return lobby == null ? 0 : await lobby.StartMeshCheckAsync(session, socket);
 	}
 
-	internal async Task StoreMeshResponseAsync(UserSession session, RealtimeConnection socket,
-		WebSocketMessage_FullMeshConnectivityCheckResponseFromUser response)
+	internal async Task StoreMeshResponseAsync(UserSession session, RealtimeConnection socket, MeshCheckResponseRequest response)
 	{
 		using var membership = await AcquireMembershipGateAsync(session.m_UserID);
 		if (!IsCurrentSession(session) || session.IsRetired || !ReferenceEquals(WebSocketManager.GetWebSocketForSession(session), socket)) return;

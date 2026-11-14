@@ -93,6 +93,9 @@ namespace GenOnlineService.Realtime
 		public SlotState State { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public Member? Member { get; init; }
+		// The name this lobby shows for the player: the member's name, or Name#tag while another member has the same name
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Name { get; init; }
 		public bool Ready { get; init; }
 		public bool HasMap { get; init; }
 		public int Side { get; init; }
@@ -122,6 +125,16 @@ namespace GenOnlineService.Realtime
 		public uint IniCrc { get; init; }
 	}
 
+	public sealed record LobbySummarySlot
+	{
+		public int Index { get; init; }
+		public SlotState State { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public Member? Member { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Name { get; init; }
+	}
+
 	public sealed record LobbySummary
 	{
 		public long Id { get; init; }
@@ -138,6 +151,7 @@ namespace GenOnlineService.Realtime
 		public LobbySummarySettings Settings { get; init; } = new LobbySummarySettings();
 		public BuildIdentity Build { get; init; } = new BuildIdentity();
 		public DateTime CreatedAt { get; init; }
+		public LobbySummarySlot[] Slots { get; init; } = [];
 	}
 
 	public sealed record LobbyInfo
