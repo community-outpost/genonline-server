@@ -17,6 +17,7 @@
 */
 
 using Microsoft.AspNetCore;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -142,6 +143,7 @@ namespace GenOnlineService.Identity
 					UpstreamAccounts.ErrorBlocked => "This account is blocked.",
 					UpstreamAccounts.ErrorDeactivated => "This account is deactivated.",
 					UpstreamAccounts.ErrorSignUpDisabled => "No account is linked to this sign-in, and sign-up is closed.",
+					UpstreamAccounts.ErrorIdentityConflict => "Another sign-in of this provider is already linked to the account. Please contact support.",
 					_ => "The sign-in could not be completed."
 				};
 				return Page(403, "Sign-in refused", $"<p>{WebUtility.HtmlEncode(message)}</p>");
@@ -188,6 +190,22 @@ namespace GenOnlineService.Identity
 			object application = await m_applications.FindByClientIdAsync(request.ClientId!) ?? throw new InvalidOperationException("Unknown client.");
 			string? applicationID = await m_applications.GetIdAsync(application);
 
+			// OpenIddict already refuses a disabled client; the registry check covers the reload window
+			RegisteredClient? client = ClientRegistry.FindEnabled(request.ClientId);
+			if (client == null)
+			{
+				return Forbid(Error(Errors.UnauthorizedClient, "This client is disabled."), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+			}
+
+			if (!client.FirstParty)
+			{
+				IActionResult? consent = await Consent(request, cookie.Principal!, await m_applications.GetDisplayNameAsync(application) ?? client.ClientID);
+				if (consent != null)
+				{
+					return consent;
+				}
+			}
+
 			ClaimsIdentity identity = BuildIdentity(user, request.GetScopes());
 
 			// one authorization per sign-in, so revoking it ends exactly that device's refresh chain
@@ -218,6 +236,11 @@ namespace GenOnlineService.Identity
 			if (user == null || user.State != UserStates.Active)
 			{
 				return Forbid(Error(Errors.InvalidGrant, "The token is no longer valid."), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+			}
+
+			if (ClientRegistry.FindEnabled(request.ClientId) == null)
+			{
+				return Forbid(Error(Errors.InvalidGrant, "This client is disabled."), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
 			}
 
 			// a play ban ends the game clients' sessions; the website keeps working so the player can appeal
@@ -251,6 +274,66 @@ namespace GenOnlineService.Identity
 			});
 		}
 
+		private const string ConsentField = "consent";
+		private const string ConsentAllow = "allow";
+
+		private static readonly Dictionary<string, string> s_scopeDescriptions = new(StringComparer.Ordinal)
+		{
+			[Scopes.OpenId] = "Know who you are",
+			[Scopes.Profile] = "See your player name",
+			[Scopes.OfflineAccess] = "Stay signed in until you sign out",
+			[AccountsSettings.GameScope] = "Play online as you: lobbies, matchmaking and chat"
+		};
+
+		private async Task<IActionResult?> Consent(OpenIddictRequest request, ClaimsPrincipal cookieUser, string displayName)
+		{
+			if (request.HasPromptValue(PromptValues.None))
+			{
+				return Forbid(Error(Errors.ConsentRequired, "This application needs the user's consent."), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+			}
+
+			// the antiforgery token is bound to the signed-in user, so a page fetched for one account cannot approve for another
+			HttpContext.User = cookieUser;
+			var antiforgery = HttpContext.RequestServices.GetRequiredService<IAntiforgery>();
+
+			if (HttpMethods.IsPost(Request.Method) && Request.HasFormContentType && Request.Form.ContainsKey(ConsentField))
+			{
+				if (!await antiforgery.IsRequestValidAsync(HttpContext))
+				{
+					return Page(400, "Request expired", "<p>The page expired. Please start the sign-in again from the application.</p>");
+				}
+
+				return Request.Form[ConsentField] == ConsentAllow
+					? null
+					: Forbid(Error(Errors.AccessDenied, "The user declined."), OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+			}
+
+			AntiforgeryTokenSet tokens = antiforgery.GetAndStoreTokens(HttpContext);
+			IEnumerable<KeyValuePair<string, Microsoft.Extensions.Primitives.StringValues>> parameters = Request.HasFormContentType ? Request.Form : Request.Query;
+
+			var form = new System.Text.StringBuilder();
+			form.Append($"<form method=\"post\" action=\"{WebUtility.HtmlEncode(Request.PathBase + Request.Path)}\">");
+			foreach ((string key, Microsoft.Extensions.Primitives.StringValues values) in parameters.Where(p => p.Key != ConsentField && p.Key != Parameters.Prompt && p.Key != tokens.FormFieldName))
+			{
+				foreach (string? value in values)
+				{
+					form.Append($"<input type=\"hidden\" name=\"{WebUtility.HtmlEncode(key)}\" value=\"{WebUtility.HtmlEncode(value)}\">");
+				}
+			}
+			form.Append($"<input type=\"hidden\" name=\"{WebUtility.HtmlEncode(tokens.FormFieldName)}\" value=\"{WebUtility.HtmlEncode(tokens.RequestToken)}\">");
+
+			string scopes = String.Concat(request.GetScopes().Where(s_scopeDescriptions.ContainsKey).Select(s => $"<li>{WebUtility.HtmlEncode(s_scopeDescriptions[s])}</li>"));
+			form.Append($"<p><strong>{WebUtility.HtmlEncode(displayName)}</strong> is not made by Generals Online. It asks to:</p><ul>{scopes}</ul>");
+			form.Append($"<p>Signed in as {WebUtility.HtmlEncode(cookieUser.Identity?.Name ?? String.Empty)}.</p>");
+			form.Append($"<button type=\"submit\" name=\"{ConsentField}\" value=\"{ConsentAllow}\">Allow</button> <button type=\"submit\" name=\"{ConsentField}\" value=\"deny\">Deny</button></form>");
+
+			// never inside another site's frame or a cache
+			Response.Headers["X-Frame-Options"] = "DENY";
+			Response.Headers["Content-Security-Policy"] = "frame-ancestors 'none'";
+			Response.Headers.CacheControl = "no-store";
+			return Page(200, "Allow " + displayName + "?", form.ToString());
+		}
+
 		private static AuthenticationProperties Error(string error, string description)
 		{
 			return new AuthenticationProperties(new Dictionary<string, string?>
@@ -268,8 +351,7 @@ namespace GenOnlineService.Identity
 				.SetClaim(Claims.Name, user.Username)
 				.SetClaim(Claims.PreferredUsername, user.Username);
 
-			var allowed = new HashSet<string>(StringComparer.Ordinal) { Scopes.OpenId, Scopes.Profile, Scopes.OfflineAccess, AccountsSettings.GameScope };
-			identity.SetScopes(requestedScopes.Where(allowed.Contains));
+			identity.SetScopes(requestedScopes.Where(AccountsSetup.RegisteredScopes.Contains));
 			identity.SetAudiences(m_settings.Audience);
 			identity.SetDestinations(claim => claim.Type switch
 			{

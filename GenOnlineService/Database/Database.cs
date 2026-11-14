@@ -71,6 +71,8 @@ public abstract class AppDbContext : DbContext
 	public DbSet<UserUsernameHistory> UserUsernameHistory => Set<UserUsernameHistory>();
 	public DbSet<UserIdentity> Identities => Set<UserIdentity>();
 	public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
+	public DbSet<Client> Clients => Set<Client>();
+	public DbSet<ClientBuild> ClientBuilds => Set<ClientBuild>();
 
 	public DbSet<UserRole> UserRoles => Set<UserRole>();
 	public DbSet<Ban> Bans => Set<Ban>();
@@ -140,6 +142,8 @@ public abstract class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new UserUsernameHistoryConfiguration());
 		modelBuilder.ApplyConfiguration(new UserIdentityConfiguration());
 		modelBuilder.ApplyConfiguration(new ApplicationSettingConfiguration());
+		modelBuilder.ApplyConfiguration(new ClientConfiguration());
+		modelBuilder.ApplyConfiguration(new ClientBuildConfiguration());
 		modelBuilder.ApplyConfiguration(new UserRoleConfiguration());
 		modelBuilder.ApplyConfiguration(new BanConfiguration());
 		modelBuilder.ApplyConfiguration(new AuditLogConfiguration());

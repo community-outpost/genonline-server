@@ -22,6 +22,9 @@ namespace GenOnlineService.Identity
 	{
 		public string ClientID { get; init; } = String.Empty;
 		public string DisplayName { get; init; } = String.Empty;
+		public string Kind { get; init; } = String.Empty;
+		public string Game { get; init; } = ClientGames.None;
+		public string? MinVersion { get; init; }
 		public List<string> RedirectUris { get; init; } = new();
 	}
 
@@ -37,7 +40,6 @@ namespace GenOnlineService.Identity
 		public bool AllowSignUp { get; init; } = true;
 		public bool OnlyProvider { get; init; }
 		public bool AutoLinkVerifiedEmail { get; init; }
-
 
 		public string Source => AuthoritySources.UpstreamPrefix + Name;
 		public string CallbackPath => $"users/auth/{Name}/callback";
@@ -76,6 +78,9 @@ namespace GenOnlineService.Identity
 			{
 				ClientID = c.GetValue<string>("client_id") ?? String.Empty,
 				DisplayName = c.GetValue<string>("display_name") ?? c.GetValue<string>("client_id") ?? String.Empty,
+				Kind = c.GetValue<string>("kind") ?? String.Empty,
+				Game = c.GetValue<string>("game") ?? ClientGames.None,
+				MinVersion = c.GetValue<string>("min_version"),
 				RedirectUris = c.GetSection("redirect_uris").Get<List<string>>() ?? new()
 			}).Where(c => c.ClientID.Length > 0).ToList();
 

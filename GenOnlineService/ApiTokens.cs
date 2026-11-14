@@ -571,6 +571,8 @@ namespace GenOnlineService
 	// One 401 body for every authentication failure, so a response never tells why a credential was refused
 	public static class UniformAuthResponses
 	{
+		public static readonly object UnauthorizedBody = new { error = "unauthorized", @params = new { } };
+
 		public static async Task WriteUnauthorized(HttpContext context)
 		{
 			if (context.Response.HasStarted)
@@ -580,7 +582,7 @@ namespace GenOnlineService
 
 			context.Response.StatusCode = StatusCodes.Status401Unauthorized;
 			context.Response.Headers.WWWAuthenticate = "Bearer";
-			await context.Response.WriteAsJsonAsync(new { message = "401 Unauthorized", error = "unauthorized" });
+			await context.Response.WriteAsJsonAsync(UnauthorizedBody);
 		}
 	}
 }

@@ -102,11 +102,9 @@ namespace GenOnlineService
 			return roles;
 		}
 
-		// The OAuth client id of the access token, by name
-		public static KnownClients.EKnownClients GetClientID(ControllerBase controller)
+		public static string GetClientID(ControllerBase controller)
 		{
-			string? clientID = controller.User.FindFirst(SessionTokenHandler.ClientIDClaim)?.Value;
-			return SessionRevocation.TryParseKnownClient(clientID, out KnownClients.EKnownClients known) ? known : KnownClients.EKnownClients.unknown;
+			return ClientRegistry.FindEnabled(controller.User.FindFirst(SessionTokenHandler.ClientIDClaim)?.Value)?.ClientID ?? String.Empty;
 		}
 
 		public static EUserSessionType GetSessionType(ControllerBase controller)
@@ -685,6 +683,27 @@ namespace GenOnlineService
 					Console.WriteLine($"  {name}");
 				}
 
+				// the unique (user_id, provider) index would fail on existing duplicates; list them instead of a half-applied migration
+				if (applied.Count > 0 && pending.Any(m => m.EndsWith("_UniqueIdentityPerProvider", StringComparison.Ordinal)))
+				{
+					var duplicates = await db.Identities.AsNoTracking()
+						.GroupBy(i => new { i.UserID, i.Provider })
+						.Where(g => g.Count() > 1)
+						.Select(g => new { g.Key.UserID, g.Key.Provider, Count = g.Count() })
+						.ToListAsync();
+
+					if (duplicates.Count > 0)
+					{
+						Console.Error.WriteLine($"Cannot add the one-identity-per-provider index: {duplicates.Count} user(s) have several identities of one provider. Remove the extra rows from identities first:");
+						foreach (var duplicate in duplicates)
+						{
+							Console.Error.WriteLine($"  user {duplicate.UserID}: {duplicate.Count} {duplicate.Provider} identities");
+						}
+
+						return 2;
+					}
+				}
+
 				if (!Confirm(assumeYes, $"Apply {pending.Count} pending migration(s)?", "Input is not interactive. Pass --yes to apply pending migrations in an unattended run."))
 				{
 					return 1;
@@ -955,6 +974,12 @@ namespace GenOnlineService
 			if (args.Length > 0 && args[0].Equals("tokens", StringComparison.OrdinalIgnoreCase))
 			{
 				Environment.ExitCode = await ApiTokensCli.RunTokens(args);
+				return;
+			}
+
+			if (args.Length > 0 && args[0].Equals("clients", StringComparison.OrdinalIgnoreCase))
+			{
+				Environment.ExitCode = await ClientsCli.RunClients(args);
 				return;
 			}
 
@@ -1620,6 +1645,14 @@ namespace GenOnlineService
 							await AccessControl.Reload(db);
 						});
 
+							await RunObservedBackgroundJobAsync("client_registry_reload", app.Logger, async () =>
+						{
+							using var scope = app.Services.CreateScope();
+							var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+							await using var db = await factory.CreateDbContextAsync();
+							await ClientRegistry.Reload(db);
+						});
+
 						// a separate job, so a failed ban reconcile never keeps a revoked role in place
 						await RunObservedBackgroundJobAsync("staff_roles_reload", app.Logger, async () =>
 						{
@@ -1667,11 +1700,13 @@ namespace GenOnlineService
 				await StaffRoles.Reload(db);
 				StaffRoles.ValidateRoleDefinitions();
 				await ApiTokenCache.Reload(db);
+				await ClientRegistry.Reload(db);
 			}
 
 			if (accountsSettings.Enabled)
 			{
 				await AccountsSetup.SeedClients(app.Services, accountsSettings);
+				await ClientRegistry.SweepDisabledClients(app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>());
 			}
 
 			app.Run();

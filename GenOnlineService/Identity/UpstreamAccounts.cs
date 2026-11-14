@@ -18,6 +18,7 @@
 
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 
@@ -28,13 +29,14 @@ namespace GenOnlineService.Identity
 		public static UpstreamSignInResult Refused(string error) => new(null, error);
 	}
 
-	// GitLab OmniAuth behaviour: a known identity signs in, a verified email links where the operator allows it, otherwise sign-up
+	// GitLab OmniAuth behaviour: a known identity signs in, an (opt-in) verified email finds the user, otherwise sign-up
 	public sealed class UpstreamAccounts
 	{
 		public const string ErrorNoSubject = "no_subject";
 		public const string ErrorSignUpDisabled = "sign_up_disabled";
 		public const string ErrorBlocked = "blocked";
 		public const string ErrorDeactivated = "deactivated";
+		public const string ErrorIdentityConflict = "identity_conflict";
 
 		private static readonly ILogger s_log = AppLog.For(typeof(UpstreamAccounts));
 		private readonly IDbContextFactory<AppDbContext> m_dbFactory;
@@ -61,7 +63,16 @@ namespace GenOnlineService.Identity
 			catch (DbUpdateException ex) when (DbHelpers.IsUniqueViolation(ex))
 			{
 				// a concurrent first sign-in created the identity or took the name; the second attempt finds it
-				return await SignInOnce(provider, external, subject, externName);
+				try
+				{
+					return await SignInOnce(provider, external, subject, externName);
+				}
+				catch (DbUpdateException again) when (DbHelpers.IsUniqueViolation(again))
+				{
+					// another upstream account linked the same user in between: one identity per provider per user
+					s_log.LogWarning("{Provider} sign-in of {Subject} lost a race for its user", provider.Name, subject);
+					return UpstreamSignInResult.Refused(ErrorIdentityConflict);
+				}
 			}
 		}
 
@@ -76,6 +87,7 @@ namespace GenOnlineService.Identity
 			if (user == null)
 			{
 				await using var tx = await db.Database.BeginTransactionAsync();
+
 				user = await FindByVerifiedEmail(db, provider, external);
 
 				if (user == null)
@@ -122,7 +134,7 @@ namespace GenOnlineService.Identity
 			return new UpstreamSignInResult(user, null);
 		}
 
-		private static async Task<User?> FindByVerifiedEmail(AppDbContext db, UpstreamProviderSettings provider, ClaimsPrincipal external)
+				private static async Task<User?> FindByVerifiedEmail(AppDbContext db, UpstreamProviderSettings provider, ClaimsPrincipal external)
 		{
 			string? email = external.GetClaim(OpenIddictConstants.Claims.Email);
 			if (provider.AutoLinkVerifiedEmail && !String.IsNullOrEmpty(email)
