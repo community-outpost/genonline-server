@@ -80,6 +80,10 @@ public abstract class AppDbContext : DbContext
 	public DbSet<FriendRequest> FriendRequests => Set<FriendRequest>();
 	public DbSet<UserBlock> Blocks => Set<UserBlock>();
 
+	public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+	public DbSet<ChatReadMarker> ChatReadMarkers => Set<ChatReadMarker>();
+	public DbSet<ChatReport> ChatReports => Set<ChatReport>();
+
 	public DbSet<PlayerRating> PlayerRatings => Set<PlayerRating>();
 	public DbSet<PlayerStat> PlayerStats => Set<PlayerStat>();
 	public DbSet<PlayerPreference> PlayerPreferences => Set<PlayerPreference>();
@@ -124,6 +128,7 @@ public abstract class AppDbContext : DbContext
 		configure(modelBuilder.Entity<MatchPlayer>().Property(e => e.Details));
 		configure(modelBuilder.Entity<AuditLogEntry>().Property(e => e.Details));
 		configure(modelBuilder.Entity<ApplicationSetting>().Property(e => e.Value));
+		configure(modelBuilder.Entity<ChatReport>().Property(e => e.Snapshot));
 	}
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -141,6 +146,9 @@ public abstract class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new FriendshipConfiguration());
 		modelBuilder.ApplyConfiguration(new FriendRequestConfiguration());
 		modelBuilder.ApplyConfiguration(new UserBlockConfiguration());
+		modelBuilder.ApplyConfiguration(new ChatMessageConfiguration());
+		modelBuilder.ApplyConfiguration(new ChatReadMarkerConfiguration());
+		modelBuilder.ApplyConfiguration(new ChatReportConfiguration());
 		modelBuilder.ApplyConfiguration(new PlayerRatingConfiguration());
 		modelBuilder.ApplyConfiguration(new PlayerStatConfiguration());
 		modelBuilder.ApplyConfiguration(new PlayerPreferenceConfiguration());
