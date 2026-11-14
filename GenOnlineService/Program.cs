@@ -1149,6 +1149,8 @@ namespace GenOnlineService
 			}
 
 			builder.Services.AddHostedService<ExternalLeaderboardPublicationWorker>();
+			builder.Services.AddSingleton<ILobbyIdSource, DatabaseLobbyIdSource>();
+			builder.Services.AddSingleton(sp => new LobbyIdAllocator(sp.GetRequiredService<ILobbyIdSource>()));
 			builder.Services.AddSingleton<LobbyManager>();
 			builder.Services.AddSingleton<LobbyMembershipConnections>();
 
@@ -1177,6 +1179,8 @@ namespace GenOnlineService
 
 			AccountsSettings accountsSettings = AccountsSettings.Read(builder.Configuration);
 			builder.Services.AddSingleton(accountsSettings);
+
+			builder.Services.AddSingleton<GenOnlineService.Names.PlayerNames>();
 
 			builder.Services.AddAuthentication(options =>
 			{
@@ -1364,6 +1368,13 @@ namespace GenOnlineService
 			// These log through AppLog, which only has a logger factory once ServiceLocator.Services is set, so they run after Build
 			MatchmakingManager.RemoveInvalidPlaylistsAtStartup();
 			S3CredentialManager.Initialize();
+
+			if (!ClientFeatures.Configure(builder.Configuration))
+			{
+				Console.Error.WriteLine("[ERROR] Features:roles has invalid feature names, see the log above.");
+				Environment.ExitCode = 1;
+				return;
+			}
 
 			// Schema changes only happen through "GenOnlineService migrate"
 			using (var migrationScope = app.Services.CreateScope())

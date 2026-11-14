@@ -334,11 +334,16 @@ public class DiscordBot
 			Staff("uptime", "Shows when the service started").Build(),
 			Staff("peak", "Shows the highest player count since the last restart").Build(),
 			Staff("whois", "Finds the user id of an online player")
-				.AddOption("name", ApplicationCommandOptionType.String, "Display name", isRequired: true, maxLength: 32)
+				.AddOption("name", ApplicationCommandOptionType.String, "Display name, or Name#tag", isRequired: true, maxLength: 37)
 				.Build(),
 			Staff("kick", "Kicks an online player from the server")
 				.AddOption("user_id", ApplicationCommandOptionType.Integer, "User id of the player", isRequired: true, minValue: 1)
 				.AddOption("reason", ApplicationCommandOptionType.String, "Reason shown to the player", isRequired: false, maxLength: ModerationManager.MaximumReasonLength)
+				.Build(),
+			Staff("rename", "Replaces an offensive display name, the tag stays")
+				.AddOption("user_id", ApplicationCommandOptionType.Integer, "User id of the player", isRequired: true, minValue: 1)
+				.AddOption("name", ApplicationCommandOptionType.String, "The new display name", isRequired: true, maxLength: GenOnlineService.Realtime.RealtimeHub.NameMaxLength)
+				.AddOption("reason", ApplicationCommandOptionType.String, "Reason kept in the audit log", isRequired: false, maxLength: ModerationManager.MaximumReasonLength)
 				.Build(),
 			Staff("announce", "Sends an announcement to every online player")
 				.AddOption("message", ApplicationCommandOptionType.String, "Announcement text", isRequired: true, maxLength: 512)
@@ -377,6 +382,7 @@ public class DiscordBot
 	private static string? RequiredPermission(string commandName) => commandName switch
 	{
 		"kick" => Permissions.ModerationKick,
+		"rename" => Permissions.ModerationRename,
 		"whois" => Permissions.ModerationKick,
 		"uptime" => Permissions.ServerStats,
 		"peak" => Permissions.ServerStats,
@@ -498,8 +504,8 @@ public class DiscordBot
 				string name = GetOption<string>(command, "name") ?? String.Empty;
 				SharedUserData? userDataFound = GenOnlineService.WebSocketManager.GetSharedDataForUser(name);
 				return userDataFound != null
-					? $"User {userDataFound.m_strDisplayName} is user ID {userDataFound.m_UserID}."
-					: $"User {name} is not active on the server.";
+					? $"User {Database.DisplayNames.Format(userDataFound.m_strDisplayName, userDataFound.m_NameTag)} is user ID {userDataFound.m_UserID}."
+					: $"User {name} is not active on the server, or more than one active user has that name: use Name#tag.";
 			}
 			case "kick":
 			{
@@ -525,6 +531,16 @@ public class DiscordBot
 						? $"User {targetUserID} ({kickResult.TargetDisplayName}) has been kicked from the server."
 						: $"User {targetUserID} ({kickResult.TargetDisplayName}) has been kicked from the server. Reason: {reason}"
 				};
+			}
+			case "rename":
+			{
+				Int64 targetUserID = GetOption<Int64>(command, "user_id");
+				string name = GetOption<string>(command, "name") ?? String.Empty;
+				string? reason = GetOption<string>(command, "reason");
+				GenOnlineService.Realtime.Result<GenOnlineService.Realtime.Empty> renamed = await ServiceLocator.Services.GetRequiredService<GenOnlineService.Names.PlayerNames>().RenameByStaffAsync(actor, targetUserID, name, reason);
+				return renamed.Ok
+					? $"User {targetUserID} is now named {name}."
+					: $"User {targetUserID} was not renamed: {renamed.Code}.";
 			}
 			case "announce":
 			{

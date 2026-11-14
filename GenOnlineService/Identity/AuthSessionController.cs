@@ -106,7 +106,7 @@ namespace GenOnlineService.Identity
 				await Database.UserDevices.RegisterUserDevice(db, userID, body.MachineGuid ?? "NONE", body.MacAddress ?? "NONE", body.VolumeSerial ?? "NONE", ipAddress);
 			}
 
-			string displayName = await Database.Users.GetDisplayName(db, userID);
+			(string Name, int Tag) name = await Database.DisplayNames.Get(db, userID) ?? (String.Empty, 0);
 
 			await SessionHelpers.SetUsedLoggedIn(userID, sessionType);
 			await WebSocketManager.ClearDataFromUser(userID, sessionType);
@@ -116,7 +116,8 @@ namespace GenOnlineService.Identity
 			return Ok(new
 			{
 				user_id = userID,
-				display_name = displayName,
+				display_name = name.Name,
+				name_tag = Database.DisplayNames.FormatTag(name.Tag),
 				session_type = sessionType.ToString(),
 				ws_url = $"{(Request.IsHttps ? "wss" : "ws")}://{Request.Host}{Request.PathBase}{GenOnlineService.Realtime.RealtimeHub.Path}"
 			});

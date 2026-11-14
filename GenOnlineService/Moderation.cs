@@ -67,7 +67,10 @@ namespace GenOnlineService
 				// The kick is stored before it is applied and kept only when it was applied, so the sanction, the audit row and the kick always agree
 				await using var transaction = await db.Database.BeginTransactionAsync();
 				kick = await Database.Moderation.AddKick(db, targetUserID, reason, actor);
-				targetDisplayName = target?.m_strDisplayName ?? await Database.Users.GetDisplayName(db, targetUserID);
+				// staff see Name#tag: the name alone may belong to several players
+				(string Name, int Tag)? stored = target == null ? await Database.DisplayNames.Get(db, targetUserID) : null;
+				targetDisplayName = target != null ? Database.DisplayNames.Format(target.m_strDisplayName, target.m_NameTag)
+					: stored != null ? Database.DisplayNames.Format(stored.Value.Name, stored.Value.Tag) : String.Empty;
 
 				bool applied = true;
 				if (target != null)

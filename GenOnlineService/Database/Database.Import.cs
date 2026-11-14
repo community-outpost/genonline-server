@@ -641,6 +641,8 @@ namespace Database
 						ID = old.Id,
 						Username = kept.Username,
 						UsernameNormalized = NameNormalizer.Normalize(kept.Username),
+						// imported names are unique already (AssignUsernames), so tag 1 keeps name#tag unique; renames keep it
+						NameTag = 1,
 						Email = kept.Email,
 						EmailNormalized = kept.Email == null ? null : NameNormalizer.Normalize(kept.Email),
 						State = UserStates.Active,

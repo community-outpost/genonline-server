@@ -178,6 +178,14 @@ namespace GenOnlineService.Api
 		public string? ResolutionNote { get; init; }
 	}
 
+	[ApiFixture("patch-players.request")]
+	public sealed record RenamePlayerRequest
+	{
+		public string? Name { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Reason { get; init; }
+	}
+
 	[ApiFixture("patch-me.request")]
 	public sealed record UpdateMeRequest
 	{

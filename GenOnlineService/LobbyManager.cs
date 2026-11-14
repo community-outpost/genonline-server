@@ -599,16 +599,53 @@ namespace GenOnlineService
 
 				s_log.LogDebug("Lobby {LobbyId}: re-signalling {SourceUserId} <-> {TargetUserId} before mesh check retry", LobbyID, sourceMember.UserID, targetMember.UserID);
 
-				SendStartSignallingToMember(sourceMember, targetMember);
-				SendStartSignallingToMember(targetMember, sourceMember);
+				RestartPairLocked(sourceMember, targetMember, true);
 			}
 		}
 
-		private void SendStartSignallingToMember(LobbyMember recipient, LobbyMember peer)
+		private void SendStartSignallingToMember(LobbyMember recipient, LobbyMember peer, PeerStepValues? values)
 		{
 			ForgetConnection(recipient.UserID, peer.UserID);
-			RealtimeOut.Fire(RealtimeLobbies.GameOf(recipient).StartSignalling(StartSignallingFor(peer)));
+			RealtimeOut.Fire(RealtimeLobbies.GameOf(recipient).StartSignalling(StartSignallingFor(recipient, peer, values)));
 		}
+
+		private readonly PeerPairs m_PeerPairs = new();
+
+		private static IReadOnlyList<string>? TransportsOf(LobbyMember member) =>
+			member.GetSession().TryGetTarget(out UserSession? session) ? session?.PeerTransports : null;
+
+		private void RestartPairLocked(LobbyMember a, LobbyMember b, bool advance)
+		{
+			IReadOnlyList<string>? transportsA = TransportsOf(a);
+			IReadOnlyList<string>? transportsB = TransportsOf(b);
+			m_PeerPairs.Restart(a.UserID, b.UserID, advance, ConnectionOrder.BothListEos(transportsA, transportsB));
+			PeerStepValues? values = PairValuesLocked(a, b, transportsA, transportsB);
+			SendStartSignallingToMember(a, b, values);
+			SendStartSignallingToMember(b, a, values);
+		}
+
+		internal Task RequestSignallingAsync(Int64 sourceUserID, Int64 targetUserID, int? failedAttempt, IRealtimeClient caller) => RunExclusiveAsync(() =>
+		{
+			LobbyMember? source = GetMemberFromUserID(sourceUserID);
+			LobbyMember? target = sourceUserID == targetUserID ? null : GetMemberFromUserID(targetUserID);
+			if (source == null || target == null)
+			{
+				return Task.CompletedTask;
+			}
+
+			IReadOnlyList<string>? transportsSource = TransportsOf(source);
+			IReadOnlyList<string>? transportsTarget = TransportsOf(target);
+			if (m_PeerPairs.Request(sourceUserID, targetUserID, failedAttempt, ConnectionOrder.BothListEos(transportsSource, transportsTarget)) == null)
+			{
+				return Task.CompletedTask;
+			}
+
+			PeerStepValues? values = PairValuesLocked(source, target, transportsSource, transportsTarget);
+			ForgetConnection(sourceUserID, targetUserID);
+			RealtimeOut.Fire(caller.StartSignalling(StartSignallingFor(source, target, values)));
+			RealtimeOut.Fire(RealtimeOut.UserGame(targetUserID).StartSignalling(StartSignallingFor(target, source, values)));
+			return Task.CompletedTask;
+		});
 
 		private bool IsPairConnected(Int64 userA, Int64 userB) =>
 			m_ReportedConnections.ContainsKey((userA, userB)) && m_ReportedConnections.ContainsKey((userB, userA));
@@ -628,6 +665,8 @@ namespace GenOnlineService
 					m_ReportedConnections.TryRemove(pair, out _);
 				}
 			}
+
+			m_PeerPairs.Forget(userID);
 		}
 
 		private void RecordReportedConnections(Int64 reporter, IReadOnlyList<Int64> connected)
@@ -667,20 +706,44 @@ namespace GenOnlineService
 				}
 
 				s_log.LogDebug("Lobby {LobbyId}: re-signalling {SourceUserId} <-> {TargetUserId} after a reconnect", LobbyID, userID, peer.UserID);
-				SendStartSignallingToMember(member, peer);
-				SendStartSignallingToMember(peer, member);
+				RestartPairLocked(member, peer, false);
 			}
 			return Task.CompletedTask;
 		});
 
-		// tells a member how to reach the given peer
-		internal StartSignallingEvent StartSignallingFor(LobbyMember peer) => new StartSignallingEvent
+		// The step values of a pair from one snapshot of both transport lists, null for the old shape, under the lobby gate
+		private PeerStepValues? PairValuesLocked(LobbyMember a, LobbyMember b, IReadOnlyList<string>? transportsA, IReadOnlyList<string>? transportsB)
 		{
-			LobbyId = LobbyID,
-			UserId = peer.UserID,
-			PreferredPort = peer.Port,
-			MiddlewareId = peer.MiddlewareUserID
-		};
+			if (transportsA == null || transportsB == null)
+			{
+				m_PeerPairs.Current(a.UserID, b.UserID);
+				return null;
+			}
+			bool bothEos = ConnectionOrder.BothListEos(transportsA, transportsB);
+			PeerPairState state = m_PeerPairs.Settle(a.UserID, b.UserID, bothEos);
+
+			// eos reaches a peer by its middleware id, so without both ids this send uses the next step and the stored step stays
+			bool idsKnown = !String.IsNullOrEmpty(a.MiddlewareUserID) && !String.IsNullOrEmpty(b.MiddlewareUserID);
+			return ConnectionOrder.ValuesOf(state, bothEos && idsKnown);
+		}
+
+		private PeerStepValues? PairValuesLocked(LobbyMember a, LobbyMember b) => PairValuesLocked(a, b, TransportsOf(a), TransportsOf(b));
+
+		// Tells a member how to reach the given peer with the values both peers of the pair get, the old shape leaves the four fields out
+		private StartSignallingEvent StartSignallingFor(LobbyMember recipient, LobbyMember peer, PeerStepValues? values)
+		{
+			return new StartSignallingEvent
+			{
+				LobbyId = LobbyID,
+				UserId = peer.UserID,
+				PreferredPort = peer.Port,
+				MiddlewareId = peer.MiddlewareUserID,
+				Attempt = values?.Attempt,
+				Transport = values?.Transport,
+				Relay = values?.Relay,
+				TimeoutS = values?.TimeoutS
+			};
+		}
 
 		internal static AnticheatPeerEvent AnticheatPeerFor(LobbyMember peer) => new AnticheatPeerEvent
 		{
@@ -705,7 +768,8 @@ namespace GenOnlineService
 				{
 					if (member.SlotState == EPlayerType.SLOT_PLAYER && member.UserID != userID)
 					{
-						SendStartSignallingToMember(member, resolvedMember);
+						// the peer already started this attempt with an empty middleware id, so the pair restarts with one more attempt
+						RestartPairLocked(member, resolvedMember, false);
 						RealtimeOut.Fire(RealtimeLobbies.GameOf(member).AnticheatRegister(AnticheatPeerFor(resolvedMember)));
 					}
 				}
@@ -961,6 +1025,11 @@ namespace GenOnlineService
 
 		[JsonIgnore]
 		public ConcurrentDictionary<Int64, DateTime> TimeMemberLeft { get; private set; } = new();
+
+		// every player who joined this lobby, kept for the lobby's lifetime so connection reports may name a former member
+		private readonly ConcurrentDictionary<Int64, byte> m_EverMemberUserIDs = new();
+
+		public bool WasEverMember(Int64 userID) => m_EverMemberUserIDs.ContainsKey(userID);
 
 		// Records the first time each player's in-game WebSocket connection dropped (i.e., when they first "quit"
 		// while the match was in progress). Only the first disconnect is stored � reconnects do not reset it.
@@ -1269,7 +1338,7 @@ public async Task FinalizeACChecks()
 		}
 
 		internal static async Task<LobbyMembershipStatus> TransferMemberAsync(Lobby destination, IReadOnlyCollection<Lobby> sources,
-			JoinLobbyCommand command, UserSession session, string displayName, UserLobbyPreferences preferences)
+			JoinLobbyCommand command, UserSession session, string displayName, int nameTag, UserLobbyPreferences preferences)
 		{
 			var locked = sources.Append(destination).Distinct().OrderBy(lobby => lobby.LobbyID).ToArray();
 			int acquired = 0;
@@ -1284,7 +1353,7 @@ public async Task FinalizeACChecks()
 				}
 				var admission = destination.ValidateJoin(command);
 				if (admission != LobbyMembershipStatus.Success) return admission;
-				var added = destination.AddMemberLocked(session, displayName, command.PreferredPort, command.HasMap, preferences);
+				var added = destination.AddMemberLocked(session, displayName, nameTag, command.PreferredPort, command.HasMap, preferences);
 				if (added.Member == null) return added.Status;
 				foreach (var source in sources)
 				{
@@ -1311,15 +1380,15 @@ public async Task FinalizeACChecks()
 				return Task.FromResult(true);
 			});
 
-		internal Task<LobbyMembershipStatus> AddCreatorAsync(UserSession session, string displayName, ushort preferredPort, UserLobbyPreferences preferences) =>
+		internal Task<LobbyMembershipStatus> AddCreatorAsync(UserSession session, string displayName, int nameTag, ushort preferredPort, UserLobbyPreferences preferences) =>
 			RunExclusiveAsync(() =>
 			{
-				var added = AddMemberLocked(session, displayName, preferredPort, true, preferences);
+				var added = AddMemberLocked(session, displayName, nameTag, preferredPort, true, preferences);
 				if (added.Member != null) PublishMemberAddition(session, added.Member);
 				return Task.FromResult(added.Status);
 			});
 
-		private (LobbyMembershipStatus Status, LobbyMember? Member) AddMemberLocked(UserSession playerSession, string strDisplayName, UInt16 userPreferredPort, bool bHasMap, UserLobbyPreferences lobbyPrefs)
+		private (LobbyMembershipStatus Status, LobbyMember? Member) AddMemberLocked(UserSession playerSession, string strDisplayName, int nameTag, UInt16 userPreferredPort, bool bHasMap, UserLobbyPreferences lobbyPrefs)
 		{
 			if (State != ELobbyState.GAME_SETUP) return (LobbyMembershipStatus.NotInSetup, null);
 			if (GetMemberFromUserID(playerSession.m_UserID) != null) return (LobbyMembershipStatus.AlreadyMember, null);
@@ -1342,20 +1411,6 @@ public async Task FinalizeACChecks()
 			}
 
 			string strOriginalDisplayName = strDisplayName;
-			int dupesSeen = 0;
-			string strNameLower = strDisplayName.ToLower();
-			foreach (var memberEntry in Members)
-			{
-				if (memberEntry.DisplayNameNotDeduped.ToLower() == strNameLower)
-				{
-					++dupesSeen;
-				}
-			}
-
-			if (dupesSeen > 0)
-			{
-				strDisplayName = String.Format("{0} ({1})", strDisplayName, dupesSeen);
-			}
 
 			// only apply lobby prefs if not QM
 			LobbyMember? newMember = null;
@@ -1365,6 +1420,11 @@ public async Task FinalizeACChecks()
 				// if vanilla teams, dont apply favorite
 				int sideToUse = lobbyPrefs.favorite_side;
 				if (IsVanillaTeamsOnly)
+				{
+					sideToUse = -1;
+				}
+
+				if (sideToUse == ClientFeatures.ObserverSide && !AllowObservers)
 				{
 					sideToUse = -1;
 				}
@@ -1382,7 +1442,7 @@ public async Task FinalizeACChecks()
 					}
 				}
 
-				newMember = new LobbyMember(this, playerSession, playerSession.m_UserID, strDisplayName, strOriginalDisplayName, userPreferredPort, sideToUse, colorToUse, -1, EPlayerType.SLOT_PLAYER, slotIndex, bHasMap);
+				newMember = new LobbyMember(this, playerSession, playerSession.m_UserID, strDisplayName, strOriginalDisplayName, userPreferredPort, sideToUse, colorToUse, -1, EPlayerType.SLOT_PLAYER, slotIndex, bHasMap, nameTag);
 			}
 			else
 			{
@@ -1405,7 +1465,7 @@ public async Task FinalizeACChecks()
 
 				int sideToUse = allowedTeams[Random.Shared.Next(0, allowedTeams.Length)];
 
-				newMember = new LobbyMember(this, playerSession, playerSession.m_UserID, strDisplayName, strOriginalDisplayName, userPreferredPort, sideToUse, -1, -1, EPlayerType.SLOT_PLAYER, slotIndex, bHasMap);
+				newMember = new LobbyMember(this, playerSession, playerSession.m_UserID, strDisplayName, strOriginalDisplayName, userPreferredPort, sideToUse, -1, -1, EPlayerType.SLOT_PLAYER, slotIndex, bHasMap, nameTag);
 			}
 
 			Members[slotIndex] = newMember;
@@ -1413,6 +1473,8 @@ public async Task FinalizeACChecks()
 			++m_MembershipVersion;
 			InvalidateMeshCheck("membership_changed");
 			TimeMemberLeft[playerSession.m_UserID] = DateTime.UnixEpoch;
+			m_EverMemberUserIDs[playerSession.m_UserID] = 0;
+			RefreshLobbyNamesLocked();
 
 			playerSession.TryUpdateSessionNetworkRoom(-1);
 
@@ -1431,11 +1493,12 @@ public async Task FinalizeACChecks()
 					continue;
 				}
 
-				RealtimeOut.Fire(joining.StartSignalling(StartSignallingFor(memberEntry)));
+				PeerStepValues? values = PairValuesLocked(newMember, memberEntry);
+				RealtimeOut.Fire(joining.StartSignalling(StartSignallingFor(newMember, memberEntry, values)));
 				RealtimeOut.Fire(joining.AnticheatRegister(AnticheatPeerFor(memberEntry)));
 
 				IRealtimeClient existing = RealtimeOut.Session(remoteSession);
-				RealtimeOut.Fire(existing.StartSignalling(StartSignallingFor(newMember)));
+				RealtimeOut.Fire(existing.StartSignalling(StartSignallingFor(memberEntry, newMember, values)));
 				RealtimeOut.Fire(existing.AnticheatRegister(AnticheatPeerFor(newMember)));
 			}
 
@@ -1506,6 +1569,33 @@ public async Task FinalizeACChecks()
 			return status;
 		}
 
+		// Lobbies show names alone; while two human members share a name (compared like names in the database), both show
+		// Name#tag, which is unique, and a member drops back to the bare name once nobody else has it.
+		// Changed names reach everyone in the next LobbyState.
+		private void RefreshLobbyNamesLocked()
+		{
+			List<LobbyMember> humans = Members.Where(m => m.IsHuman()).ToList();
+			bool changed = false;
+			foreach (LobbyMember member in humans)
+			{
+				string key = NameNormalizer.Normalize(member.DisplayNameNotDeduped);
+				bool shared = humans.Any(other => !ReferenceEquals(other, member) && NameNormalizer.Normalize(other.DisplayNameNotDeduped) == key);
+				string shown = !shared ? member.DisplayNameNotDeduped
+					: member.NameTag > 0 ? Database.DisplayNames.Format(member.DisplayNameNotDeduped, member.NameTag)
+					: $"{member.DisplayNameNotDeduped} ({member.UserID})";
+				if (!String.Equals(shown, member.DisplayName, StringComparison.Ordinal))
+				{
+					member.SetLobbyName(shown);
+					changed = true;
+				}
+			}
+
+			if (changed)
+			{
+				DirtyRetransmit();
+			}
+		}
+
 		private bool RemoveMemberLocked(LobbyMember member)
 		{
 			if (member.SlotIndex < 0
@@ -1519,6 +1609,7 @@ public async Task FinalizeACChecks()
 			Members[member.SlotIndex] = placeholderMember;
 			TimeMemberLeft[member.UserID] = DateTime.UtcNow;
 			ForgetConnectionsOf(member.UserID);
+			RefreshLobbyNamesLocked();
 
 			OnAfterPlayerLeftLocked(member.UserID);
 			++m_MembershipVersion;
@@ -1890,6 +1981,11 @@ public async Task FinalizeACChecks()
 		public string DisplayName { get; private set; } = "";
 
 		[JsonIgnore]
+		public int NameTag { get; private set; }
+
+		internal void SetLobbyName(string name) => DisplayName = name;
+
+		[JsonIgnore]
 		public string DisplayNameNotDeduped { get; set; } = ""; // internal only, used for determining dedupe counts
 
 		private bool m_Ready;
@@ -1958,8 +2054,9 @@ public async Task FinalizeACChecks()
 			return PlayerSession;
 		}
 
-		public LobbyMember(Lobby owningLobby, UserSession? owningSession, Int64 UserID_in, string DisplayName_in, string strUndedupedDisplayName, UInt16 Port_in, int Side_in, int Color_in, int StartingPosition_in, EPlayerType SlotState_in, UInt16 SlotIndex_in, bool bHasMap_in)
+		public LobbyMember(Lobby owningLobby, UserSession? owningSession, Int64 UserID_in, string DisplayName_in, string strUndedupedDisplayName, UInt16 Port_in, int Side_in, int Color_in, int StartingPosition_in, EPlayerType SlotState_in, UInt16 SlotIndex_in, bool bHasMap_in, int nameTag_in = 0)
 		{
+			NameTag = nameTag_in;
 			CurrentLobby = new WeakReference<Lobby?>(owningLobby);
 			PlayerSession = new WeakReference<UserSession?>(owningSession);
 
@@ -2082,27 +2179,19 @@ public async Task FinalizeACChecks()
 	{
 		private ConcurrentDictionary<Int64, Lobby> m_dictLobbies = new();
 
-		private Int64 m_NextLobbyID = 0;
-
-		// Concurrent CreateLobby calls (e.g. a custom lobby and a QuickMatch allocation racing) must never be
-		// handed the same ID. Interlocked.Increment returns the post-increment value, so subtracting 1 keeps
-		// the original "starts at 0" sequence while making the read-and-bump atomic.
-		// Internal (not private) so it is unit-testable via InternalsVisibleTo without needing the rest of
-		// CreateLobby's database dependencies.
-		internal Int64 GenerateNextLobbyID()
-		{
-			return Interlocked.Increment(ref m_NextLobbyID) - 1;
-		}
+		// lobby ids come from database blocks, so no restart or other service copy reuses one
+		private readonly LobbyIdAllocator m_lobbyIds;
 
 		private readonly IServiceProvider _services;
 		private readonly ILogger<LobbyManager> _logger;
 
-		public LobbyManager(IServiceProvider services, IDbContextFactory<AppDbContext> membershipDbFactory, LobbyMembershipConnections membershipConnections, ILogger<LobbyManager> logger)
+		public LobbyManager(IServiceProvider services, IDbContextFactory<AppDbContext> membershipDbFactory, LobbyMembershipConnections membershipConnections, LobbyIdAllocator lobbyIds, ILogger<LobbyManager> logger)
 		{
 			_services = services;
 			_logger = logger;
 			this.membershipDbFactory = membershipDbFactory;
 			this.membershipConnections = membershipConnections;
+			m_lobbyIds = lobbyIds;
         }
 
         public async Task Cleanup()
@@ -2187,8 +2276,11 @@ public async Task FinalizeACChecks()
 
 		public async Task<Int64> CreateLobby(AppDbContext _db, UserSession owningSession, string strOwnerDisplayName, string strName, string strMapName, string strMapPath, bool bMapOfficial, int maxPlayers,
 			UInt16 hostPreferredPort, bool bVanillaTeams, bool bTrackStats, UInt32 starting_cash, bool bLimitSuperweapons, bool bPassworded, String strPassword, Int16 parentNetworkRoom, bool bAllowObservers,
-			UInt16 maxCamHeight, GameBuild build, ELobbyType lobbyType, ELobbyJoinability joinability = ELobbyJoinability.Public)
+			UInt16 maxCamHeight, GameBuild build, ELobbyType lobbyType, ELobbyJoinability joinability = ELobbyJoinability.Public, int ownerNameTag = 0)
 		{
+			// the id is taken before the membership gate so a block refill never holds it, a database failure throws before anything changes
+			Int64 newLobbyID = await m_lobbyIds.NextAsync();
+
 			using var membership = await AcquireMembershipGateAsync(owningSession.m_UserID);
 			if (!IsCurrentSession(owningSession) || owningSession.IsRetired) return -1;
 			_logger.LogInformation("Creating lobby for user {UserId}", owningSession.m_UserID);
@@ -2200,7 +2292,6 @@ public async Task FinalizeACChecks()
 
 			int rng_seed = new Random().Next();
 
-			Int64 newLobbyID = GenerateNextLobbyID();
 
 			Lobby newLobby = new Lobby(newLobbyID, owningSession, strName, ELobbyState.GAME_SETUP, strMapName, strMapPath, bVanillaTeams, starting_cash, bLimitSuperweapons, bTrackStats, bPassworded, strPassword, bMapOfficial, rng_seed, parentNetworkRoom, bAllowObservers, maxCamHeight, build, maxPlayers, lobbyType);
 			newLobby.UpdateJoinability(joinability);
@@ -2211,7 +2302,7 @@ public async Task FinalizeACChecks()
 			if (lobbyType != ELobbyType.QuickMatch) // QuickMatch clients join after allocation.
 			{
 				var preferences = await Database.Users.GetUserLobbyPreferences(_db, owningSession.m_UserID);
-				if (preferences != null && await newLobby.AddCreatorAsync(owningSession, strOwnerDisplayName, hostPreferredPort, preferences) == LobbyMembershipStatus.Success)
+				if (preferences != null && await newLobby.AddCreatorAsync(owningSession, strOwnerDisplayName, ownerNameTag, hostPreferredPort, preferences) == LobbyMembershipStatus.Success)
 					RealtimeHub.PublishPresence(owningSession.m_UserID);
 			}
 

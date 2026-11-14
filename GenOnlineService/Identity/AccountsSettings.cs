@@ -28,7 +28,7 @@ namespace GenOnlineService.Identity
 		public List<string> RedirectUris { get; init; } = new();
 	}
 
-	// The environment owns names, roles and bans; the provider only signs people in
+	// One upstream OpenID Connect provider
 	public sealed class UpstreamProviderSettings
 	{
 		public string Name { get; init; } = String.Empty;

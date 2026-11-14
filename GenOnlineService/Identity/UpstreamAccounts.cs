@@ -18,7 +18,6 @@
 
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
-using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 
@@ -29,7 +28,7 @@ namespace GenOnlineService.Identity
 		public static UpstreamSignInResult Refused(string error) => new(null, error);
 	}
 
-	// GitLab OmniAuth behaviour: a known identity signs in, an (opt-in) verified email finds the user, otherwise sign-up
+	// GitLab OmniAuth behaviour: a known identity signs in, a verified email (opt-in) finds the user, otherwise sign-up
 	public sealed class UpstreamAccounts
 	{
 		public const string ErrorNoSubject = "no_subject";
@@ -99,12 +98,12 @@ namespace GenOnlineService.Identity
 
 					user = new User
 					{
-						Username = await UniqueUsername(db, externName),
+						Username = InitialName(externName),
 						State = UserStates.Active,
 						CreatedAt = now,
 						UpdatedAt = now
 					};
-					user.UsernameNormalized = NameNormalizer.Normalize(user.Username);
+					await Database.DisplayNames.AssignNewUser(db, user);
 					db.Users.Add(user);
 					await db.SaveChangesAsync();
 					s_log.LogInformation("Created user {UserId} from {Provider} sign-up", user.ID, provider.Name);
@@ -134,7 +133,8 @@ namespace GenOnlineService.Identity
 			return new UpstreamSignInResult(user, null);
 		}
 
-				private static async Task<User?> FindByVerifiedEmail(AppDbContext db, UpstreamProviderSettings provider, ClaimsPrincipal external)
+		// An unknown identity links by a verified email only where the operator allows it
+		private static async Task<User?> FindByVerifiedEmail(AppDbContext db, UpstreamProviderSettings provider, ClaimsPrincipal external)
 		{
 			string? email = external.GetClaim(OpenIddictConstants.Claims.Email);
 			if (provider.AutoLinkVerifiedEmail && !String.IsNullOrEmpty(email)
@@ -151,38 +151,26 @@ namespace GenOnlineService.Identity
 			return null;
 		}
 
-		// Display name rules: printable, trimmed, at most 32 characters, unique after normalization
-		private static async Task<string> UniqueUsername(AppDbContext db, string? requested)
+		// A first name for a new account: printable, trimmed, at most 32 characters; the tag makes it unique
+		private static string InitialName(string? requested)
 		{
 			var builder = new StringBuilder();
 			foreach (char c in (requested ?? String.Empty).Normalize(NormalizationForm.FormKC))
 			{
-				if (!Char.IsControl(c) && !Char.IsSurrogate(c) && c != '�')
+				if (!Char.IsControl(c) && !Char.IsSurrogate(c) && c != '�' && c != '#')
 				{
 					builder.Append(Char.IsWhiteSpace(c) ? ' ' : c);
 				}
 			}
 
-			string baseName = String.Join(' ', builder.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-			if (baseName.Length == 0)
+			string name = String.Join(' ', builder.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+			name = Truncate(name, User.UsernameMaxLength)!;
+			while (name.Length > 0 && NameNormalizer.Normalize(name).Length > User.UsernameMaxLength)
 			{
-				baseName = "player";
+				name = name.Substring(0, name.Length - 1).TrimEnd();
 			}
 
-			baseName = Truncate(baseName, User.UsernameMaxLength)!;
-
-			for (int attempt = 1; attempt < 10000; attempt++)
-			{
-				string suffix = attempt == 1 ? String.Empty : "_" + attempt;
-				string candidate = Truncate(baseName, User.UsernameMaxLength - suffix.Length) + suffix;
-				string normalized = NameNormalizer.Normalize(candidate);
-				if (normalized.Length <= User.UsernameMaxLength && !await db.Users.AnyAsync(u => u.UsernameNormalized == normalized))
-				{
-					return candidate;
-				}
-			}
-
-			return "player_" + Guid.NewGuid().ToString("N").Substring(0, 12);
+			return name.Length == 0 ? "player" : name;
 		}
 
 		private static string? Truncate(string? value, int length) => value == null || value.Length <= length ? value : value.Substring(0, length);

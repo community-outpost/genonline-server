@@ -18,6 +18,16 @@
 		<PackageReference Update="System.Linq.AsyncEnumerable" ExcludeAssets="all" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<!-- The UTS #39 confusables table behind the look-alike key of display names (NameKey) -->
+		<EmbeddedResource Include="Resources\confusables.txt" LogicalName="GenOnlineService.Resources.confusables.txt" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Lets the tests drive a lobby through its internal membership calls -->
+		<InternalsVisibleTo Include="GenOnlineService.Tests" />
+	</ItemGroup>
+
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'">
     <WarningLevel>0</WarningLevel>

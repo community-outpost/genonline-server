@@ -111,13 +111,13 @@ namespace GenOnlineService.Realtime
 			Int64 lobbyID;
 			await using (AppDbContext db = await m_dbFactory.CreateDbContextAsync())
 			{
-				string displayName = await global::Database.Users.GetDisplayName(db, UserID);
+				(string Name, int Tag) owner = await global::Database.DisplayNames.Get(db, UserID) ?? (String.Empty, 0);
 				LobbySettings settings = request.Settings;
-				lobbyID = await m_lobbyManager.CreateLobby(db, session, displayName, request.Name, request.Map.Name, request.Map.Path, request.Map.Official, request.MaxPlayers,
+				lobbyID = await m_lobbyManager.CreateLobby(db, session, owner.Name, request.Name, request.Map.Name, request.Map.Path, request.Map.Official, request.MaxPlayers,
 					(UInt16)request.PreferredPort, settings.VanillaTeams, settings.TrackStats, (UInt32)settings.StartingCash, settings.LimitSuperweapons,
 					request.Password != null, request.Password ?? String.Empty, session.networkRoomID, settings.AllowObservers, (UInt16)settings.MaxCameraHeight,
 					GameBuild.Of(build), ELobbyType.CustomGame,
-					request.Visibility == LobbyVisibility.Friends ? ELobbyJoinability.FriendsOnly : ELobbyJoinability.Public);
+					request.Visibility == LobbyVisibility.Friends ? ELobbyJoinability.FriendsOnly : ELobbyJoinability.Public, owner.Tag);
 			}
 
 			if (lobbyID < 0)
@@ -275,7 +275,7 @@ namespace GenOnlineService.Realtime
 
 		public Task<Result<Empty>> UpdateMySlot(UpdateMySlotRequest request)
 		{
-			if (IsInvalidGameID(request.Side)) return Invalid("side");
+			if (IsInvalidSide(request.Side)) return Invalid("side");
 			if (IsInvalidGameID(request.Color)) return Invalid("color");
 			if (IsInvalidGameID(request.StartPosition)) return Invalid("start_position");
 			if (request.Team.HasValue && request.Team.Value < 0) return Invalid("team");
@@ -283,6 +283,11 @@ namespace GenOnlineService.Realtime
 			bool changes = request.Side != null || request.Color != null || request.StartPosition != null || request.Team.HasValue;
 			return ChangeLobbyAsync(hostOnly: false, resetsReady: changes, async (lobby, member) =>
 			{
+				// the observer seat follows the host's setting, as in the original game
+				if (request.Side == ClientFeatures.ObserverSide && !lobby.AllowObservers)
+				{
+					return Result.Invalid("side");
+				}
 				if (request.Side != null || request.Color != null)
 				{
 					await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -349,7 +354,7 @@ namespace GenOnlineService.Realtime
 			foreach (SlotPatch patch in request.Slots)
 			{
 				if (patch == null || patch.Index < 0 || patch.Index >= Lobby.MaxLobbySize) return Invalid("slots.index");
-				if (IsInvalidGameID(patch.Side)) return Invalid("slots.side");
+				if (IsInvalidSide(patch.Side)) return Invalid("slots.side");
 				if (IsInvalidGameID(patch.Color)) return Invalid("slots.color");
 				if (IsInvalidGameID(patch.StartPosition)) return Invalid("slots.start_position");
 				if (patch.Team.HasValue && patch.Team.Value < 0) return Invalid("slots.team");
@@ -357,6 +362,15 @@ namespace GenOnlineService.Realtime
 
 			return ChangeLobbyAsync(hostOnly: true, resetsReady: request.Slots.Count > 0, (lobby, member) =>
 			{
+				// an observer seat is checked for every slot first, so a refused patch changes nothing
+				foreach (SlotPatch patch in request.Slots.Where(p => p.Side == ClientFeatures.ObserverSide))
+				{
+					LobbyMember? target = lobby.GetMemberFromSlot(patch.Index);
+					if (!lobby.AllowObservers || (target != null && target.IsAI()))
+					{
+						return Task.FromResult<Failure?>(Result.Invalid("slots.side"));
+					}
+				}
 				foreach (SlotPatch patch in request.Slots)
 				{
 					LobbyMember? target = lobby.GetMemberFromSlot(patch.Index);
@@ -503,6 +517,15 @@ namespace GenOnlineService.Realtime
 			return Task.FromResult<Result<Empty>>(MatchmakingManager.PlayerWidenSearch(Session) ? Result.Success() : Result.Fail(ErrorCodes.MatchmakingNotQueued));
 		}
 
+		public Task SetPeerTransports(SetPeerTransportsRequest request)
+		{
+			if (RequireAccess(ESessionAccessType.Gameplay) == null)
+			{
+				Session.SetPeerTransports(request.Transports);
+			}
+			return Task.CompletedTask;
+		}
+
 		public Task RequestSignalling(RequestSignallingRequest request)
 		{
 			if (RequireAccess(ESessionAccessType.Gameplay) != null || !TryGetPeers(request.TargetUserId, out Lobby? lobby, out LobbyMember? source, out LobbyMember? target))
@@ -510,11 +533,7 @@ namespace GenOnlineService.Realtime
 				return Task.CompletedTask;
 			}
 
-			// both peers restart the handshake towards each other
-			lobby.ForgetConnection(source.UserID, target.UserID);
-			RealtimeOut.Fire(Clients.Caller.StartSignalling(lobby.StartSignallingFor(target)));
-			RealtimeOut.Fire(RealtimeOut.UserGame(target.UserID).StartSignalling(lobby.StartSignallingFor(source)));
-			return Task.CompletedTask;
+			return lobby.RequestSignallingAsync(source.UserID, target.UserID, request.FailedAttempt, Clients.Caller);
 		}
 
 		public Task Signal(RelayRequest request)
@@ -562,15 +581,6 @@ namespace GenOnlineService.Realtime
 			}
 
 			await m_lobbyManager.StoreMeshResponseAsync(Session, Connection, request);
-		}
-
-		public Task AnticheatMessage(RelayRequest request)
-		{
-			if (RequireAccess(ESessionAccessType.Gameplay) == null && request.Payload != null && TryGetPeers(request.To, out _, out _, out LobbyMember? target))
-			{
-				RealtimeOut.Fire(RealtimeOut.UserGame(target.UserID).AnticheatMessage(new RelayEvent { From = UserID, Payload = request.Payload }));
-			}
-			return Task.CompletedTask;
 		}
 
 		public Task ProbeResponse(ProbeResponseRequest request)
@@ -707,5 +717,8 @@ namespace GenOnlineService.Realtime
 
 		// side, color and start position are game ids, -1 means random
 		private static bool IsInvalidGameID(int? value) => value is int id && id < -1;
+
+		// a side may also be the observer seat, which needs a lobby that allows observers
+		private static bool IsInvalidSide(int? value) => value != ClientFeatures.ObserverSide && IsInvalidGameID(value);
 	}
 }

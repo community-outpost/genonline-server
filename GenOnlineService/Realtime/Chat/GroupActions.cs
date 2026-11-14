@@ -44,7 +44,7 @@ namespace GenOnlineService.Realtime
 			}
 
 			Database.GroupInfo group;
-			Dictionary<long, string> names;
+			Dictionary<long, (string Name, int Tag)> names;
 			await using (AppDbContext db = await dbFactory.CreateDbContextAsync())
 			{
 				Failure? refused = await CheckInviteesAsync(db, me, invited);
@@ -71,7 +71,7 @@ namespace GenOnlineService.Realtime
 
 			Database.GroupInfo group;
 			Int64[] added;
-			Dictionary<long, string> names;
+			Dictionary<long, (string Name, int Tag)> names;
 			SemaphoreSlim gate = GroupLock(groupID);
 			await gate.WaitAsync();
 			try
@@ -128,7 +128,7 @@ namespace GenOnlineService.Realtime
 			}
 
 			Database.GroupInfo? remaining;
-			Dictionary<long, string> names;
+			Dictionary<long, (string Name, int Tag)> names;
 			SemaphoreSlim gate = GroupLock(groupID);
 			await gate.WaitAsync();
 			try
@@ -149,7 +149,7 @@ namespace GenOnlineService.Realtime
 				}
 
 				remaining = (await Database.Chat.LeaveGroup(db, groupID, userID)).Remaining;
-				names = remaining == null ? new Dictionary<long, string>() : await RealtimeHub.NamesAsync(db, remaining.MemberIDs);
+				names = remaining == null ? new Dictionary<long, (string Name, int Tag)>() : await RealtimeHub.NamesAsync(db, remaining.MemberIDs);
 			}
 			finally
 			{
@@ -172,7 +172,7 @@ namespace GenOnlineService.Realtime
 			}
 
 			Database.GroupInfo? group;
-			Dictionary<long, string> names;
+			Dictionary<long, (string Name, int Tag)> names;
 			SemaphoreSlim gate = GroupLock(groupID);
 			await gate.WaitAsync();
 			try
@@ -208,7 +208,7 @@ namespace GenOnlineService.Realtime
 		private static async Task<Result<Empty>> LeaveAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 groupID)
 		{
 			Database.GroupLeaveResult result;
-			Dictionary<long, string> names;
+			Dictionary<long, (string Name, int Tag)> names;
 			SemaphoreSlim gate = GroupLock(groupID);
 			await gate.WaitAsync();
 			try
@@ -221,7 +221,7 @@ namespace GenOnlineService.Realtime
 				{
 					return Result.Fail(ErrorCodes.GroupNotMember);
 				}
-				names = result.Remaining == null ? new Dictionary<long, string>() : await RealtimeHub.NamesAsync(db, result.Remaining.MemberIDs);
+				names = result.Remaining == null ? new Dictionary<long, (string Name, int Tag)>() : await RealtimeHub.NamesAsync(db, result.Remaining.MemberIDs);
 			}
 			finally
 			{

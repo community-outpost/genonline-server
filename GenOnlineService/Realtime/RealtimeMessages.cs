@@ -45,6 +45,10 @@ namespace GenOnlineService.Realtime
 	{
 		public long Id { get; init; }
 		public string Name { get; init; } = "";
+
+		// "0042": Name#tag is unique, the name alone is not
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Tag { get; init; }
 		public IReadOnlyList<string> Badges { get; init; } = [];
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public ClientType? Client { get; init; }
@@ -111,6 +115,7 @@ namespace GenOnlineService.Realtime
 		public SlotState State { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public Member? Member { get; init; }
+
 		// The name this lobby shows for the player: the member's name, or Name#tag while another member has the same name
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public string? Name { get; init; }
@@ -401,6 +406,13 @@ namespace GenOnlineService.Realtime
 	public sealed record RequestSignallingRequest
 	{
 		public long TargetUserId { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public int? FailedAttempt { get; init; }
+	}
+
+	public sealed record SetPeerTransportsRequest
+	{
+		public IReadOnlyList<string> Transports { get; init; } = [];
 	}
 
 	public sealed record RelayRequest
@@ -683,6 +695,14 @@ namespace GenOnlineService.Realtime
 		public long UserId { get; init; }
 		public int PreferredPort { get; init; }
 		public string MiddlewareId { get; init; } = "";
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public int? Attempt { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Transport { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public bool? Relay { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public int? TimeoutS { get; init; }
 	}
 
 	public sealed record DisconnectPeerEvent

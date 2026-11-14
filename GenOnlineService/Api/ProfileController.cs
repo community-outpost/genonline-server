@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using GenOnlineService.Names;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -30,11 +31,13 @@ namespace GenOnlineService.Api
 	public sealed class ProfileController : ApiControllerBase
 	{
 		private readonly IDbContextFactory<AppDbContext> m_dbFactory;
+		private readonly PlayerNames m_names;
 		private readonly LobbyManager m_lobbyManager;
 
-		public ProfileController(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IAuthorizationService authorization) : base(authorization)
+		public ProfileController(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IAuthorizationService authorization, PlayerNames names) : base(authorization)
 		{
 			m_dbFactory = dbFactory;
+			m_names = names;
 			m_lobbyManager = lobbyManager;
 		}
 
@@ -46,7 +49,7 @@ namespace GenOnlineService.Api
 			{
 				return ApiResults.Fail(malformed.Value);
 			}
-			return ApiResults.NoContent(await ProfileActions.SetDisplayNameAsync(m_dbFactory, Me, body?.Name));
+			return ApiResults.NoContent(await m_names.RenameSelfAsync(Me, body?.Name));
 		}
 
 		[HttpPut("~/api/v1/matches/{matchID:long}/results/me")]
