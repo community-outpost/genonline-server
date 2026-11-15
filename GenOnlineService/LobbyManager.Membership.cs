@@ -84,7 +84,10 @@ public partial class LobbyManager
 		var preferences = await Users.GetUserLobbyPreferences(db, command.UserID);
 		if (preferences == null) return new(LobbyMembershipStatus.PreferencesUnavailable);
 		var sources = m_dictLobbies.Values.Where(source => source.GetMemberFromUserID(command.UserID) != null).ToArray();
-		var status = await Lobby.TransferMemberAsync(lobby, sources, command, session, name.Name, name.Tag, preferences);
+		// the stored blocks of the members decide with the cache, so a block made through another copy refuses the join at once
+		long[] members = lobby.Members.Where(member => member.IsHuman()).Select(member => member.UserID).Append(lobby.Owner).Distinct().ToArray();
+		var blockers = await RealtimeBlocks.BlockersAsync(db, command.UserID, members);
+		var status = await Lobby.TransferMemberAsync(lobby, sources, command, session, name.Name, name.Tag, preferences, blockers);
 		if (status != LobbyMembershipStatus.Success) return new(status);
 		RealtimeHub.PublishPresence(command.UserID);
 
@@ -140,6 +143,16 @@ public partial class LobbyManager
 	// Caller holds the user's membership gate through removal and session cleanup.
 	private async Task<LobbyMember?> RemoveMembershipAsync(Lobby lobby, long userID, LobbyMember? expectedMember = null)
 	{
+		// a lobby handed to another copy stays frozen here, the leave reaches the new copy as a note
+		if (lobby.IsMovingAway)
+		{
+			if (lobby.GetMemberFromUserID(userID) != null)
+			{
+				MovingLeave?.Invoke(lobby.LobbyID, userID);
+			}
+			return null;
+		}
+
 		var removed = await lobby.RemoveMemberAsync(userID, expectedMember);
 		if (removed != null && removed.GetSession().TryGetTarget(out var session)
 			&& IsCurrentSession(session) && !session.IsRetired && session.currentLobbyID == lobby.LobbyID)

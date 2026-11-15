@@ -18,6 +18,7 @@
 
 using Microsoft.EntityFrameworkCore;
 using OpenIddict.Abstractions;
+using System.Globalization;
 using System.Security.Claims;
 using System.Text;
 
@@ -28,7 +29,7 @@ namespace GenOnlineService.Identity
 		public static UpstreamSignInResult Refused(string error) => new(null, error);
 	}
 
-	// GitLab OmniAuth behaviour: a known identity signs in, a verified email (opt-in) finds the user, otherwise sign-up
+	// GitLab OmniAuth behaviour: a known identity signs in, an (opt-in) verified email finds the user, otherwise sign-up
 	public sealed class UpstreamAccounts
 	{
 		public const string ErrorNoSubject = "no_subject";

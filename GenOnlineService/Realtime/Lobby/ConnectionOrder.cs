@@ -144,6 +144,10 @@ namespace GenOnlineService.Realtime
 			return state;
 		}
 
+		public IEnumerable<(long Low, long High, PeerPairState State)> All() => m_pairs.Select(entry => (entry.Key.Low, entry.Key.High, entry.Value)).ToList();
+
+		public void Restore(long userA, long userB, PeerPairState state) => m_pairs[Key(userA, userB)] = state;
+
 		// A member who leaves or joins starts each of its pairs over
 		public void Forget(long userID)
 		{

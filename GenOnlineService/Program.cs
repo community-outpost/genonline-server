@@ -426,6 +426,8 @@ namespace GenOnlineService
 			}
 		}
 
+		internal static bool UsesPostgres(IConfiguration config) => GetDbProvider(config) == DbProvider.Postgres;
+
 		private static string BuildDbConnectionString(IConfiguration config, DbProvider provider)
 		{
 			IConfiguration? dbSettings = config.GetSection("Database");
@@ -652,7 +654,8 @@ namespace GenOnlineService
 			return true;
 		}
 
-		// "GenOnlineService migrate [--yes]": applies pending migrations without starting the web host.
+		// "GenOnlineService migrate [--yes]": applies pending migrations without starting the web host, then brings every
+		// users.name_key up to date and stops with a report when look-alike names collide (NameKeyBackfill).
 		private static async Task<int> RunMigrateCommand(string[] args)
 		{
 			bool assumeYes = args.Skip(1).Any(a => a.Equals("--yes", StringComparison.OrdinalIgnoreCase));
@@ -674,7 +677,7 @@ namespace GenOnlineService
 				if (pending.Count == 0)
 				{
 					Console.WriteLine("Database is up to date.");
-					return 0;
+					return await Names.NameKeyBackfill.RunCommand(db, Console.Out, Console.Error);
 				}
 
 				Console.WriteLine($"Pending migrations: {pending.Count}");
@@ -711,7 +714,7 @@ namespace GenOnlineService
 
 				await db.Database.MigrateAsync();
 				Console.WriteLine($"Applied {pending.Count} migration(s) successfully.");
-				return 0;
+				return await Names.NameKeyBackfill.RunCommand(db, Console.Out, Console.Error);
 			}
 			catch (Exception ex)
 			{
@@ -874,7 +877,8 @@ namespace GenOnlineService
 			return true;
 		}
 
-		private static async Task RunObservedBackgroundJobAsync(
+		// An UpstreamUnavailableException is an expected outage: one Warning line without the stack trace, the next run retries
+		internal static async Task RunObservedBackgroundJobAsync(
 			string jobName,
 			ILogger logger,
 			Func<Task> operation)
@@ -889,6 +893,12 @@ namespace GenOnlineService
 			{
 				await operation();
 			}
+			catch (UpstreamUnavailableException ex)
+			{
+				succeeded = false;
+				AppMetrics.RecordException(activity, ex);
+				logger.LogWarning("Background job {JobName} could not reach its upstream: {Reason}", jobName, ex.Message);
+			}
 			catch (Exception ex)
 			{
 				succeeded = false;
@@ -897,6 +907,26 @@ namespace GenOnlineService
 			}
 
 			AppMetrics.RecordBackgroundJob(jobName, succeeded);
+		}
+
+		// HTTPS enforcement (AccountsSettings.EnforceHttps, on unless Core:enforce_https is false): HSTS and the http to https
+		// redirect. A local plain http run sets it to false, which also lets sign-in and its cookies work over http.
+		internal static void UseHttpsEnforcement(IApplicationBuilder app, IConfiguration config, ILogger logger)
+		{
+			if (AccountsSettings.EnforceHttps(config))
+			{
+				app.UseHsts();
+
+				// WebSocket upgrades are exempt because redirecting an upgrade request breaks the handshake.
+				app.UseWhen(context => !context.WebSockets.IsWebSocketRequest, branch =>
+				{
+					branch.UseHttpsRedirection();
+				});
+			}
+			else
+			{
+				logger.LogWarning("Core:enforce_https is disabled. Bearer tokens will be sent in clear text over any plain-HTTP listener.");
+			}
 		}
 
 		public static async Task Main(string[] args)
@@ -940,6 +970,12 @@ namespace GenOnlineService
 			if (args.Length > 0 && args[0].Equals("connections", StringComparison.OrdinalIgnoreCase))
 			{
 				Environment.ExitCode = await ModerationCli.RunConnections(args);
+				return;
+			}
+
+			if (args.Length > 0 && args[0].Equals("realtime", StringComparison.OrdinalIgnoreCase))
+			{
+				Environment.ExitCode = await ModerationCli.RunRealtime(args);
 				return;
 			}
 
@@ -1124,19 +1160,32 @@ namespace GenOnlineService
 			builder.Services.AddSingleton<LobbyMembershipConnections>();
 
 			GenOnlineService.Realtime.RealtimeBackplaneSettings realtimeBackplane = GenOnlineService.Realtime.RealtimeBackplaneSettings.Read(builder.Configuration);
+
+			// Realtime:failover holds the lease. The host waits the handover budget plus 10 s on shutdown:
+			// handover_limit_s, three lease periods for the bounded statements and waits, the switch delay, ten lease periods for the queue move
+			// and the forced lobby moves, and 5 s for the last batch (168.5 s with the defaults). A handover cancelled during the shutdown and started again can exceed it, the host then aborts what is left.
+			GenOnlineService.Failover.FailoverSettings failoverSettings = GenOnlineService.Failover.FailoverSettings.Read(builder.Configuration);
+			if (failoverSettings.Enabled)
+			{
+				builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromMilliseconds(failoverSettings.HandoverBudgetMs + 10_000));
+			}
 			Microsoft.AspNetCore.SignalR.ISignalRServerBuilder signalR = builder.Services.AddSignalR(options =>
 			{
 				options.KeepAliveInterval = TimeSpan.FromSeconds(15);
 				options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
 				options.MaximumReceiveMessageSize = 64 * 1024;
 				options.EnableDetailedErrors = false;
+				if (failoverSettings.Enabled)
+				{
+					Microsoft.AspNetCore.SignalR.HubOptionsExtensions.AddFilter(options, new GenOnlineService.Failover.RealtimeFenceFilter());
+				}
 			}).AddJsonProtocol(options => GenOnlineService.Realtime.RealtimeJson.Configure(options.PayloadSerializerOptions));
 			if (realtimeBackplane.UsesRedis)
 			{
 				signalR.AddStackExchangeRedis(realtimeBackplane.ConfigureSignalR);
 			}
 			builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, GenOnlineService.Realtime.RealtimeUserIdProvider>();
-			builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.HubLifetimeManager<GenOnlineService.Realtime.RealtimeHub>>(services => new RealtimeLifetimeManager(realtimeBackplane.CreateLifetimeManager(services)));
+			builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.HubLifetimeManager<GenOnlineService.Realtime.RealtimeHub>>(services => new RealtimeLifetimeManager(realtimeBackplane.CreateLifetimeManager(services), realtimeBackplane.UsesRedis ? GenOnlineService.Realtime.RealtimeFanout.Groups : null, realtimeBackplane.UsesRedis ? GenOnlineService.Realtime.RealtimeFanout.Outboxes : null));
 
 			CorsPolicy corsPolicy = BuildCorsPolicy(builder.Configuration);
 
@@ -1338,6 +1387,43 @@ namespace GenOnlineService
 			ServiceLocator.Services = app.Services;
 			GenOnlineService.Realtime.RealtimeOut.Initialize(app.Services.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<GenOnlineService.Realtime.RealtimeHub, GenOnlineService.Realtime.IRealtimeClient>>());
 			await GenOnlineService.Realtime.RealtimeControl.StartAsync(realtimeBackplane);
+			app.Logger.LogInformation("Service copy {CopyId} starting", GenOnlineService.Failover.CopyIdentity.ID);
+			GenOnlineService.Failover.FailoverCoordinator? failover = null;
+			if (failoverSettings.Enabled)
+			{
+				GenOnlineService.Failover.RealtimeConnectionDrain drain = new();
+				failover = new GenOnlineService.Failover.FailoverCoordinator(failoverSettings, GenOnlineService.Failover.CopyIdentity.ID,
+					new GenOnlineService.Failover.DatabaseLeaseStore(app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>()), drain);
+				GenOnlineService.Failover.RealtimeFailover.Install(failover);
+				if (!realtimeBackplane.UsesRedis)
+				{
+					app.Logger.LogWarning("Realtime:failover is on without the Redis backplane: during a handover chat between the two copies does not cross, and lobbies and the queue do not survive a failover.");
+				}
+				else
+				{
+					GenOnlineService.Failover.LiveStateSettings liveStateSettings = GenOnlineService.Failover.LiveStateSettings.Read(builder.Configuration);
+					GenOnlineService.Failover.RedisLiveStateStore liveStore = new(() => GenOnlineService.Realtime.RealtimeRedis.ConnectAsync(realtimeBackplane), realtimeBackplane.ChannelPrefix, liveStateSettings.StreamMaxLength);
+					GenOnlineService.Failover.FailoverCoordinator coordinator = failover;
+					GenOnlineService.Failover.LiveStateWriter liveWriter = new(liveStore, GenOnlineService.Failover.CopyIdentity.ID, () => coordinator.OwnsState);
+					GenOnlineService.Failover.LiveStateFollower liveFollower = new(liveStore, GenOnlineService.Failover.CopyIdentity.ID,
+						() => coordinator.Role is GenOnlineService.Failover.FailoverRole.Standby or GenOnlineService.Failover.FailoverRole.Target, liveStateSettings.PollIntervalMs, failoverSettings.LeaseMs);
+					GenOnlineService.Failover.RealtimeLiveState.Install(liveWriter, liveFollower, liveStateSettings.RefreshMs, liveStateSettings.RewriteMs);
+					LobbyManager liveLobbies = app.Services.GetRequiredService<LobbyManager>();
+					GenOnlineService.Failover.LiveStateHandover handover = new(liveWriter, liveStore, liveLobbies, drain, failoverSettings.LeaseMs * 2);
+					liveWriter.Rejected += handover.OnRejected;
+					liveFollower.Owned += handover.OnOwned;
+					failover.Activating = handover.OnActivating;
+					failover.Fencing = handover.OnFencing;
+					failover.Mover = handover;
+					LobbyManager.MovingLeave = handover.OnMovingLeave;
+					failover.StandbyReady = () => liveFollower.InSync;
+					GenOnlineService.Failover.RealtimeFailover.InstallSwitcher(drain);
+
+					_ = Task.Run(() => liveWriter.RunAsync(CancellationToken.None));
+					_ = Task.Run(() => liveFollower.RunAsync(CancellationToken.None));
+					app.Logger.LogInformation("Realtime live state on: lobbies and the queue go to Redis, a standby announces itself only while in sync");
+				}
+			}
 
 			// These log through AppLog, which only has a logger factory once ServiceLocator.Services is set, so they run after Build
 			MatchmakingManager.RemoveInvalidPlaylistsAtStartup();
@@ -1427,26 +1513,11 @@ namespace GenOnlineService
 				return next();
 			});
 
-			// HTTPS enforcement. Gated because TLS may be terminated upstream (or a plain-HTTP
-			// listener may be deliberately in use), in which case redirecting would break clients.
-			bool bEnforceHttps = builder.Configuration.GetSection("Core").GetValue<bool>("enforce_https");
-			if (bEnforceHttps)
-			{
-				app.UseHsts();
-
-				// WebSocket upgrades are exempt because redirecting an upgrade request breaks the handshake.
-				app.UseWhen(context => !context.WebSockets.IsWebSocketRequest, branch =>
-				{
-					branch.UseHttpsRedirection();
-				});
-			}
-			else
-			{
-				app.Logger.LogWarning("Core:enforce_https is disabled. Bearer tokens will be sent in clear text over any plain-HTTP listener.");
-			}
+			UseHttpsEnforcement(app, builder.Configuration, app.Logger);
 
 			app.UseCors();
 			app.Use(GenOnlineService.Rest.RestSetup.StatusBodies);
+			GenOnlineService.Failover.RealtimeFailover.UseRealtimeStandbyGate(app);
 			app.UseRealtimeQueryToken();
 			app.UseAuthentication();
 			app.UseRealtimeRegistrationGate();
@@ -1695,6 +1766,18 @@ namespace GenOnlineService
 			{
 				await AccountsSetup.SeedClients(app.Services, accountsSettings);
 				await ClientRegistry.SweepDisabledClients(app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>());
+			}
+
+			if (failover != null)
+			{
+				// the stopping callback blocks the shutdown until the handover ends, the server still serves the connections meanwhile
+				CancellationTokenSource leaseLoopStop = new();
+				_ = Task.Run(() => failover.RunAsync(app.Lifetime.StopApplication, leaseLoopStop.Token));
+				app.Lifetime.ApplicationStopping.Register(() =>
+				{
+					failover.ShutdownAsync().GetAwaiter().GetResult();
+					leaseLoopStop.Cancel();
+				});
 			}
 
 			app.Run();

@@ -38,13 +38,14 @@ public enum LocalRenameOutcome
 
 public sealed class NameTagsExhaustedException : Exception
 {
-	public NameTagsExhaustedException(string normalized) : base($"No free tag for the name {normalized}") { }
+	public NameTagsExhaustedException(string name) : base($"No free tag for the name {name}") { }
 }
 
 namespace Database
 {
 	// Xbox-style names: the name is not unique, name#tag is. The environment assigns the tag (AssignNewUser) and renames keep it
-	// (RenameKeepingTag); ApplyUpstream copies a name and tag another environment owns.
+	// (RenameKeepingTag); ApplyUpstream copies a name and tag another environment owns (the follow-prod mirror).
+	// Look-alikes count as one name everywhere: the plugin's key (NameKey) is unique with the tag (ux_users_name_key_name_tag).
 	public static class DisplayNames
 	{
 		public const int MinTag = 1;
@@ -60,14 +61,16 @@ namespace Database
 			return !String.IsNullOrWhiteSpace(name)
 				&& !name.Any(Char.IsControl)
 				&& String.Equals(TextSanitizer.Clean(name, User.UsernameMaxLength), name, StringComparison.Ordinal)
-				&& NameNormalizer.Normalize(name).Length <= User.UsernameMaxLength;
+				&& NameNormalizer.Normalize(name).Length <= User.UsernameMaxLength
+				&& NameKey.Of(name).Length <= NameKey.MaxLength;
 		}
 
-		// A random tag no other user holds with this name
-		public static async Task<int> FreeTag(AppDbContext db, string normalized, Int64? exceptUserID = null, int? alsoAvoid = null)
+		public static async Task<int> FreeTag(AppDbContext db, string name, Int64? exceptUserID = null, int? alsoAvoid = null)
 		{
+			string key = NameKey.Of(name);
+			string normalized = NameNormalizer.Normalize(name);
 			HashSet<int> used = (await db.Users
-				.Where(u => u.UsernameNormalized == normalized && (exceptUserID == null || u.ID != exceptUserID))
+				.Where(u => (u.NameKey == key || u.UsernameNormalized == normalized) && (exceptUserID == null || u.ID != exceptUserID))
 				.Select(u => u.NameTag)
 				.ToListAsync()).ToHashSet();
 			if (alsoAvoid != null)
@@ -78,54 +81,23 @@ namespace Database
 			List<int> free = Enumerable.Range(MinTag, MaxTag - MinTag + 1).Where(t => !used.Contains(t)).ToList();
 			if (free.Count == 0)
 			{
-				throw new NameTagsExhaustedException(normalized);
+				throw new NameTagsExhaustedException(name);
 			}
 
 			return free[Random.Shared.Next(free.Count)];
 		}
 
-		// Sets a new, unsaved user's normalized name and a free tag
+		// Sets a new, unsaved user's normalized name, key and a tag no look-alike holds. Two look-alike sign-ups that pick the
+		// same tag at once meet the unique index, and the caller retries with a new tag.
 		public static async Task AssignNewUser(AppDbContext db, User user)
 		{
 			user.UsernameNormalized = NameNormalizer.Normalize(user.Username);
-			user.NameTag = await FreeTag(db, user.UsernameNormalized);
-		}
-
-		// A rename where the environment owns names: a change of case or width keeps the tag, any other name gets a free one.
-		// Null when nothing changed or the user does not exist.
-		public static async Task<NameChange?> Rename(AppDbContext db, Int64 userID, string name, string changedBy)
-		{
-			for (int attempt = 1; ; attempt++)
-			{
-				try
-				{
-					return await RenameOnce(db, userID, name, changedBy);
-				}
-				catch (DbUpdateException ex) when (DbHelpers.IsUniqueViolation(ex) && attempt < 3)
-				{
-					// two renames picked the same free tag; pick again
-					db.ChangeTracker.Clear();
-				}
-			}
-		}
-
-		private static async Task<NameChange?> RenameOnce(AppDbContext db, Int64 userID, string name, string changedBy)
-		{
-			User? user = await db.Users.AsTracking().FirstOrDefaultAsync(u => u.ID == userID);
-			if (user == null || String.Equals(user.Username, name, StringComparison.Ordinal))
-			{
-				return null;
-			}
-
-			string normalized = NameNormalizer.Normalize(name);
-			int tag = normalized == user.UsernameNormalized ? user.NameTag : await FreeTag(db, normalized, userID);
-			NameChange change = Record(db, user, name, tag, changedBy);
-			await db.SaveChangesAsync();
-			return change;
+			user.NameKey = NameKey.Of(user.Username);
+			user.NameTag = await FreeTag(db, user.Username);
 		}
 
 		// A rename where the environment owns names (self-hosted): the tag is static, and the new name with that tag must be
-		// free under the plugin's key (NameKey), so Bob#0042 and B0b#0042 never both exist
+		// free under the plugin's key (NameKey), so Bob#0042 and B0b#0042 never both exist. The unique index decides a race.
 		public static async Task<(LocalRenameOutcome Outcome, NameChange? Change)> RenameKeepingTag(AppDbContext db, Int64 userID, string name, string changedBy)
 		{
 			User? user = await db.Users.AsTracking().FirstOrDefaultAsync(u => u.ID == userID);
@@ -139,9 +111,9 @@ namespace Database
 			}
 
 			string key = NameKey.Of(name);
+			string normalized = NameNormalizer.Normalize(name);
 			int tag = user.NameTag;
-			List<string> sameTag = await db.Users.Where(u => u.ID != userID && u.NameTag == tag).Select(u => u.Username).ToListAsync();
-			if (sameTag.Any(other => NameKey.Of(other) == key))
+			if (await db.Users.AnyAsync(u => u.ID != userID && u.NameTag == tag && (u.NameKey == key || u.UsernameNormalized == normalized)))
 			{
 				return (LocalRenameOutcome.Taken, null);
 			}
@@ -153,7 +125,7 @@ namespace Database
 			}
 			catch (DbUpdateException ex) when (DbHelpers.IsUniqueViolation(ex))
 			{
-				// another rename took the same name#tag at the same moment
+				// another rename took a look-alike name with this tag at the same moment
 				db.ChangeTracker.Clear();
 				return (LocalRenameOutcome.Taken, null);
 			}
@@ -176,6 +148,7 @@ namespace Database
 
 			user.Username = name;
 			user.UsernameNormalized = NameNormalizer.Normalize(name);
+			user.NameKey = NameKey.Of(name);
 			user.NameTag = tag;
 			user.RenamedAt = now;
 			user.UpdatedAt = now;

@@ -35,7 +35,8 @@ namespace GenOnlineService.Realtime
 
 		private static async Task<bool> HasFriendAsync(AppDbContext db, Int64 userID, Int64 otherID) => SocialState.Of(userID) != null ? SocialState.HasFriend(userID, otherID) : (await Database.Social.GetFriends(db, userID)).Contains(otherID);
 		private static async Task<bool> HasIncomingAsync(AppDbContext db, Int64 userID, Int64 fromID) => SocialState.Of(userID) != null ? SocialState.HasIncoming(userID, fromID) : await Database.Social.HasFriendRequest(db, fromID, userID);
-		private static async Task<bool> HasBlockedAsync(AppDbContext db, Int64 userID, Int64 otherID) => SocialState.Of(userID) != null ? SocialState.HasBlocked(userID, otherID) : await Database.Social.IsBlocked(db, userID, otherID);
+		// Block decisions read the database, so a block or unblock made through another copy counts at once
+		private static Task<bool> HasBlockedAsync(AppDbContext db, Int64 userID, Int64 otherID) => Database.Social.IsBlocked(db, userID, otherID);
 
 		public static async Task<SocialLists> ListsAsync(AppDbContext db, Int64 me)
 		{
@@ -104,8 +105,8 @@ namespace GenOnlineService.Realtime
 			// asking for a friendship lifts the caller's own block
 			if (await HasBlockedAsync(db, me, target))
 			{
-				SocialState.Update(me, c => c.Blocked.Remove(target));
 				await Database.Social.RemoveBlock(db, me, target);
+				await RealtimeBlocks.ChangedAsync(me, target, false);
 			}
 
 			// a crossed request means both want the friendship
@@ -189,10 +190,13 @@ namespace GenOnlineService.Realtime
 
 			if (await HasBlockedAsync(db, me, target))
 			{
+				// a repeat publishes again, so a copy that missed the first message catches up
+				await RealtimeBlocks.ChangedAsync(me, target, true);
 				return Result.Success();
 			}
 
-			if (await HasFriendAsync(db, me, target))
+			// the database decides, a friendship made through another copy ends too
+			if ((await Database.Social.GetFriends(db, me)).Contains(target))
 			{
 				await EndFriendshipAsync(db, me, target);
 			}
@@ -202,7 +206,7 @@ namespace GenOnlineService.Realtime
 			SocialState.Update(target, c => c.PendingRequests.Remove(me));
 
 			await Database.Social.AddBlock(db, me, target);
-			SocialState.Update(me, c => c.Blocked.Add(target));
+			await RealtimeBlocks.ChangedAsync(me, target, true);
 			return Result.Success();
 		}
 
@@ -211,11 +215,12 @@ namespace GenOnlineService.Realtime
 			await using AppDbContext db = await dbFactory.CreateDbContextAsync();
 			if (!await HasBlockedAsync(db, me, target))
 			{
+				await RealtimeBlocks.ChangedAsync(me, target, false);
 				return Result.Success();
 			}
 
-			SocialState.Update(me, c => c.Blocked.Remove(target));
 			await Database.Social.RemoveBlock(db, me, target);
+			await RealtimeBlocks.ChangedAsync(me, target, false);
 			return Result.Success();
 		}
 

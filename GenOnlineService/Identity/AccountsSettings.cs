@@ -28,7 +28,7 @@ namespace GenOnlineService.Identity
 		public List<string> RedirectUris { get; init; } = new();
 	}
 
-	// One upstream OpenID Connect provider
+	// The environment owns names, roles and bans; the provider only signs people in
 	public sealed class UpstreamProviderSettings
 	{
 		public string Name { get; init; } = String.Empty;
@@ -70,6 +70,9 @@ namespace GenOnlineService.Identity
 
 		public IEnumerable<UpstreamProviderSettings> EnabledProviders => Providers.Where(p => p.Enabled);
 
+		// true when missing: https-only cookies and OpenIddict transport security; a local plain http run sets false.
+		public static bool EnforceHttps(IConfiguration config) => config.GetSection("Core").GetValue<bool?>("enforce_https") ?? true;
+
 		public static AccountsSettings Read(IConfiguration config)
 		{
 			IConfigurationSection section = config.GetSection("Accounts");
@@ -109,7 +112,7 @@ namespace GenOnlineService.Identity
 				EncryptionCertificates = section.GetSection("encryption_certificates").Get<List<string>>() ?? new(),
 				CertificatePassword = section.GetValue<string>("certificate_password"),
 				EphemeralKeys = section.GetValue<bool>("ephemeral_keys"),
-				RequireHttps = config.GetSection("Core").GetValue<bool?>("enforce_https") ?? true,
+				RequireHttps = EnforceHttps(config),
 				Clients = clients,
 				Providers = providers
 			};

@@ -22,8 +22,7 @@ using System.Text;
 
 namespace GenOnlineService.Names
 {
-	// The uniqueness key of a display name: lower case, NFKC, the UTS #39 confusables skeleton, lower case again.
-	// Bob, BOB and B0b share one key.
+	// The look-alike key of a display name; NameKeyVectors.txt in the tests pins its results.
 	public static class NameKey
 	{
 		// Generated from ICU4J 78.1
@@ -31,10 +30,385 @@ namespace GenOnlineService.Names
 
 		private static readonly Lazy<IReadOnlyDictionary<int, string>> s_table = new(LoadTable);
 
+		// 32 characters of NFKC grow at most sevenfold (a Hangul syllable)
+		public const int MaxLength = 255;
+
 		public static string Of(string name)
 		{
-			string folded = name.ToLowerInvariant().Normalize(NormalizationForm.FormKC);
-			return Skeleton(folded).ToLowerInvariant();
+			string folded = LowerRoot(name).Normalize(NormalizationForm.FormKC);
+			return LowerRoot(Skeleton(folded));
+		}
+
+		// Java's toLowerCase(Locale.ROOT): the simple mappings plus the two special cases Java applies in every locale
+		public static string LowerRoot(string value)
+		{
+			int[] points = CodePoints(value);
+			StringBuilder lower = new StringBuilder(value.Length + 1);
+			for (int i = 0; i < points.Length; i++)
+			{
+				int point = points[i];
+				if (point == CapitalIWithDot)
+				{
+					// Java maps it to i and a combining dot, the invariant culture keeps it
+					lower.Append("i\u0307");
+				}
+				else if (point == CapitalSigma)
+				{
+					lower.Append(IsFinalSigma(points, i) ? '\u03C2' : '\u03C3');
+				}
+				else
+				{
+					lower.Append(Rune.ToLowerInvariant(new Rune(point)).ToString());
+				}
+			}
+			return lower.ToString();
+		}
+
+		private const int CapitalIWithDot = 0x0130;
+		private const int CapitalSigma = 0x03A3;
+
+		// Java's isFinalCased: a cased letter before the sigma and none after it, within one word of Java's word BreakIterator (WordBoundaries)
+		private static bool IsFinalSigma(int[] points, int index)
+		{
+			bool[] boundary = WordBoundaries(points);
+			for (int i = index; !boundary[i]; i--)
+			{
+				if (IsJavaCased(points[i - 1]))
+				{
+					for (int j = index + 1; !boundary[j]; j++)
+					{
+						if (IsJavaCased(points[j]))
+						{
+							return false;
+						}
+					}
+					return true;
+				}
+			}
+			return false;
+		}
+
+		// Character sets of the JDK word break rules (sun.text.resources.BreakIteratorRules)
+		[Flags]
+		private enum BreakSet
+		{
+			None = 0,
+			Ignore = 1,
+			Letter = 2,
+			Digit = 4,
+			MidWord = 8,
+			MidNum = 16,
+			PreNum = 32,
+			PostNum = 64,
+			Space = 128,
+			LineEnd = 256,
+			Kanji = 512,
+			Katakana = 1024,
+			Hiragana = 2048,
+			Supplementary = 4096,
+			Format = 8192,
+			Danda = 16384
+		}
+
+		private static BreakSet SetsOf(int point)
+		{
+			BreakSet sets = BreakSet.None;
+			UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(point);
+			if (point > 0xFFFF)
+			{
+				sets |= BreakSet.Supplementary;
+			}
+			if (point is 0x3005 or (>= 0x4E00 and <= 0x9FA5) or (>= 0xF900 and <= 0xFA2D))
+			{
+				sets |= BreakSet.Kanji;
+			}
+			if (point is >= 0x30A1 and <= 0x30FE)
+			{
+				sets |= BreakSet.Katakana;
+			}
+			if (point is (>= 0x3041 and <= 0x3094) or 0x309D or 0x309E or 0x30FC)
+			{
+				sets |= BreakSet.Hiragana;
+			}
+			bool kana = (sets & (BreakSet.Kanji | BreakSet.Katakana | BreakSet.Hiragana)) != 0;
+			if (category is UnicodeCategory.NonSpacingMark or UnicodeCategory.EnclosingMark or UnicodeCategory.Format && point is not 0x00AD and <= 0xFFFF)
+			{
+				sets |= category == UnicodeCategory.Format ? BreakSet.Ignore | BreakSet.Format : BreakSet.Ignore;
+			}
+			if (!kana && (category is UnicodeCategory.UppercaseLetter or UnicodeCategory.LowercaseLetter or UnicodeCategory.TitlecaseLetter
+				or UnicodeCategory.ModifierLetter or UnicodeCategory.OtherLetter or UnicodeCategory.SpacingCombiningMark))
+			{
+				sets |= BreakSet.Letter;
+			}
+			if (category is UnicodeCategory.DecimalDigitNumber or UnicodeCategory.LetterNumber or UnicodeCategory.OtherNumber)
+			{
+				sets |= BreakSet.Digit;
+			}
+			if (category is UnicodeCategory.DashPunctuation or UnicodeCategory.ConnectorPunctuation && point <= 0xFFFF || point is 0x00AD or 0x2027 or '"' or '\'' or '.')
+			{
+				sets |= BreakSet.MidWord;
+			}
+			if (point is '"' or '\'' or ',' or '.' or 0x066B)
+			{
+				sets |= BreakSet.MidNum;
+			}
+			if (category == UnicodeCategory.CurrencySymbol || point is '#' or '.' or '^' or 0x00A2)
+			{
+				sets |= BreakSet.PreNum;
+			}
+			if (point is 0x0964 or 0x0965)
+			{
+				sets |= BreakSet.Danda;
+			}
+			if (point is '%' or '&' or 0x00A2 or 0x066A or 0x2030 or 0x2031)
+			{
+				sets |= BreakSet.PostNum;
+			}
+			if (category == UnicodeCategory.SpaceSeparator || point == '\t')
+			{
+				sets |= BreakSet.Space;
+			}
+			if (point is '\n' or '\f' or 0x2028 or 0x2029)
+			{
+				sets |= BreakSet.LineEnd;
+			}
+			return sets;
+		}
+
+		// Each token is the longest match of the JDK rules; a mark joins the character before it; the JDK ends a token after a supplementary character, except one that starts the text.
+		private static bool[] WordBoundaries(int[] points)
+		{
+			int length = points.Length;
+			BreakSet[] sets = new BreakSet[length];
+			for (int i = 0; i < length; i++)
+			{
+				sets[i] = SetsOf(points[i]);
+			}
+
+			bool[] boundary = new bool[length + 1];
+			boundary[0] = true;
+			boundary[length] = true;
+
+			int start = 0;
+			while (start < length && (sets[start] & BreakSet.Ignore) != 0)
+			{
+				// a mark that starts the text is a token of its own
+				start++;
+				boundary[start] = true;
+			}
+
+			while (start < length)
+			{
+				if ((sets[start] & BreakSet.Ignore) != 0 && EndsToken(sets, start - 1))
+				{
+					// a mark after a supplementary letter or digit counts as one in the next token
+					sets[start] |= sets[start - 1] & (BreakSet.Letter | BreakSet.Digit);
+				}
+				int end = Math.Max(start + 1, Math.Max(MatchWordsAndNumbers(sets, start), MatchPrefixedNumber(sets, start)));
+				end = Math.Max(end, MatchRun(sets, start, BreakSet.Space));
+				end = Math.Max(end, MatchRun(sets, start, BreakSet.Kanji));
+				end = Math.Max(end, MatchRun(sets, start, BreakSet.Katakana));
+				end = Math.Max(end, MatchRun(sets, start, BreakSet.Hiragana));
+				if (!KeepsMarksOut(sets, end - 1))
+				{
+					end = SkipIgnored(sets, end);
+				}
+				boundary[end] = true;
+				start = end;
+			}
+			return boundary;
+		}
+
+		private static int SkipIgnored(BreakSet[] sets, int index)
+		{
+			while (index < sets.Length && (sets[index] & BreakSet.Ignore) != 0)
+			{
+				index++;
+			}
+			return index;
+		}
+
+		private static bool Is(BreakSet[] sets, int index, BreakSet set) => index >= 0 && index < sets.Length && (sets[index] & set) != 0;
+
+		// Marks after a word's danda, a number's suffix, or a supplementary letter or digit that ends a token start the next token
+		private static bool KeepsMarksOut(BreakSet[] sets, int index)
+		{
+			int last = LastBeforeFormat(sets, index);
+			return IsWordDanda(sets, last) || IsNumberSuffix(sets, last) || EndsToken(sets, index) && Is(sets, index, BreakSet.Letter | BreakSet.Digit);
+		}
+
+		private static bool IsNumberSuffix(BreakSet[] sets, int index)
+		{
+			return Is(sets, index, BreakSet.PostNum) && Is(sets, LastBeforeIgnored(sets, index - 1), BreakSet.Digit);
+		}
+
+		private static int LastBeforeIgnored(BreakSet[] sets, int index)
+		{
+			while (index >= 0 && (sets[index] & BreakSet.Ignore) != 0)
+			{
+				index--;
+			}
+			return index;
+		}
+
+		private static bool IsWordDanda(BreakSet[] sets, int index)
+		{
+			int before = LastBeforeIgnored(sets, index - 1);
+			return index >= 0 && Is(sets, index, BreakSet.Danda) && before >= 0 && Is(sets, before, BreakSet.Letter);
+		}
+
+		private static int LastBeforeFormat(BreakSet[] sets, int index)
+		{
+			while (index >= 0 && (sets[index] & BreakSet.Format) != 0)
+			{
+				index--;
+			}
+			return index;
+		}
+
+		private static int SkipFormat(BreakSet[] sets, int index)
+		{
+			while (Is(sets, index, BreakSet.Format))
+			{
+				index++;
+			}
+			return index;
+		}
+
+		private static bool EndsToken(BreakSet[] sets, int index) => index > 0 && (sets[index] & BreakSet.Supplementary) != 0;
+
+		private static int MatchRunWithMiddles(BreakSet[] sets, int index, BreakSet member, BreakSet middle, out bool ended)
+		{
+			ended = false;
+			int i = index;
+			while (Is(sets, i, member))
+			{
+				ended = EndsToken(sets, i);
+				if (ended)
+				{
+					return i + 1;
+				}
+				i = SkipIgnored(sets, i + 1);
+				if (!Is(sets, i, member) && Is(sets, i, middle))
+				{
+					// format characters after the middle character are skipped, a mark ends the token
+					int after = SkipFormat(sets, i + 1);
+					if (Is(sets, after, member))
+					{
+						i = after;
+					}
+				}
+			}
+			return i;
+		}
+
+		// {word}(number word)*{number{post_num}}, where word is letters with middle characters and an optional danda
+		private static int MatchWordsAndNumbers(BreakSet[] sets, int start)
+		{
+			int i = start;
+			bool lastNumber = false;
+			bool lastWord = false;
+			while (!lastNumber && !lastWord ? Is(sets, i, BreakSet.Letter | BreakSet.Digit) : Is(sets, i, lastWord ? BreakSet.Digit : BreakSet.Letter))
+			{
+				bool letter = Is(sets, i, BreakSet.Letter) && !lastWord;
+				i = letter
+					? MatchRunWithMiddles(sets, i, BreakSet.Letter, BreakSet.MidWord, out bool ended)
+					: MatchRunWithMiddles(sets, i, BreakSet.Digit, BreakSet.MidNum, out ended);
+				lastNumber = !letter;
+				lastWord = letter;
+				if (ended)
+				{
+					return i;
+				}
+				if (letter && Is(sets, i, BreakSet.Danda))
+				{
+					i = SkipFormat(sets, i + 1);
+					if (Is(sets, i, BreakSet.Ignore))
+					{
+						return i;
+					}
+				}
+			}
+			if (lastNumber && Is(sets, i, BreakSet.PostNum))
+			{
+				i = SkipFormat(sets, i + 1);
+			}
+			return i;
+		}
+
+		// pre_num(number word)*{number{post_num}}
+		private static int MatchPrefixedNumber(BreakSet[] sets, int start)
+		{
+			if (!Is(sets, start, BreakSet.PreNum))
+			{
+				return start;
+			}
+			// a mark after the prefix ends it
+			int i = start + 1;
+			while (Is(sets, i, BreakSet.Digit))
+			{
+				i = MatchRunWithMiddles(sets, i, BreakSet.Digit, BreakSet.MidNum, out bool ended);
+				if (ended)
+				{
+					return i;
+				}
+				if (!Is(sets, i, BreakSet.Letter))
+				{
+					if (Is(sets, i, BreakSet.PostNum))
+					{
+						i = SkipFormat(sets, i + 1);
+					}
+					return i;
+				}
+				i = MatchRunWithMiddles(sets, i, BreakSet.Letter, BreakSet.MidWord, out ended);
+				if (ended)
+				{
+					return i;
+				}
+				if (Is(sets, i, BreakSet.Danda))
+				{
+					i = SkipFormat(sets, i + 1);
+					if (Is(sets, i, BreakSet.Ignore))
+					{
+						return i;
+					}
+				}
+			}
+			return i;
+		}
+
+		private static int MatchRun(BreakSet[] sets, int start, BreakSet set)
+		{
+			int i = start;
+			while (Is(sets, i, set))
+			{
+				i = SkipIgnored(sets, i + 1);
+			}
+			return i;
+		}
+
+		// Java's isCased, with its Other_Lowercase and Other_Uppercase ranges
+		private static bool IsJavaCased(int point)
+		{
+			UnicodeCategory category = CharUnicodeInfo.GetUnicodeCategory(point);
+			return category is UnicodeCategory.LowercaseLetter or UnicodeCategory.UppercaseLetter or UnicodeCategory.TitlecaseLetter
+				|| point is >= 0x02B0 and <= 0x02B8
+				|| point is >= 0x02C0 and <= 0x02C1
+				|| point is >= 0x02E0 and <= 0x02E4
+				|| point is 0x0345 or 0x037A
+				|| point is >= 0x1D2C and <= 0x1D61
+				|| point is >= 0x2160 and <= 0x217F
+				|| point is >= 0x24B6 and <= 0x24E9;
+		}
+
+		private static int[] CodePoints(string value)
+		{
+			List<int> points = new List<int>(value.Length);
+			foreach (Rune rune in value.EnumerateRunes())
+			{
+				points.Add(rune.Value);
+			}
+			return points.ToArray();
 		}
 
 		// skeleton(X) = NFD(map(NFD(X))), one code point at a time

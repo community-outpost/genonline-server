@@ -26,7 +26,7 @@ using System.Text.Json;
 
 namespace GenOnlineService.Realtime
 {
-	// Realtime:backplane none (one copy, the default) or redis, which carries hub messages and close requests between copies
+	// Realtime:backplane none (one copy, the default) or redis, which carries hub messages, chat fan-out and close requests between copies
 	public sealed class RealtimeBackplaneSettings
 	{
 		public const string None = "none";
@@ -38,7 +38,6 @@ namespace GenOnlineService.Realtime
 
 		public bool UsesRedis => Backplane == Redis;
 
-		// Refuses an unknown backplane and redis without a connection string at startup
 		public static RealtimeBackplaneSettings Read(IConfiguration configuration)
 		{
 			string backplane = (configuration["Realtime:backplane"] ?? String.Empty).Trim().ToLowerInvariant();
@@ -49,6 +48,12 @@ namespace GenOnlineService.Realtime
 			if (backplane != None && backplane != Redis)
 			{
 				throw new InvalidOperationException($"Realtime:backplane is '{backplane}', expected '{None}' or '{Redis}'.");
+			}
+
+			// every multi copy feature needs PostgreSQL, MySQL and MariaDB run one copy with the none backplane
+			if (backplane == Redis && !Program.UsesPostgres(configuration))
+			{
+				throw new InvalidOperationException("Realtime:backplane is 'redis', but more than one service copy is supported on PostgreSQL only. Set Database:db_provider to postgres or Realtime:backplane to 'none'.");
 			}
 
 			string? connection = configuration["Realtime:redis"];
@@ -149,7 +154,7 @@ namespace GenOnlineService.Realtime
 	{
 		private static readonly ILogger s_log = AppLog.For(typeof(RealtimeControl));
 		private static readonly JsonSerializerOptions s_json = RealtimeJson.Create();
-		private static readonly string s_copyID = Guid.NewGuid().ToString("N");
+		private static readonly string s_copyID = GenOnlineService.Failover.CopyIdentity.ID;
 		private static readonly RedisChannel s_closeChannel = RedisChannel.Literal("realtime.close");
 		private static readonly RedisChannel s_ackChannel = RedisChannel.Literal("realtime.close.ack");
 		private static readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> s_pendingAcks = new(StringComparer.Ordinal);
@@ -187,6 +192,9 @@ namespace GenOnlineService.Realtime
 					pending.TrySetResult(true);
 				}
 			});
+
+			await RealtimeFanout.StartAsync(subscriber);
+			await RealtimeBlocks.StartAsync(subscriber);
 
 			Volatile.Write(ref s_subscriber, subscriber);
 			s_log.LogInformation("Realtime backplane redis started on copy {CopyId}", s_copyID);

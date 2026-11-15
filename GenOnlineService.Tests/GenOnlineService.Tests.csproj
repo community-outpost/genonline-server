@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="NameKeyVectors.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

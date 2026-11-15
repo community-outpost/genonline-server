@@ -314,6 +314,8 @@ namespace GenOnlineService
 
 		internal static async Task<RealtimeConnection?> InstallSession(AppDbContext _db, EUserSessionType sessionType, bool bIsReconnect, Int64 ownerID, string client_id, string ipAddr, string strContinent, string strCountry, double dLatitude, double dLongitude, HubConnectionContext transport, string? authorizationID)
 		{
+			// taken before the block lists load, see the reload below
+			long blockSequence = RealtimeBlocks.Sequence;
 			(string Name, int Tag) name = await Database.DisplayNames.Get(_db, ownerID) ?? (String.Empty, 0);
 			string strDisplayName = name.Name;
 			await Database.Users.UpdateLastLoginData(_db, ownerID, ipAddr, client_id, strCountry, bIsReconnect);
@@ -390,6 +392,12 @@ namespace GenOnlineService
 				{
 					m_dictSharedUserData[ownerID] = new SharedUserData(ownerID, socialContainer, strDisplayName, name.Tag, GameStats);
 				}
+			}
+
+			// a block change that arrived while the lists loaded found no cache to update, so the list is read again
+			if (RealtimeBlocks.Sequence != blockSequence)
+			{
+				await RealtimeBlocks.ReloadAsync(ownerID);
 			}
 
 			// the sign-in is recorded before the connection is published, so a revocation can always find it
@@ -508,8 +516,12 @@ namespace GenOnlineService
 				}
 			}
 
-			// friends see the session type disappear, or the user go offline with the last one
-			RealtimeHub.PublishPresence(session.m_UserID);
+			// friends see the session type disappear, or the user go offline with the last one, a switch to another copy shows no change,
+			// and a fenced copy leaves presence to the copy that serves now, where the user reconnects
+			if (!session.SwitchingAway && !GenOnlineService.Failover.RealtimeFailover.Fenced)
+			{
+				RealtimeHub.PublishPresence(session.m_UserID);
+			}
 			Console.Title = $"GenOnline - {GetNumberOfUsersOnline()} players";
 			return true;
 		}
@@ -928,6 +940,12 @@ namespace GenOnlineService
 		public long MatchmakingStartedTimestamp = 0;
 		public ConcurrentList<int> MatchmakingMapIndicies = new();
 		internal bool IsRegisteredForMatchmaking { get; set; } = false;
+
+		// Set when a planned handover sends this session with an open connection to another copy that keeps its seat or ticket, friends see no change
+		internal volatile bool SwitchingAway;
+
+		// Set for every session a planned handover sends to a copy that keeps its seat or ticket, its end here keeps the relay credentials
+		internal volatile bool KeepRelayCredentials;
 		internal SemaphoreSlim MatchmakingStateLock { get; } = new(1, 1);
 
 		public GameBuild MatchmakingBuild = new GameBuild(String.Empty, 0, 0, EKnownAnticheatID.NONE);

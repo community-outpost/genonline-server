@@ -91,11 +91,15 @@ namespace GenOnlineService.Rest
 		[HttpGet("~/-/liveness")]
 		public IActionResult Liveness() => RestResults.Ok(new ProbeResponse());
 
-		// Ready while the database answers; the failover lease joins this check when it is built
+		// Ready while the database answers, with Realtime:failover only on the lease holder and the handover target
 		[AllowAnonymous]
 		[HttpGet("~/-/readiness")]
 		public async Task<IActionResult> Readiness()
 		{
+			if (!GenOnlineService.Failover.RealtimeFailover.Serving)
+			{
+				return RestResults.Fail(RestCodes.ServiceUnavailable, new { What = GenOnlineService.Failover.RealtimeFailover.StandbyWhat });
+			}
 			return await DatabaseAnswers() ? RestResults.Ok(new ProbeResponse()) : RestResults.Fail(RestCodes.ServiceUnavailable, new { What = "database" });
 		}
 

@@ -26,8 +26,8 @@ namespace GenOnlineService.Realtime
 	{
 		private const int StoredNameMaxLength = 32;
 
-		// Words only staff may use in a display name, badge ids and badge texts are added at check time
-		private static readonly string[] s_reservedNameWords =
+		// Words only staff may use in a display name, matched case-insensitively anywhere in it
+		public static readonly IReadOnlyList<string> ReservedNameWords = new[]
 		{
 			"admin", "staff", "mass^", "mas^", "m4ss^", "m4s^", "moderator",
 			"hitler", "h1tler", "h1tl3r", "hittler", "h1ttler", "h1ttl3r",
@@ -37,7 +37,6 @@ namespace GenOnlineService.Realtime
 		// Lobbies add (N) to tell duplicate names apart, so a name never ends with one
 		private static readonly Regex s_dedupeSuffix = new(@"\((1[0-9]|20|[0-9])\)$", RegexOptions.Compiled);
 
-		// The rules every chosen name follows; reserved words are checked apart
 		public static Failure? CheckNameRules(string name)
 		{
 			if (name.Contains('#') || name.Any(Char.IsControl) || !String.Equals(TextSanitizer.Clean(name, StoredNameMaxLength), name, StringComparison.Ordinal))
@@ -64,14 +63,14 @@ namespace GenOnlineService.Realtime
 			return null;
 		}
 
-		// The first reserved word in the name, compared case-insensitively
+		// The first reserved word anywhere in the name, as the plugin's NameRules.check finds it: both sides lower-cased
+		// with Java's Locale.ROOT rules, then a substring match. Returns the word as the list spells it.
 		public static string? ReservedWordIn(string name)
 		{
-			string lower = name.ToLowerInvariant();
-			IEnumerable<string> badgeWords = RealtimeBadges.Definitions.SelectMany(b => new[] { b.Key, b.Value.Text });
-			foreach (string word in s_reservedNameWords.Concat(badgeWords))
+			string lower = Names.NameKey.LowerRoot(name);
+			foreach (string word in ReservedNameWords)
 			{
-				if (!String.IsNullOrWhiteSpace(word) && lower.Contains(word.ToLowerInvariant(), StringComparison.Ordinal))
+				if (!String.IsNullOrWhiteSpace(word) && lower.Contains(Names.NameKey.LowerRoot(word), StringComparison.Ordinal))
 				{
 					return word;
 				}
