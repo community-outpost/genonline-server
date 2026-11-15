@@ -33,9 +33,9 @@ namespace GenOnlineService.Realtime
 		private static async Task<long[]> IncomingOf(AppDbContext db, Int64 userID) => SocialState.Of(userID) != null ? SocialState.Snapshot(userID, c => c.PendingRequests) : (await Database.Social.GetPendingFriendsRequests(db, userID)).ToArray();
 		private static async Task<long[]> BlockedOf(AppDbContext db, Int64 userID) => SocialState.Of(userID) != null ? SocialState.Snapshot(userID, c => c.Blocked) : (await Database.Social.GetBlocked(db, userID)).ToArray();
 
-		private static async Task<bool> HasFriendAsync(AppDbContext db, Int64 userID, Int64 otherID) => SocialState.Of(userID) != null ? SocialState.HasFriend(userID, otherID) : (await Database.Social.GetFriends(db, userID)).Contains(otherID);
-		private static async Task<bool> HasIncomingAsync(AppDbContext db, Int64 userID, Int64 fromID) => SocialState.Of(userID) != null ? SocialState.HasIncoming(userID, fromID) : await Database.Social.HasFriendRequest(db, fromID, userID);
-		// Block decisions read the database, so a block or unblock made through another copy counts at once
+		// Friend, request and block decisions read the database, so a change made through another copy counts at once
+		private static Task<bool> HasFriendAsync(AppDbContext db, Int64 userID, Int64 otherID) => Database.Social.AreFriends(db, userID, otherID);
+		private static Task<bool> HasIncomingAsync(AppDbContext db, Int64 userID, Int64 fromID) => Database.Social.HasFriendRequest(db, fromID, userID);
 		private static Task<bool> HasBlockedAsync(AppDbContext db, Int64 userID, Int64 otherID) => Database.Social.IsBlocked(db, userID, otherID);
 
 		public static async Task<SocialLists> ListsAsync(AppDbContext db, Int64 me)
@@ -122,6 +122,7 @@ namespace GenOnlineService.Realtime
 
 			await Database.Social.AddPendingFriendRequest(db, me, target);
 			SocialState.Update(target, c => c.PendingRequests.Add(me));
+			await RealtimeBlocks.SocialChangedAsync(me, target);
 			await RealtimeOut.User(target).FriendRequestReceived(new FriendRequestReceivedEvent { From = RealtimeMembers.Of(me) });
 			return Result.Success();
 		}
@@ -146,8 +147,9 @@ namespace GenOnlineService.Realtime
 			await using AppDbContext db = await dbFactory.CreateDbContextAsync();
 			if (await HasIncomingAsync(db, me, target))
 			{
-				SocialState.Update(me, c => c.PendingRequests.Remove(target));
 				await Database.Social.RemoveFriendRequest(db, target, me);
+				SocialState.Update(me, c => c.PendingRequests.Remove(target));
+				await RealtimeBlocks.SocialChangedAsync(me, target);
 				return Result.Success();
 			}
 
@@ -155,6 +157,7 @@ namespace GenOnlineService.Realtime
 			{
 				await Database.Social.RemoveFriendRequest(db, me, target);
 				SocialState.Update(target, c => c.PendingRequests.Remove(me));
+				await RealtimeBlocks.SocialChangedAsync(me, target);
 				return Result.Success();
 			}
 
@@ -239,7 +242,8 @@ namespace GenOnlineService.Realtime
 
 		private static async Task<int> FriendCountAsync(AppDbContext db, Int64 userID)
 		{
-			return SocialState.Of(userID) != null ? SocialState.Snapshot(userID, c => c.Friends).Length : await Database.Social.CountFriends(db, userID);
+			// the stored count, a friendship made through another copy counts toward the limit at once
+			return await Database.Social.CountFriends(db, userID);
 		}
 
 		private static async Task<Result<Empty>> AcceptAsync(AppDbContext db, Int64 me, Int64 target)
@@ -254,6 +258,7 @@ namespace GenOnlineService.Realtime
 			await Database.Social.CreateFriendship(db, me, target);
 			SocialState.Update(me, c => { c.PendingRequests.Remove(target); c.Friends.Add(target); });
 			SocialState.Update(target, c => { c.PendingRequests.Remove(me); c.Friends.Add(me); });
+			await RealtimeBlocks.SocialChangedAsync(me, target);
 
 			await RealtimeOut.User(target).FriendRequestAccepted(new FriendRequestAcceptedEvent { By = RealtimeMembers.Of(me) });
 			await RealtimeOut.User(target).FriendPresence(RealtimePresence.Of(me));
@@ -266,6 +271,7 @@ namespace GenOnlineService.Realtime
 			await Database.Social.RemoveFriendship(db, me, target);
 			SocialState.Update(me, c => c.Friends.Remove(target));
 			SocialState.Update(target, c => c.Friends.Remove(me));
+			await RealtimeBlocks.SocialChangedAsync(me, target);
 
 			await RealtimeOut.User(me).FriendRemoved(new UserIdEvent { UserId = target });
 			await RealtimeOut.User(target).FriendRemoved(new UserIdEvent { UserId = me });
