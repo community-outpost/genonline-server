@@ -22,7 +22,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GenOnlineService.Names
 {
-	// Every rename (PATCH /api/v1/me, PATCH /api/v1/players/:id, the Discord bot), this environment owns names and tags
+	// Every rename (PATCH /api/v1/me, PATCH /api/v1/players/:id, the Discord bot): this environment owns names and tags
 	public sealed class PlayerNames
 	{
 		private readonly IDbContextFactory<AppDbContext> m_dbFactory;

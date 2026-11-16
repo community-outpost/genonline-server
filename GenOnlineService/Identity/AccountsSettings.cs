@@ -28,10 +28,22 @@ namespace GenOnlineService.Identity
 		public List<string> RedirectUris { get; init; } = new();
 	}
 
+	public enum ProviderKind
+	{
+		Oidc,
+		Discord,
+		Google,
+		Steam,
+		GameReplays
+	}
+
 	// The environment owns names, roles and bans; the provider only signs people in
 	public sealed class UpstreamProviderSettings
 	{
 		public string Name { get; init; } = String.Empty;
+		public ProviderKind Kind { get; init; } = ProviderKind.Oidc;
+		public string BaseUrl { get; init; } = String.Empty;
+		public string? ApplicationKey { get; init; }
 		public string DisplayName { get; init; } = String.Empty;
 		public bool Enabled { get; init; }
 		public string Issuer { get; init; } = String.Empty;
@@ -40,9 +52,71 @@ namespace GenOnlineService.Identity
 		public bool AllowSignUp { get; init; } = true;
 		public bool OnlyProvider { get; init; }
 		public bool AutoLinkVerifiedEmail { get; init; }
+		// Return URL registered at the provider when it is not this service's callback; it must redirect the browser, query intact, to CallbackPath here
+		public string? RedirectUri { get; init; }
 
 		public string Source => AuthoritySources.UpstreamPrefix + Name;
 		public string CallbackPath => $"users/auth/{Name}/callback";
+		public string ReturnUri => RedirectUri ?? CallbackPath;
+		public string SteamHandlerPath => $"/users/auth/{Name}/openid";
+
+		private static readonly Dictionary<string, ProviderKind> s_kinds = new(StringComparer.Ordinal)
+		{
+			["oidc"] = ProviderKind.Oidc,
+			["discord"] = ProviderKind.Discord,
+			["google"] = ProviderKind.Google,
+			["steam"] = ProviderKind.Steam,
+			["gamereplays"] = ProviderKind.GameReplays
+		};
+
+		internal static ProviderKind KindOf(string name, string? kind)
+		{
+			if (!String.IsNullOrEmpty(kind))
+			{
+				return s_kinds.TryGetValue(kind, out ProviderKind configured) ? configured
+					: throw new InvalidOperationException($"Accounts:providers:{name}:kind \"{kind}\" is unknown. Use one of {String.Join(", ", s_kinds.Keys)}.");
+			}
+			return s_kinds.TryGetValue(name, out ProviderKind byName) ? byName : ProviderKind.Oidc;
+		}
+
+		internal void Validate()
+		{
+			string prefix = $"Accounts:providers:{Name}";
+			switch (Kind)
+			{
+				case ProviderKind.Oidc:
+					if (!Uri.TryCreate(Issuer, UriKind.Absolute, out _))
+					{
+						throw new InvalidOperationException($"{prefix}:issuer must be the provider's absolute issuer URL.");
+					}
+					break;
+				case ProviderKind.Discord:
+				case ProviderKind.Google:
+				case ProviderKind.GameReplays:
+					if (String.IsNullOrEmpty(ClientID) || String.IsNullOrEmpty(ClientSecret))
+					{
+						throw new InvalidOperationException($"{prefix} needs client_id and client_secret of the application registered at {Kind}.");
+					}
+					if (Kind == ProviderKind.GameReplays
+						&& (!Uri.TryCreate(BaseUrl, UriKind.Absolute, out Uri? url) || (url.Scheme != Uri.UriSchemeHttps && url.Scheme != Uri.UriSchemeHttp)))
+					{
+						throw new InvalidOperationException($"{prefix}:base_url must be the absolute http or https URL of the folder holding authorize.php, token.php and resource.php.");
+					}
+					break;
+			}
+
+			if (RedirectUri != null)
+			{
+				if (Kind == ProviderKind.Steam)
+				{
+					throw new InvalidOperationException($"{prefix}:redirect_uri is not supported for Steam, whose return URL is always this service's.");
+				}
+				if (!Uri.TryCreate(RedirectUri, UriKind.Absolute, out Uri? relay) || (relay.Scheme != Uri.UriSchemeHttps && relay.Scheme != Uri.UriSchemeHttp))
+				{
+					throw new InvalidOperationException($"{prefix}:redirect_uri must be the absolute http or https return URL registered at the provider.");
+				}
+			}
+		}
 	}
 
 	public sealed class AccountsSettings
@@ -90,6 +164,9 @@ namespace GenOnlineService.Identity
 			var providers = section.GetSection("providers").GetChildren().Select(p => new UpstreamProviderSettings
 			{
 				Name = p.Key,
+				Kind = UpstreamProviderSettings.KindOf(p.Key, p.GetValue<string>("kind")),
+				BaseUrl = (p.GetValue<string>("base_url") ?? String.Empty).TrimEnd('/'),
+				ApplicationKey = String.IsNullOrEmpty(p.GetValue<string>("application_key")) ? null : p.GetValue<string>("application_key"),
 				DisplayName = p.GetValue<string>("display_name") ?? p.Key,
 				Enabled = p.GetValue<bool>("enabled"),
 				Issuer = p.GetValue<string>("issuer") ?? String.Empty,
@@ -97,8 +174,14 @@ namespace GenOnlineService.Identity
 				ClientSecret = p.GetValue<string>("client_secret") ?? String.Empty,
 				AllowSignUp = p.GetValue<bool?>("allow_sign_up") ?? true,
 				OnlyProvider = p.GetValue<bool>("only_provider"),
-				AutoLinkVerifiedEmail = p.GetValue<bool>("auto_link_verified_email")
+				AutoLinkVerifiedEmail = p.GetValue<bool>("auto_link_verified_email"),
+				RedirectUri = String.IsNullOrEmpty(p.GetValue<string>("redirect_uri")) ? null : p.GetValue<string>("redirect_uri")
 			}).ToList();
+
+			foreach (UpstreamProviderSettings provider in providers.Where(p => p.Enabled))
+			{
+				provider.Validate();
+			}
 
 			return new AccountsSettings
 			{

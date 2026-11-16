@@ -29,7 +29,8 @@ namespace GenOnlineService.Identity
 		public static UpstreamSignInResult Refused(string error) => new(null, error);
 	}
 
-	// GitLab OmniAuth behaviour: a known identity signs in, an (opt-in) verified email finds the user, otherwise sign-up
+	public sealed record UpstreamProfile(string? Subject, string? Name);
+
 	public sealed class UpstreamAccounts
 	{
 		public const string ErrorNoSubject = "no_subject";
@@ -48,13 +49,15 @@ namespace GenOnlineService.Identity
 
 		public async Task<UpstreamSignInResult> SignIn(UpstreamProviderSettings provider, ClaimsPrincipal external)
 		{
-			string? subject = external.GetClaim(OpenIddictConstants.Claims.Subject) ?? external.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+			UpstreamProfile profile = ReadProfile(provider, external);
+			string? subject = profile.Subject;
 			if (String.IsNullOrEmpty(subject) || subject.Length > 128)
 			{
+				s_log.LogWarning("{Provider} sign-in carries no usable subject", provider.Name);
 				return UpstreamSignInResult.Refused(ErrorNoSubject);
 			}
 
-			string? externName = Truncate(external.GetClaim(OpenIddictConstants.Claims.PreferredUsername) ?? external.GetClaim(OpenIddictConstants.Claims.Name), 128);
+			string? externName = Truncate(profile.Name, 128);
 
 			try
 			{
@@ -134,7 +137,54 @@ namespace GenOnlineService.Identity
 			return new UpstreamSignInResult(user, null);
 		}
 
-		// An unknown identity links by a verified email only where the operator allows it
+		private const string SteamClaimedIDPrefix = "https://steamcommunity.com/openid/id/";
+
+		public static UpstreamProfile ReadProfile(UpstreamProviderSettings provider, ClaimsPrincipal external)
+		{
+			string? Claim(string type) => external.FindFirst(type)?.Value is { Length: > 0 } value ? value : null;
+			// The display name comes before the account handle because it is the name players already go by
+			string? name = Claim(OpenIddictConstants.Claims.Name) ?? Claim(ClaimTypes.Name) ?? Claim(OpenIddictConstants.Claims.PreferredUsername);
+
+			switch (provider.Kind)
+			{
+				case ProviderKind.Steam:
+				{
+					// only Steam's own https form is a Steam account
+					string? claimed = Claim(ClaimTypes.NameIdentifier);
+					string? steamID = claimed != null && claimed.StartsWith(SteamClaimedIDPrefix, StringComparison.Ordinal) ? claimed.Substring(SteamClaimedIDPrefix.Length) : null;
+					bool valid = steamID != null && steamID.Length is > 0 and <= 20 && steamID.All(Char.IsAsciiDigit);
+					return new UpstreamProfile(valid ? steamID : null, name);
+				}
+				case ProviderKind.GameReplays:
+				{
+					// resource.php answers the member itself or wraps it in "user"; the name is members_display_name only,
+					// GameReplays: "You can ignore username."
+					string? id = Claim("id");
+					string? memberName = Claim("members_display_name");
+					if (id == null && Claim("user") is string wrapped)
+					{
+						try
+						{
+							using var document = System.Text.Json.JsonDocument.Parse(wrapped);
+							System.Text.Json.JsonElement user = document.RootElement;
+							id = user.TryGetProperty("id", out var idValue) ? idValue.ToString() : null;
+							memberName ??= user.TryGetProperty("members_display_name", out var display) && display.ValueKind == System.Text.Json.JsonValueKind.String ? display.GetString() : null;
+						}
+						catch (System.Text.Json.JsonException)
+						{
+							id = null;
+						}
+					}
+					return new UpstreamProfile(String.IsNullOrEmpty(id) ? null : id, memberName);
+				}
+				case ProviderKind.Discord:
+					// username is the lowercase handle, global_name the display name the player picked; it is unset on some accounts
+					return new UpstreamProfile(Claim(OpenIddictConstants.Claims.Subject) ?? Claim(ClaimTypes.NameIdentifier), Claim("global_name") ?? name);
+				default:
+					return new UpstreamProfile(Claim(OpenIddictConstants.Claims.Subject) ?? Claim(ClaimTypes.NameIdentifier), name);
+			}
+		}
+
 		private static async Task<User?> FindByVerifiedEmail(AppDbContext db, UpstreamProviderSettings provider, ClaimsPrincipal external)
 		{
 			string? email = external.GetClaim(OpenIddictConstants.Claims.Email);
