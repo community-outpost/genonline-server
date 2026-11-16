@@ -1158,6 +1158,7 @@ namespace GenOnlineService
 			builder.Services.AddSingleton(sp => new LobbyIdAllocator(sp.GetRequiredService<ILobbyIdSource>()));
 			builder.Services.AddSingleton<LobbyManager>();
 			builder.Services.AddSingleton<LobbyMembershipConnections>();
+			builder.Services.AddSingleton<GenOnlineService.Rest.ILinkedAccountProvider>(sp => new GenOnlineService.Rest.EosLinkedAccountProvider(sp.GetRequiredService<LobbyManager>()));
 
 			GenOnlineService.Realtime.RealtimeBackplaneSettings realtimeBackplane = GenOnlineService.Realtime.RealtimeBackplaneSettings.Read(builder.Configuration);
 

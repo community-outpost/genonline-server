@@ -606,7 +606,7 @@ namespace GenOnlineService
 			}
 		}
 
-		private void SendStartSignallingToMember(LobbyMember recipient, LobbyMember peer, PeerStepValues? values)
+		private void SendStartSignallingToMember(LobbyMember recipient, LobbyMember peer, PeerStepValues values)
 		{
 			ForgetConnection(recipient.UserID, peer.UserID);
 			RealtimeOut.Fire(RealtimeLobbies.GameOf(recipient).StartSignalling(StartSignallingFor(recipient, peer, values)));
@@ -617,13 +617,23 @@ namespace GenOnlineService
 		private static IReadOnlyList<string>? TransportsOf(LobbyMember member) =>
 			member.GetSession().TryGetTarget(out UserSession? session) ? session?.PeerTransports : null;
 
+		// Step 2 needs both account ids at the provider, so only the registered linked-account providers count as plugin transports;
+		// read lazily, so a pair where a member listed no transports never resolves them
+		private static IEnumerable<string> LinkedAccountProviderNames()
+		{
+			foreach (GenOnlineService.Rest.ILinkedAccountProvider provider in ServiceLocator.Services.GetServices<GenOnlineService.Rest.ILinkedAccountProvider>())
+			{
+				yield return provider.Name;
+			}
+		}
+
 		private void RestartPairLocked(LobbyMember a, LobbyMember b, bool advance)
 		{
 			IReadOnlyList<string>? transportsA = TransportsOf(a);
 			IReadOnlyList<string>? transportsB = TransportsOf(b);
-			m_PeerPairs.Restart(a.UserID, b.UserID, advance, ConnectionOrder.BothListEos(transportsA, transportsB));
+			m_PeerPairs.Restart(a.UserID, b.UserID, advance, ConnectionOrder.SharedTransport(transportsA, transportsB, LinkedAccountProviderNames()) != null);
 			MarkLiveDirty();
-			PeerStepValues? values = PairValuesLocked(a, b, transportsA, transportsB);
+			PeerStepValues values = PairValuesLocked(a, b, transportsA, transportsB);
 			SendStartSignallingToMember(a, b, values);
 			SendStartSignallingToMember(b, a, values);
 		}
@@ -639,13 +649,13 @@ namespace GenOnlineService
 
 			IReadOnlyList<string>? transportsSource = TransportsOf(source);
 			IReadOnlyList<string>? transportsTarget = TransportsOf(target);
-			if (m_PeerPairs.Request(sourceUserID, targetUserID, failedAttempt, ConnectionOrder.BothListEos(transportsSource, transportsTarget)) == null)
+			if (m_PeerPairs.Request(sourceUserID, targetUserID, failedAttempt, ConnectionOrder.SharedTransport(transportsSource, transportsTarget, LinkedAccountProviderNames()) != null) == null)
 			{
 				return Task.CompletedTask;
 			}
 
 			MarkLiveDirty();
-			PeerStepValues? values = PairValuesLocked(source, target, transportsSource, transportsTarget);
+			PeerStepValues values = PairValuesLocked(source, target, transportsSource, transportsTarget);
 			ForgetConnection(sourceUserID, targetUserID);
 			RealtimeOut.Fire(caller.StartSignalling(StartSignallingFor(source, target, values)));
 			RealtimeOut.Fire(RealtimeOut.UserGame(targetUserID).StartSignalling(StartSignallingFor(target, source, values)));
@@ -718,27 +728,20 @@ namespace GenOnlineService
 			return Task.CompletedTask;
 		});
 
-		// The step values of a pair from one snapshot of both transport lists, null for the old shape, under the lobby gate
-		private PeerStepValues? PairValuesLocked(LobbyMember a, LobbyMember b, IReadOnlyList<string>? transportsA, IReadOnlyList<string>? transportsB)
+		private PeerStepValues PairValuesLocked(LobbyMember a, LobbyMember b, IReadOnlyList<string>? transportsA, IReadOnlyList<string>? transportsB)
 		{
-			if (transportsA == null || transportsB == null)
-			{
-				m_PeerPairs.Current(a.UserID, b.UserID);
-				return null;
-			}
-			bool bothEos = ConnectionOrder.BothListEos(transportsA, transportsB);
-			PeerPairState state = m_PeerPairs.Settle(a.UserID, b.UserID, bothEos);
+			string? shared = ConnectionOrder.SharedTransport(transportsA, transportsB, LinkedAccountProviderNames());
+			PeerPairState state = m_PeerPairs.Settle(a.UserID, b.UserID, shared != null);
 			MarkLiveDirty();
 
-			// eos reaches a peer by its middleware id, so without both ids this send uses the next step and the stored step stays
+			// a plugin transport reaches a peer by its middleware id, so without both ids this send uses the next step and the stored step stays
 			bool idsKnown = !String.IsNullOrEmpty(a.MiddlewareUserID) && !String.IsNullOrEmpty(b.MiddlewareUserID);
-			return ConnectionOrder.ValuesOf(state, bothEos && idsKnown);
+			return ConnectionOrder.ValuesOf(state, idsKnown ? shared : null);
 		}
 
-		private PeerStepValues? PairValuesLocked(LobbyMember a, LobbyMember b) => PairValuesLocked(a, b, TransportsOf(a), TransportsOf(b));
+		private PeerStepValues PairValuesLocked(LobbyMember a, LobbyMember b) => PairValuesLocked(a, b, TransportsOf(a), TransportsOf(b));
 
-		// Tells a member how to reach the given peer with the values both peers of the pair get, the old shape leaves the four fields out
-		private StartSignallingEvent StartSignallingFor(LobbyMember recipient, LobbyMember peer, PeerStepValues? values)
+		private StartSignallingEvent StartSignallingFor(LobbyMember recipient, LobbyMember peer, PeerStepValues values)
 		{
 			return new StartSignallingEvent
 			{
@@ -746,10 +749,10 @@ namespace GenOnlineService
 				UserId = peer.UserID,
 				PreferredPort = peer.Port,
 				MiddlewareId = peer.MiddlewareUserID,
-				Attempt = values?.Attempt,
-				Transport = values?.Transport,
-				Relay = values?.Relay,
-				TimeoutS = values?.TimeoutS
+				Attempt = values.Attempt,
+				Transport = values.Transport,
+				Relay = values.Relay,
+				TimeoutS = values.TimeoutS
 			};
 		}
 
@@ -1514,7 +1517,7 @@ public async Task FinalizeACChecks()
 					continue;
 				}
 
-				PeerStepValues? values = PairValuesLocked(newMember, memberEntry);
+				PeerStepValues values = PairValuesLocked(newMember, memberEntry);
 				RealtimeOut.Fire(joining.StartSignalling(StartSignallingFor(newMember, memberEntry, values)));
 				RealtimeOut.Fire(joining.AnticheatRegister(AnticheatPeerFor(memberEntry)));
 

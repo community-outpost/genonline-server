@@ -411,6 +411,10 @@ namespace GenOnlineService
 			}
 
 			RealtimeConnection newSess = new RealtimeConnection(transport, sessionType, ownerID, userCacheData);
+
+			// SetPeerTransports is required again after every Ready, so a reused session forgets the previous connection's list;
+			// from here on only the new connection's SetPeerTransports counts, a late one of the superseded connection is dropped
+			userCacheData.ResetPeerTransports(newSess);
 			m_dictWebsockets[sessionType][ownerID] = newSess;
 			RecordConnectionSnapshot();
 
@@ -950,10 +954,41 @@ namespace GenOnlineService
 
 		public GameBuild MatchmakingBuild = new GameBuild(String.Empty, 0, 0, EKnownAnticheatID.NONE);
 
-		// The peer transports of SetPeerTransports in this session, null until the client sends it
-		private volatile string[]? m_peerTransports;
-		internal IReadOnlyList<string>? PeerTransports => m_peerTransports;
-		internal void SetPeerTransports(IEnumerable<string?>? transports) => m_peerTransports = GenOnlineService.Realtime.ConnectionOrder.KnownTransports(transports);
+		// The plugin transports of SetPeerTransports in the current connection, null until the client sends them;
+		// the list is kept with the connection it belongs to, so one connection's list never stands in for another's
+		private sealed record PeerTransportsOf(object? Connection, string[]? Transports);
+		private volatile PeerTransportsOf m_peerTransports = new(null, null);
+		internal IReadOnlyList<string>? PeerTransports => m_peerTransports.Transports;
+
+		internal bool SetPeerTransports(object connection, IEnumerable<string?>? transports)
+		{
+			string[] list = GenOnlineService.Realtime.ConnectionOrder.PluginTransports(transports);
+			while (true)
+			{
+				PeerTransportsOf current = m_peerTransports;
+				if (!ReferenceEquals(current.Connection, connection))
+				{
+					return false;
+				}
+
+				if (ReferenceEquals(Interlocked.CompareExchange(ref m_peerTransports, current with { Transports = list }, current), current))
+				{
+					return true;
+				}
+			}
+		}
+
+		private int m_signallingResendPending;
+
+		internal void ResetPeerTransports(object connection)
+		{
+			Interlocked.Exchange(ref m_signallingResendPending, 0);
+			m_peerTransports = new PeerTransportsOf(connection, null);
+		}
+
+		internal void MarkSignallingResendPending() => Interlocked.Exchange(ref m_signallingResendPending, 1);
+
+		internal bool TakeSignallingResend() => m_peerTransports.Transports != null && Interlocked.Exchange(ref m_signallingResendPending, 0) == 1;
 
 		private ConcurrentList<UInt64> m_lstHistoricMatchIDs = new();
 		private ConcurrentDictionary<UInt64, int> m_lstHistoricMatchIDToSlotIndexMap = new();

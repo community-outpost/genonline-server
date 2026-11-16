@@ -23,6 +23,7 @@ using Microsoft.EntityFrameworkCore;
 namespace GenOnlineService.Api
 {
 	using GenOnlineService.Realtime;
+	using GenOnlineService.Rest;
 
 	public static class ConnectionReportValidation
 	{
@@ -47,6 +48,11 @@ namespace GenOnlineService.Api
 			return Validate(body ?? new ConnectionReportRequest(), reporterId, lobbyId, wasMember);
 		}
 
+		public static string MetricTransport(string transport, IEnumerable<string> supported)
+		{
+			return transport == ConnectionOrder.Gns || supported.Contains(transport, StringComparer.Ordinal) ? transport : "other";
+		}
+
 		public static Result<ConnectionReport> Validate(ConnectionReportRequest body, long reporterId, long lobbyId, Func<long, bool> wasLobbyMember)
 		{
 			if (body.TargetUserId is not long target || target <= 0 || target == reporterId || !wasLobbyMember(target))
@@ -59,7 +65,8 @@ namespace GenOnlineService.Api
 				return Result.Invalid("outcome");
 			}
 
-			if (body.Transport is not string transport || !ConnectionReportTransports.All.Contains(transport))
+			// gns or a plugin transport name, both follow the SetPeerTransports syntax
+			if (body.Transport is not string transport || !ConnectionOrder.IsTransportName(transport))
 			{
 				return Result.Invalid("transport");
 			}
@@ -69,8 +76,7 @@ namespace GenOnlineService.Api
 				return Result.Invalid("ip_version");
 			}
 
-			int attempt = body.Attempt ?? 1;
-			if (attempt < 1)
+			if (body.Attempt is not int attempt || attempt < 1)
 			{
 				return Result.Invalid("attempt");
 			}
@@ -112,11 +118,13 @@ namespace GenOnlineService.Api
 	{
 		private readonly IDbContextFactory<AppDbContext> m_dbFactory;
 		private readonly LobbyManager m_lobbyManager;
+		private readonly IEnumerable<ILinkedAccountProvider> m_providers;
 
-		public ConnectionReportsController(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IAuthorizationService authorization) : base(authorization)
+		public ConnectionReportsController(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IEnumerable<ILinkedAccountProvider> providers, IAuthorizationService authorization) : base(authorization)
 		{
 			m_dbFactory = dbFactory;
 			m_lobbyManager = lobbyManager;
+			m_providers = providers;
 		}
 
 		// 32 events fit in about 1.5 KB, larger bodies are refused before parsing
@@ -138,7 +146,7 @@ namespace GenOnlineService.Api
 				await Database.ConnectionReports.Upsert(db, row);
 			}
 
-			AppMetrics.RecordConnectionOutcome(row.Outcome, row.Transport, row.IpVersion);
+			AppMetrics.RecordConnectionOutcome(row.Outcome, ConnectionReportValidation.MetricTransport(row.Transport, m_providers.Select(p => p.Name)), row.IpVersion);
 			return ApiResults.NoContent(Result.Success());
 		}
 	}

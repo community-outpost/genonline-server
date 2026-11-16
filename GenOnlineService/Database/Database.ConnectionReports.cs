@@ -30,14 +30,6 @@ public static class ConnectionReportOutcomes
 	public static readonly string[] All = { ConnectedDirect, ConnectedRelay, Failed, Disconnected };
 }
 
-public static class ConnectionReportTransports
-{
-	public const string Gns = "gns";
-	public const string Eos = "eos";
-
-	public static readonly string[] All = { Gns, Eos };
-}
-
 public static class ConnectionReportStates
 {
 	public const string Connecting = "connecting";
@@ -84,7 +76,7 @@ public class ConnectionReportConfiguration : IEntityTypeConfiguration<Connection
 		builder.Property(e => e.TargetUserID).HasColumnName("target_user_id");
 		builder.Property(e => e.Attempt).HasColumnName("attempt");
 		builder.Property(e => e.Outcome).HasColumnName("outcome").HasMaxLength(16);
-		builder.Property(e => e.Transport).HasColumnName("transport").HasMaxLength(8);
+		builder.Property(e => e.Transport).HasColumnName("transport").HasMaxLength(32);
 		builder.Property(e => e.IpVersion).HasColumnName("ip_version");
 		builder.Property(e => e.Events).HasColumnName("events");
 		builder.Property(e => e.CreatedAt).HasColumnName("created_at");

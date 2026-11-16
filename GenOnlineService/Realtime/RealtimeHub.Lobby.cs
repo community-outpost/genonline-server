@@ -33,7 +33,7 @@ namespace GenOnlineService.Realtime
 		// a module scan answer adds at most this many new modules, later scans pick up the rest
 		private const int MaxNewModulesPerScan = 256;
 
-		// Reconnects rejoin the lobby group, get the current state and the lobby chat, then signalling restarts for the unconnected pairs
+		// Reconnects rejoin the lobby group and get the current state and lobby chat; signalling restarts for the unconnected pairs once the new connection's transports arrived
 		private async partial Task RestoreLobbyAsync(UserSession session)
 		{
 			if (session.GetSessionType() != EUserSessionType.GameClient || session.currentLobbyID == -1)
@@ -49,7 +49,22 @@ namespace GenOnlineService.Realtime
 
 			await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.Lobby(lobby.LobbyID));
 			await SendLobbySnapshotAsync(lobby, session.m_UserID);
-			await lobby.ResendSignallingAfterReconnectAsync(session.m_UserID);
+			session.MarkSignallingResendPending();
+			await ResendSignallingIfDueAsync(session);
+		}
+
+		private async Task ResendSignallingIfDueAsync(UserSession session)
+		{
+			if (!session.TakeSignallingResend())
+			{
+				return;
+			}
+
+			Lobby? lobby = m_lobbyManager.GetLobby(session.currentLobbyID);
+			if (lobby != null)
+			{
+				await lobby.ResendSignallingAfterReconnectAsync(session.m_UserID);
+			}
 		}
 
 		private async Task SendLobbySnapshotAsync(Lobby lobby, Int64 userID)
@@ -592,13 +607,19 @@ namespace GenOnlineService.Realtime
 			return Task.FromResult<Result<Empty>>(MatchmakingManager.PlayerWidenSearch(Session) ? Result.Success() : Result.Fail(ErrorCodes.MatchmakingNotQueued));
 		}
 
-		public Task SetPeerTransports(SetPeerTransportsRequest request)
+		public async Task SetPeerTransports(SetPeerTransportsRequest request)
 		{
-			if (RequireAccess(ESessionAccessType.Gameplay) == null)
+			if (RequireAccess(ESessionAccessType.Gameplay) != null)
 			{
-				Session.SetPeerTransports(request.Transports);
+				return;
 			}
-			return Task.CompletedTask;
+
+			// a call of a connection that was superseded after it passed the check above stores nothing
+			RealtimeConnection connection = Connection;
+			if (connection.OwnerSession.SetPeerTransports(connection, request.Transports))
+			{
+				await ResendSignallingIfDueAsync(connection.OwnerSession);
+			}
 		}
 
 		public Task RequestSignalling(RequestSignallingRequest request)

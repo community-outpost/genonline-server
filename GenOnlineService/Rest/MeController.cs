@@ -81,42 +81,51 @@ namespace GenOnlineService.Rest
 		}
 	}
 
-	// The EOS token and the linked EOS account, for game sessions
 	public sealed class MeController : ApiControllerBase
 	{
-		private readonly IDbContextFactory<AppDbContext> m_dbFactory;
-		private readonly LobbyManager m_lobbyManager;
+		private readonly IEnumerable<ILinkedAccountProvider> m_providers;
 
-		public MeController(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IAuthorizationService authorization) : base(authorization)
+		public MeController(IEnumerable<ILinkedAccountProvider> providers, IAuthorizationService authorization) : base(authorization)
 		{
-			m_dbFactory = dbFactory;
-			m_lobbyManager = lobbyManager;
+			m_providers = providers;
 		}
 
-		[HttpPost("~/api/v1/me/eos_token")]
-		public IActionResult IssueEosToken()
+		// provider names are opaque and case-sensitive
+		private ILinkedAccountProvider? Find(string provider) => m_providers.FirstOrDefault(p => p.Name == provider);
+
+		[HttpPost("~/api/v1/me/linked_accounts/{provider}/sign_in_token")]
+		public IActionResult IssueSignInToken(string provider)
 		{
+			ILinkedAccountProvider? linked = Find(provider);
+			if (linked == null)
+			{
+				return RestResults.NotFound("provider");
+			}
+
 			if (!IsGameSession())
 			{
 				return RestResults.Fail(RestCodes.SessionGameRequired);
 			}
 
-			EosTokenIssuer.Settings? settings = EosTokenIssuer.GetSettings();
-			if (settings == null)
+			Result<SignInToken> issued = linked.IssueSignInToken(Me, TokenHelper.GetDisplayName(this));
+			if (!issued.Ok)
 			{
-				return RestResults.Fail(RestCodes.ServiceUnavailable, new { What = "eos_token" });
+				return RestResults.Fail(new Failure(issued.Code!, issued.Params!));
 			}
-
-			string token = EosTokenIssuer.Issue(settings, Me, TokenHelper.GetDisplayName(this), out _);
-			return RestResults.Ok(new EosTokenResponse { EosToken = token, ExpiresIn = (int)settings.Lifetime.TotalSeconds });
+			return RestResults.Ok(new SignInTokenResponse { Token = issued.Data!.Token, ExpiresIn = issued.Data.ExpiresIn });
 		}
 
-		// Only game clients link an EOS account
-		[HttpPut("~/api/v1/me/linked_accounts/eos")]
-		public async Task<IActionResult> LinkEos()
+		[HttpPut("~/api/v1/me/linked_accounts/{provider}")]
+		public async Task<IActionResult> LinkAccount(string provider)
 		{
-			(LinkEosRequest? body, Failure? malformed) = await ReadBodyAsync<LinkEosRequest>();
-			if ((malformed ?? EosLink.ValidateRequest(body)) is Failure invalid)
+			ILinkedAccountProvider? linked = Find(provider);
+			if (linked == null)
+			{
+				return RestResults.NotFound("provider");
+			}
+
+			(LinkAccountRequest? body, Failure? malformed) = await ReadBodyAsync<LinkAccountRequest>();
+			if ((malformed ?? LinkedAccounts.ValidateRequest(body)) is Failure invalid)
 			{
 				return RestResults.Fail(invalid);
 			}
@@ -126,7 +135,7 @@ namespace GenOnlineService.Rest
 				return RestResults.Fail(RestCodes.SessionGameRequired);
 			}
 
-			Failure? failure = await EosLink.LinkAsync(m_lobbyManager, Me, RealtimeClaims.SessionType(User), body!.IdToken!);
+			Failure? failure = await linked.LinkAsync(Me, RealtimeClaims.SessionType(User), body!.Proof!);
 			return failure is Failure failed ? RestResults.Fail(failed) : NoContent();
 		}
 
