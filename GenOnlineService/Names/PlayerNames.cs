@@ -46,6 +46,44 @@ namespace GenOnlineService.Names
 			return result;
 		}
 
+		// The player chooses the name they owe, with the rules of a rename; a taken tag draws a free one instead
+		public async Task<Result<Empty>> ChooseAsync(Int64 me, string? requested)
+		{
+			string name = (requested ?? String.Empty).Trim();
+			Failure? invalid = CheckRules(me, name);
+			if (invalid != null)
+			{
+				return invalid.Value;
+			}
+			// the placeholder's own shape would settle the debt and still look owed
+			if (Database.DisplayNames.IsPlaceholderShaped(name))
+			{
+				return Result.Fail(ErrorCodes.NameReserved, new { Word = "player" });
+			}
+
+			bool found;
+			NameChange? change;
+			try
+			{
+				await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
+				(found, change) = await Database.DisplayNames.Choose(db, me, name, $"user:{me}");
+			}
+			catch (NameTagsExhaustedException)
+			{
+				return Result.Fail(ErrorCodes.NameTaken);
+			}
+
+			if (!found)
+			{
+				return Result.NotFound("user");
+			}
+			if (change != null)
+			{
+				await RealtimeNames.PublishOne(change);
+			}
+			return Result.Success();
+		}
+
 		// moderation.rename is checked by the caller
 		public async Task<Result<Empty>> RenameByStaffAsync(Database.ModerationActor actor, Int64 target, string? requested, string? reason)
 		{
@@ -87,6 +125,46 @@ namespace GenOnlineService.Names
 				});
 			}
 			return result;
+		}
+
+		// moderation.rename is checked by the caller. Sets a neutral placeholder, the player owes a new name and every sign-in ends; audited with both names.
+		// live is false outside the running service (the CLI), which can only revoke the stored sign-ins.
+		public async Task<Result<Empty>> ResetNameByStaffAsync(Database.ModerationActor actor, Int64 target, string? reason, bool live = true)
+		{
+			int actorRank = actor.UserID is Int64 actorID ? StaffRoles.Rank(actorID) : StaffRoles.AdminRank;
+			Failure? failure = CheckStaff(actor.UserID, actorRank, target, StaffRoles.Rank(target), reason);
+			if (failure != null)
+			{
+				return failure.Value;
+			}
+
+			NameChange? change;
+			await using (AppDbContext db = await m_dbFactory.CreateDbContextAsync())
+			{
+				change = await Database.DisplayNames.ResetName(db, target, actor.Name);
+				if (change == null)
+				{
+					return Result.NotFound("user");
+				}
+
+				await Database.Moderation.LogAction(db, actor, ModerationActions.NameReset, AuditTargetKinds.User, target, String.IsNullOrEmpty(reason) ? null : reason, new
+				{
+					from = Database.DisplayNames.Format(change.OldName, change.OldTag),
+					to = Database.DisplayNames.Format(change.NewName, change.NewTag)
+				});
+
+				if (!live)
+				{
+					await SignInRevocation.RevokeStored(db, target);
+				}
+			}
+
+			if (live)
+			{
+				await RealtimeNames.PublishOne(change);
+				await SessionRevocation.RevokeUser(target, false, "name reset");
+			}
+			return Result.Success();
 		}
 
 		public static Failure? CheckStaff(Int64? actorID, int actorRank, Int64 target, int targetRank, string? reason)

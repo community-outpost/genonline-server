@@ -53,6 +53,23 @@ namespace GenOnlineService.Api
 			return ApiResults.NoContent(await m_names.RenameByStaffAsync(SanctionActions.ApiActorOf(Me), userID, body?.Name, body?.Reason));
 		}
 
+		// A placeholder replaces the name; ending every sign-in forces the player to choose a new one
+		[HttpPost("~/api/v1/players/{userID:long}/reset_name")]
+		public async Task<IActionResult> ResetPlayerName(long userID)
+		{
+			if (await RequirePermissionAsync(Permissions.ModerationRename) is Failure denied)
+			{
+				return ApiResults.Fail(denied);
+			}
+
+			(ResetNameRequest? body, Failure? malformed) = await ReadBodyAsync<ResetNameRequest>();
+			if (malformed != null)
+			{
+				return ApiResults.Fail(malformed.Value);
+			}
+			return ApiResults.NoContent(await m_names.ResetNameByStaffAsync(SanctionActions.ApiActorOf(Me), userID, body?.Reason));
+		}
+
 		[HttpPost("~/api/v1/players/{userID:long}/sanctions")]
 		public async Task<IActionResult> CreateSanction(long userID)
 		{

@@ -40,6 +40,15 @@ namespace GenOnlineService.Identity
 	// The environment owns names, roles and bans; the provider only signs people in
 	public sealed class UpstreamProviderSettings
 	{
+		public static string DefaultDisplayName(string provider) => provider switch
+		{
+			"discord" => "Discord",
+			"steam" => "Steam",
+			"google" => "Google",
+			"gamereplays" => "GameReplays",
+			_ => provider,
+		};
+
 		public string Name { get; init; } = String.Empty;
 		public ProviderKind Kind { get; init; } = ProviderKind.Oidc;
 		public string BaseUrl { get; init; } = String.Empty;
@@ -200,7 +209,7 @@ namespace GenOnlineService.Identity
 				Kind = UpstreamProviderSettings.KindOf(p.Key, p.GetValue<string>("kind")),
 				BaseUrl = (p.GetValue<string>("base_url") ?? String.Empty).TrimEnd('/'),
 				ApplicationKey = String.IsNullOrEmpty(p.GetValue<string>("application_key")) ? null : p.GetValue<string>("application_key"),
-				DisplayName = p.GetValue<string>("display_name") ?? p.Key,
+				DisplayName = p.GetValue<string>("display_name") ?? UpstreamProviderSettings.DefaultDisplayName(p.Key),
 				Enabled = p.GetValue<bool>("enabled"),
 				Issuer = p.GetValue<string>("issuer") ?? String.Empty,
 				ClientID = p.GetValue<string>("client_id") ?? String.Empty,

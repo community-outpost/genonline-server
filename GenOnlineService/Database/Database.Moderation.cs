@@ -67,6 +67,7 @@ public static class ModerationActions
 	public const string Mute = "mute";
 	public const string Unmute = "unmute";
 	public const string Rename = "rename";
+	public const string NameReset = "name_reset";
 	public const string RoleGrant = "role_grant";
 	public const string RoleRevoke = "role_revoke";
 	public const string MessageDelete = "message_delete";

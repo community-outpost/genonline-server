@@ -24,7 +24,7 @@ using System.Text;
 
 namespace GenOnlineService.Identity
 {
-	public sealed record UpstreamSignInResult(User? User, string? Error)
+	public sealed record UpstreamSignInResult(User? User, string? Error, string? SuggestedName = null)
 	{
 		public static UpstreamSignInResult Refused(string error) => new(null, error);
 	}
@@ -102,8 +102,9 @@ namespace GenOnlineService.Identity
 
 					user = new User
 					{
-						Username = InitialName(externName),
+						Username = Database.DisplayNames.Placeholder(),
 						State = UserStates.Active,
+						NameRequiredAt = now,
 						CreatedAt = now,
 						UpdatedAt = now
 					};
@@ -129,12 +130,11 @@ namespace GenOnlineService.Identity
 				return UpstreamSignInResult.Refused(ErrorDeactivated);
 			}
 
-			identity.ExternUsername = externName;
 			identity.LastUsedAt = now;
 			user.LastSignInAt = now;
 			await db.SaveChangesAsync();
 
-			return new UpstreamSignInResult(user, null);
+			return new UpstreamSignInResult(user, null, user.NameRequiredAt != null ? Suggestion(externName) : null);
 		}
 
 		private const string SteamClaimedIDPrefix = "https://steamcommunity.com/openid/id/";
@@ -202,8 +202,7 @@ namespace GenOnlineService.Identity
 			return null;
 		}
 
-		// A first name for a new account: printable, trimmed, at most 32 characters; the tag makes it unique
-		private static string InitialName(string? requested)
+		private static string? Suggestion(string? requested)
 		{
 			var builder = new StringBuilder();
 			foreach (char c in (requested ?? String.Empty).Normalize(NormalizationForm.FormKC))
@@ -221,7 +220,7 @@ namespace GenOnlineService.Identity
 				name = name.Substring(0, name.Length - 1).TrimEnd();
 			}
 
-			return name.Length == 0 ? "player" : name;
+			return name.Length == 0 ? null : name;
 		}
 
 		private static string? Truncate(string? value, int length) => value == null || value.Length <= length ? value : value.Substring(0, length);

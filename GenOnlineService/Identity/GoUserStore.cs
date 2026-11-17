@@ -91,14 +91,15 @@ namespace GenOnlineService.Identity
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(cancellationToken);
 			user.UpdatedAt = DateTime.UtcNow;
 			var entry = db.Users.Update(user);
-			// Identity writes the copy it read; the state (blocks), the name and tag (renames) belong to other code and
-			// may have changed meanwhile, so a failed sign-in never writes back a stale copy of them
+			// Identity writes the copy it read; the state (blocks), name, tag and owed name belong to other code and may have changed,
+			// so a failed sign-in never writes back a stale copy of them
 			entry.Property(u => u.State).IsModified = false;
 			entry.Property(u => u.Username).IsModified = false;
 			entry.Property(u => u.UsernameNormalized).IsModified = false;
 			entry.Property(u => u.NameTag).IsModified = false;
 			entry.Property(u => u.NameKey).IsModified = false;
 			entry.Property(u => u.RenamedAt).IsModified = false;
+			entry.Property(u => u.NameRequiredAt).IsModified = false;
 			await db.SaveChangesAsync(cancellationToken);
 			return IdentityResult.Success;
 		}
@@ -144,7 +145,6 @@ namespace GenOnlineService.Identity
 				UserID = user.ID,
 				Provider = login.LoginProvider,
 				ExternUid = login.ProviderKey,
-				ExternUsername = login.ProviderDisplayName,
 				CreatedAt = DateTime.UtcNow,
 				LastUsedAt = DateTime.UtcNow
 			});
@@ -161,7 +161,7 @@ namespace GenOnlineService.Identity
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(cancellationToken);
 			return await db.Identities.AsNoTracking().Where(i => i.UserID == user.ID)
-				.Select(i => new UserLoginInfo(i.Provider, i.ExternUid, i.ExternUsername))
+				.Select(i => new UserLoginInfo(i.Provider, i.ExternUid, null))
 				.ToListAsync(cancellationToken);
 		}
 

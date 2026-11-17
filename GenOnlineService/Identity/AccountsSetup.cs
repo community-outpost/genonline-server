@@ -217,6 +217,7 @@ namespace GenOnlineService.Identity
 
 			services.AddScoped<UpstreamAccounts>();
 			services.AddScoped<PasswordAccounts>();
+			services.TryAddSingleton<Names.PlayerNames>();
 
 			services.AddAntiforgery(options =>
 			{
@@ -333,7 +334,8 @@ namespace GenOnlineService.Identity
 							.SetClientId(provider.ClientID)
 							.SetClientSecret(provider.ClientSecret)
 							.SetRedirectUri(provider.ReturnUri)
-							.AddScopes(email.Prepend(Scopes.Profile).ToArray()));
+							// openid only: no profile, so no real name (user, 2026-11-17)
+							.AddScopes(email));
 						break;
 
 					case ProviderKind.GameReplays:
@@ -398,6 +400,8 @@ namespace GenOnlineService.Identity
 					options.CallbackPath = provider.SteamHandlerPath;
 					options.SignInScheme = IdentityConstants.ExternalScheme;
 					options.ApplicationKey = provider.ApplicationKey;
+					// no attribute exchange: the SteamID64 is all we keep, and email or real names must not arrive
+					options.Attributes.Clear();
 				});
 			}
 		}

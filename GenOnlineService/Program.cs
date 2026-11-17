@@ -1538,6 +1538,11 @@ namespace GenOnlineService
 			app.UseAuthorization();
 
 			app.MapControllers();
+			if (accountsSettings.Enabled)
+			{
+				// the sign-in pages' stylesheet, theme and theme script (PortalLook): wwwroot/portal and Blazor Blueprint's _content
+				app.MapStaticAssets();
+			}
 			app.MapHub<GenOnlineService.Realtime.RealtimeHub>(GenOnlineService.Realtime.RealtimeHub.Path, options =>
 			{
 				options.Transports = Microsoft.AspNetCore.Http.Connections.HttpTransportType.WebSockets;
