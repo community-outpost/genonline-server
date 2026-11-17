@@ -72,6 +72,7 @@ public abstract class AppDbContext : DbContext
 	public DbSet<User> Users => Set<User>();
 	public DbSet<UserUsernameHistory> UserUsernameHistory => Set<UserUsernameHistory>();
 	public DbSet<UserIdentity> Identities => Set<UserIdentity>();
+	public DbSet<UserRecoveryCode> UserRecoveryCodes => Set<UserRecoveryCode>();
 	public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
 	public DbSet<Client> Clients => Set<Client>();
 	public DbSet<ClientBuild> ClientBuilds => Set<ClientBuild>();
@@ -180,6 +181,7 @@ public abstract class AppDbContext : DbContext
 		}
 		modelBuilder.ApplyConfiguration(new UserUsernameHistoryConfiguration());
 		modelBuilder.ApplyConfiguration(new UserIdentityConfiguration());
+		modelBuilder.ApplyConfiguration(new UserRecoveryCodeConfiguration());
 		modelBuilder.ApplyConfiguration(new ApplicationSettingConfiguration());
 		modelBuilder.ApplyConfiguration(new ClientConfiguration());
 		modelBuilder.ApplyConfiguration(new ClientBuildConfiguration());
