@@ -154,6 +154,15 @@ namespace GenOnlineService.Identity
 			return new PasswordAccountResult(user, null);
 		}
 
+		// Only that column is written: the caller's User may predate Identity's save (the failed count reset), and saving the whole row would undo it.
+		public async Task RecordSignIn(User user)
+		{
+			DateTime now = DateTime.UtcNow;
+			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
+			await db.Users.Where(u => u.ID == user.ID).ExecuteUpdateAsync(setters => setters.SetProperty(u => u.LastSignInAt, now));
+			user.LastSignInAt = now;
+		}
+
 		private static string? ParseEmail(string? email)
 		{
 			string trimmed = (email ?? String.Empty).Trim();

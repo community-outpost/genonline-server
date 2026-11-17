@@ -104,6 +104,43 @@ namespace GenOnlineService.Rest
 			return RestResults.Ok(new MatchListResponse { Matches = entries.Select(entry => MatchResponse.Of(entry, tags)).ToArray() });
 		}
 
+		[Authorize(Policy = PermissionPolicies.Prefix + Permissions.MatchHistoryRead)]
+		[EndpointSummary("Lists the finished matches of one player, newest first.")]
+		[EndpointDescription("before_id continues the list; a Link rel=next with before_id=<last id> is sent when the page is full.")]
+		[ProducesResponseType<MatchListResponse>(StatusCodes.Status200OK)]
+		[HttpGet("~/api/v1/players/{userID:long}/matches")]
+		public async Task<IActionResult> OfPlayer(long userID)
+		{
+			long? beforeID = null;
+			if (Request.Query.TryGetValue("before_id", out var beforeText))
+			{
+				if (!long.TryParse(beforeText, NumberStyles.None, CultureInfo.InvariantCulture, out long before))
+				{
+					return RestResults.Invalid("before_id");
+				}
+				beforeID = before;
+			}
+			int perPage = OffsetPage.DefaultPerPage;
+			if (Request.Query.TryGetValue("per_page", out var perPageText) && (!int.TryParse(perPageText, NumberStyles.None, CultureInfo.InvariantCulture, out perPage) || perPage < 1 || perPage > OffsetPage.MaxPerPage))
+			{
+				return RestResults.Invalid("per_page");
+			}
+
+			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(HttpContext.RequestAborted);
+			if (!await Database.Users.Exists(db, userID))
+			{
+				return RestResults.NotFound("user");
+			}
+
+			List<MatchHistory_Entry> entries = await Database.MatchHistory.GetMatchesOfPlayer(db, userID, beforeID, perPage, HttpContext.RequestAborted);
+			if (entries.Count == perPage)
+			{
+				Paging.WriteKeysetNext(HttpContext, "before_id", entries[^1].match_id);
+			}
+			IReadOnlyDictionary<long, int> tags = await TagsOf(db, entries.SelectMany(MatchResponse.UserIdsOf));
+			return RestResults.Ok(new MatchListResponse { Matches = entries.Select(entry => MatchResponse.Of(entry, tags)).ToArray() });
+		}
+
 		// One match, finished or running: match_history.read, or any staff permission through the sign-in cookie, so the
 		// staff pages open a match as the first staff area did (A1); a bearer caller still needs match_history.read
 		[AllowSignInCookie]

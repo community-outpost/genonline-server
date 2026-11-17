@@ -133,6 +133,7 @@ public class MatchConfiguration : IEntityTypeConfiguration<Match>
 		entity.HasKey(e => e.Id);
 
 		entity.HasIndex(e => new { e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_finished_at");
+		entity.HasIndex(e => e.StartedAt).HasDatabaseName("ix_matches_started_at");
 
 		entity.HasMany(e => e.Players).WithOne().HasForeignKey(p => p.MatchId).OnDelete(DeleteBehavior.Cascade);
 
@@ -829,6 +830,19 @@ namespace Database
 			return await ToEntries(db, matches, cancellationToken);
 		}
 
+		public static async Task<List<MatchHistory_Entry>> GetMatchesOfPlayer(AppDbContext db, long userID, long? beforeID, int take, CancellationToken cancellationToken = default)
+		{
+			IQueryable<Match> query = db.Matches.AsNoTracking().Where(m => m.FinishedAt != null && db.MatchPlayers.Any(p => p.MatchId == m.Id && p.UserId == userID));
+			if (beforeID != null)
+			{
+				long before = beforeID.Value;
+				query = query.Where(m => m.Id < before);
+			}
+
+			List<Match> matches = await query.OrderByDescending(m => m.Id).Take(take).ToListAsync(cancellationToken);
+			return await ToEntries(db, matches, cancellationToken);
+		}
+
 		public static async Task FinalizeAndScheduleExternalPublication(
 			AppDbContext db,
 			GenOnlineService.Lobby lobby,
@@ -872,7 +886,8 @@ namespace Database
 			ulong matchId,
 			CancellationToken cancellationToken)
 		{
-			if (matchId == 0)
+			// an environment without the external leaderboards keeps no backlog to publish later
+			if (matchId == 0 || !GenOnlineService.ExternalLeaderboardsClient.IsConfigured())
 				return;
 
 			bool exists = await db.MatchPublications.AnyAsync(p => p.MatchId == (long)matchId, cancellationToken);

@@ -23,6 +23,8 @@ namespace GenOnlineService.Portal.Client
 		// Times show in UTC, as the service stores them
 		public static string Date(DateTime? value) => value is DateTime time ? time.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) : "never";
 
+		public static string Day(DateTime value) => value.ToUniversalTime().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+
 		public static string Ago(DateTime value, DateTime utcNow)
 		{
 			TimeSpan age = utcNow - value.ToUniversalTime();
@@ -32,6 +34,8 @@ namespace GenOnlineService.Portal.Client
 				: age.TotalDays < 7 ? $"{(int)age.TotalDays}d ago"
 				: Date(value);
 		}
+
+		public static string Recent(DateTime value, DateTime utcNow) => (utcNow - value.ToUniversalTime()).TotalDays < 7 ? Ago(value, utcNow) : Day(value);
 
 		public static string Count(int value) => value.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
@@ -57,6 +61,8 @@ namespace GenOnlineService.Portal.Client
 			"moderation.target_outranks" => "That player holds the same or a higher staff rank.",
 			"moderation.target_offline" => "That player is not connected.",
 			"moderation.reason_too_long" => "The reason is too long.",
+			"roles.rank" => "That role ranks the same as or above your own.",
+			"roles.upstream" => "That role comes from a sign-in provider and follows its sign-ins.",
 			_ => "The service answered: " + code
 		};
 	}
