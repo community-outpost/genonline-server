@@ -1222,6 +1222,11 @@ namespace GenOnlineService
 			builder.Services.AddGenOnlineDataProtection(builder.Configuration, builder.Environment.IsDevelopment());
 			builder.Services.AddGenOnlineIdentity(accountsSettings, builder.Environment.IsDevelopment());
 
+			if (accountsSettings.Enabled)
+			{
+				GenOnlineService.Portal.PortalSetup.AddPortal(builder.Services);
+			}
+
 			builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationPolicyProvider, PermissionPolicyProvider>();
 			builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, PermissionHandler>();
 
@@ -1537,11 +1542,16 @@ namespace GenOnlineService
 
 			app.UseAuthorization();
 
+			if (accountsSettings.Enabled)
+			{
+				GenOnlineService.Portal.PortalSetup.UsePortal(app);
+			}
+
 			app.MapControllers();
 			if (accountsSettings.Enabled)
 			{
-				// the sign-in pages' stylesheet, theme and theme script (PortalLook): wwwroot/portal and Blazor Blueprint's _content
 				app.MapStaticAssets();
+				GenOnlineService.Portal.PortalSetup.MapPortal(app);
 			}
 			app.MapHub<GenOnlineService.Realtime.RealtimeHub>(GenOnlineService.Realtime.RealtimeHub.Path, options =>
 			{
