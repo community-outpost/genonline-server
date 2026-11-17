@@ -50,9 +50,8 @@ namespace GenOnlineService.Api
 		public static IActionResult Answer<T>(Result<T> result) where T : class => result.Ok ? Ok(result.Data!) : Fail(new Failure(result.Code!, result.Params!));
 	}
 
-	// The REST endpoints that act for a signed-in player, with the same session principal as the realtime hub
 	[ApiController]
-	[Authorize(Roles = "GameClient,ChatClient,GameLauncher")]
+	[Authorize(Policy = ApiAuthentication.GameSessionOrSignInCookie)]
 	public abstract class ApiControllerBase : ControllerBase
 	{
 		protected ApiControllerBase(IAuthorizationService authorization)

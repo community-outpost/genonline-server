@@ -21,7 +21,6 @@ using System.Text.Json.Serialization;
 
 namespace GenOnlineService.Portal.Client
 {
-	// The portal endpoints answer in the same snake_case JSON as /api/v1
 	public static class PortalJson
 	{
 		public static readonly JsonSerializerOptions Options = new JsonSerializerOptions
@@ -31,15 +30,16 @@ namespace GenOnlineService.Portal.Client
 		};
 	}
 
-	// The paths the browser calls with the sign-in cookie, and the pages the host gates
 	public static class PortalRoutes
 	{
-		public const string Session = "admin/api/session";
-		public const string Reports = "admin/api/reports";
-		public const string Players = "admin/api/players";
-		public const string Sanctions = "admin/api/sanctions";
-		public const string Matches = "admin/api/matches";
-		public const string AntiCheat = "admin/api/anticheat";
+		public const string Overview = "api/v1/staff/overview";
+		public const string Reports = "api/v1/reports";
+		public const string ReportSearch = "api/v1/reports/search";
+		public const string Players = "api/v1/players";
+		public const string PlayerSearch = "api/v1/players/search";
+		public const string Sanctions = "api/v1/sanctions";
+		public const string Matches = "api/v1/matches";
+		public const string AntiCheat = "api/v1/anticheat_reports";
 		public const string SignIn = "users/sign_in";
 		public const string SignOut = "users/sign_out";
 
@@ -47,12 +47,15 @@ namespace GenOnlineService.Portal.Client
 		// the logo of the sign-in pages (PortalLook.LogoPath on the host)
 		public const string LogoPath = "/portal/logo.png";
 		public const string AdminPages = "/admin";
+		public const string OverviewPage = AdminPages;
 		public const string ReportsPage = "/admin/reports";
 		public const string PlayersPage = "/admin/players";
 		public const string MatchesPage = "/admin/matches";
 		public const string AntiCheatPage = "/admin/anticheat";
 
 		public static string PlayerPage(long id) => PlayersPage + "/" + id;
+
+		public static string PlayersSearch(string term) => PlayersPage + "?q=" + Uri.EscapeDataString(term);
 
 		public static string MatchPage(long id) => MatchesPage + "/" + id;
 
@@ -69,22 +72,62 @@ namespace GenOnlineService.Portal.Client
 		public const string PlayersInspect = "players.inspect";
 	}
 
-	// The review lists, in sidebar order
-	public sealed record PortalReviewList(string Kind, string Title, string Description)
+	public sealed record PortalReviewList(string Kind, string Title, string ShortTitle, string Description)
 	{
 		public static readonly IReadOnlyList<PortalReviewList> All =
 		[
-			new PortalReviewList("new_accounts", "New accounts in quickmatch", "New accounts that played a quickmatch game."),
-			new PortalReviewList("modules", "Unrecognized modules", "Modules a game client loaded that are not on the allow list."),
-			new PortalReviewList("probes", "Suspicious probes", "Missing or malformed answers to an anti-cheat probe inside a match."),
-			new PortalReviewList("devices", "Suspicious device ids", "Sign-ins with a device value that lacks the marker of a genuine client."),
-			new PortalReviewList("quickmatch_rules", "Illegal quick match actions", "Quick match requests a genuine client never sends, such as choosing an army in a random army playlist.")
+			new PortalReviewList("new_accounts", "New accounts in quickmatch", "New accounts", "New accounts that played a quickmatch game."),
+			new PortalReviewList("modules", "Unrecognized modules", "Modules", "Modules a game client loaded that are not on the allow list."),
+			new PortalReviewList("probes", "Suspicious probes", "Probes", "Missing or malformed answers to an anti-cheat probe inside a match."),
+			new PortalReviewList("devices", "Suspicious device ids", "Device ids", "Sign-ins with a device value that lacks the marker of a genuine client."),
+			new PortalReviewList("quickmatch_rules", "Illegal quick match actions", "Quick match", "Quick match requests a genuine client never sends, such as choosing an army in a random army playlist.")
 		];
 
 		public static PortalReviewList? Find(string? kind) => All.FirstOrDefault(list => list.Kind == kind);
+
+		public static string IconOf(string kind) => kind switch
+		{
+			"new_accounts" => "user-plus",
+			"modules" => "puzzle",
+			"probes" => "radar",
+			_ => "fingerprint-pattern"
+		};
 	}
 
-	// Who is signed in, what they may do, and the anti-forgery token every change must carry
+	// The unreviewed rows of one review list on the dashboard
+	public sealed record PortalQueue
+	{
+		public string Kind { get; init; } = "";
+		public int Unreviewed { get; init; }
+	}
+
+	public sealed record PortalOverviewSanction
+	{
+		public long Id { get; init; }
+		public string Type { get; init; } = "";
+		public PortalMember Player { get; init; } = new PortalMember();
+		public string? Reason { get; init; }
+		public DateTime CreatedAt { get; init; }
+		public DateTime? ExpiresAt { get; init; }
+		public DateTime? LiftedAt { get; init; }
+		public PortalMember? CreatedBy { get; init; }
+		public bool Active { get; init; }
+	}
+
+	// The staff dashboard: live counts, the queues, and the newest reports and sanctions. The anti-cheat numbers are
+	// null for staff without anticheat.review
+	public sealed record PortalOverview
+	{
+		public int PlayersOnline { get; init; }
+		public int LobbiesOpen { get; init; }
+		public int MatchesToday { get; init; }
+		public int OpenReports { get; init; }
+		public int? UnreviewedAnticheat { get; init; }
+		public IReadOnlyList<PortalQueue>? Anticheat { get; init; }
+		public IReadOnlyList<PortalReport> RecentReports { get; init; } = [];
+		public IReadOnlyList<PortalOverviewSanction> RecentSanctions { get; init; } = [];
+	}
+
 	public sealed record PortalSessionInfo
 	{
 		public long UserId { get; init; }
@@ -93,7 +136,10 @@ namespace GenOnlineService.Portal.Client
 		public IReadOnlyList<string> Roles { get; init; } = [];
 		public IReadOnlyList<string> Permissions { get; init; } = [];
 		public bool Staff { get; init; }
+		// from the page's own csrf meta tags, not from the session JSON
+		[JsonIgnore]
 		public string CsrfHeader { get; init; } = "";
+		[JsonIgnore]
 		public string CsrfToken { get; init; } = "";
 
 		[JsonIgnore]

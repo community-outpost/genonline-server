@@ -6,11 +6,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0c0a09" />
     <base href="/" />
     <title>Admin · Generals Online</title>
     <link rel="stylesheet" href="@PortalLook.ThemePath" />
     <link rel="stylesheet" href="@PortalLook.StylesheetPath" />
     <link rel="stylesheet" href="@PortalLook.GeneralsPath" />
+    @if (PortalSetup.HostDataOf(HttpContext) is PortalHostData host)
+    {
+        <meta name="go-portal-session" content="@host.Session" />
+        <meta name="csrf-header" content="@host.CsrfHeader" />
+        <meta name="csrf-token" content="@host.CsrfToken" />
+    }
+    <script>window.goPortalMeta = function (name) { var meta = document.querySelector('meta[name="' + name + '"]'); return meta ? meta.getAttribute('content') : null; };</script>
     @Head
 </head>
 <body class="bb:bg-background bb:text-foreground">
@@ -19,6 +27,10 @@
 </html>
 
 @code {
+    // set while the page renders on the server, which is the only time this document renders
+    [CascadingParameter]
+    public HttpContext? HttpContext { get; set; }
+
     [Parameter]
     public RenderFragment? Head { get; set; }
 
