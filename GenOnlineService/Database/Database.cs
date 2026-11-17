@@ -110,6 +110,7 @@ public abstract class AppDbContext : DbContext
 	public DbSet<AnticheatModuleReport> AnticheatModuleReports => Set<AnticheatModuleReport>();
 	public DbSet<AnticheatNewAccountGame> AnticheatNewAccountGames => Set<AnticheatNewAccountGame>();
 	public DbSet<AnticheatProbeReport> AnticheatProbeReports => Set<AnticheatProbeReport>();
+	public DbSet<AnticheatQuickMatchReport> AnticheatQuickMatchReports => Set<AnticheatQuickMatchReport>();
 
 	public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
 	public DbSet<ServiceAccountPermission> ServiceAccountPermissions => Set<ServiceAccountPermission>();
@@ -213,6 +214,7 @@ public abstract class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new AnticheatModuleReportConfiguration());
 		modelBuilder.ApplyConfiguration(new AnticheatNewAccountGameConfiguration());
 		modelBuilder.ApplyConfiguration(new AnticheatProbeReportConfiguration());
+		modelBuilder.ApplyConfiguration(new AnticheatQuickMatchReportConfiguration());
 		modelBuilder.ApplyConfiguration(new ServiceAccountConfiguration());
 		modelBuilder.ApplyConfiguration(new ServiceAccountPermissionConfiguration());
 		modelBuilder.ApplyConfiguration(new ApiTokenConfiguration());
