@@ -359,6 +359,7 @@ namespace GenOnlineService
 
 			member.AttachSession(session);
 			session.UpdateSessionLobbyID(LobbyID);
+			NoteHandoverReturnLocked(session);
 			if (State == ELobbyState.INGAME)
 			{
 				session.RegisterHistoricMatchID(MatchID, member.SlotIndex, member.Side, TimeCreated);

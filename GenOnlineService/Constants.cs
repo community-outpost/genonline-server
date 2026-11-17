@@ -960,6 +960,8 @@ namespace GenOnlineService
 		private volatile PeerTransportsOf m_peerTransports = new(null, null);
 		internal IReadOnlyList<string>? PeerTransports => m_peerTransports.Transports;
 
+		internal object? PeerTransportsConnection => m_peerTransports.Connection;
+
 		internal bool SetPeerTransports(object connection, IEnumerable<string?>? transports)
 		{
 			string[] list = GenOnlineService.Realtime.ConnectionOrder.PluginTransports(transports);

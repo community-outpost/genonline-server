@@ -1160,6 +1160,8 @@ namespace GenOnlineService
 			builder.Services.AddHostedService<ExternalLeaderboardPublicationWorker>();
 			builder.Services.AddSingleton<ILobbyIdSource, DatabaseLobbyIdSource>();
 			builder.Services.AddSingleton(sp => new LobbyIdAllocator(sp.GetRequiredService<ILobbyIdSource>()));
+			builder.Services.AddSingleton<IMatchIdWorkerStore, DatabaseMatchIdWorkerStore>();
+			builder.Services.AddSingleton(sp => new MatchIdGenerator(sp.GetRequiredService<IMatchIdWorkerStore>(), TimeProvider.System, MatchIdGenerator.DefaultHolder()));
 			builder.Services.AddSingleton<LobbyManager>();
 			builder.Services.AddSingleton<LobbyMembershipConnections>();
 			builder.Services.AddSingleton<GenOnlineService.Rest.ILinkedAccountProvider>(sp => new GenOnlineService.Rest.EosLinkedAccountProvider(sp.GetRequiredService<LobbyManager>()));
