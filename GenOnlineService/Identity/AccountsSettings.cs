@@ -183,6 +183,36 @@ namespace GenOnlineService.Identity
 		public List<OAuthClientSettings> Clients { get; init; } = new();
 		public List<UpstreamProviderSettings> Providers { get; init; } = new();
 		public PasswordSignInSettings Password { get; init; } = new();
+		public AgreementsSettings Agreements { get; init; } = new();
+
+		public static readonly IReadOnlyList<string> DefaultCoverImages = ["/portal/faction-usa.webp", "/portal/faction-china.webp", "/portal/faction-gla.webp"];
+
+		// Missing means the faction art; a configured list replaces it, an empty one leaves the plain dark ground.
+		public List<string> CoverImages { get; init; } = new(DefaultCoverImages);
+
+		// Every entry must be a path on this service: a page naming another host would hand every visitor's address to it
+		internal static List<string> ReadCoverImages(IConfigurationSection section)
+		{
+			if (!section.Exists())
+			{
+				return new(DefaultCoverImages);
+			}
+			var paths = new List<string>();
+			foreach (string? entry in section.GetChildren().Select(c => c.Value).Append(section.Value))
+			{
+				string path = (entry ?? String.Empty).Trim();
+				if (path.Length == 0)
+				{
+					continue;
+				}
+				if (!path.StartsWith('/') || path.StartsWith("//", StringComparison.Ordinal) || path.StartsWith("/\\", StringComparison.Ordinal) || path.Any(Char.IsWhiteSpace) || path.Contains('"') || path.Contains('\''))
+				{
+					throw new InvalidOperationException($"Accounts:cover_images entries must be paths on this service, such as /portal/faction-usa.webp. \"{path}\" is not.");
+				}
+				paths.Add(path);
+			}
+			return paths;
+		}
 
 		public IEnumerable<UpstreamProviderSettings> EnabledProviders => Providers.Where(p => p.Enabled);
 
@@ -240,7 +270,9 @@ namespace GenOnlineService.Identity
 				RequireHttps = EnforceHttps(config),
 				Clients = clients,
 				Providers = providers,
-				Password = PasswordSignInSettings.Read(section.GetSection("password"))
+				Password = PasswordSignInSettings.Read(section.GetSection("password")),
+				Agreements = AgreementsSettings.Read(config.GetSection("Agreements")),
+				CoverImages = ReadCoverImages(section.GetSection("cover_images"))
 			};
 		}
 	}

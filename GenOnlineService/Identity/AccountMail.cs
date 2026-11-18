@@ -66,14 +66,10 @@ namespace GenOnlineService.Identity
 		}
 	}
 
-	// How often account mail may be asked for, in any 15-minute window: per account or address, and per client address.
-	// A mail costs the operator money and lands in someone's inbox, so these limits are the service's (the proxy limits
-	// requests, not mails). Per copy of the service, in memory, like the report limit.
-	public sealed class AccountMailLimiter
+	// Per copy, in memory; a try counts against every key it names only when each has room.
+	public abstract class AttemptLimiter
 	{
 		public static readonly TimeSpan Window = TimeSpan.FromMinutes(15);
-		public const int PerAccount = 3;
-		public const int PerClientAddress = 10;
 
 		private static readonly TimeSpan s_pruneInterval = TimeSpan.FromMinutes(5);
 		private readonly Dictionary<string, Queue<DateTime>> m_recent = new(StringComparer.Ordinal);
@@ -123,6 +119,19 @@ namespace GenOnlineService.Identity
 				m_recent.Remove(key);
 			}
 		}
+	}
+
+	// The proxy limits requests, not mails, and each mail costs money.
+	public sealed class AccountMailLimiter : AttemptLimiter
+	{
+		public const int PerAccount = 3;
+		public const int PerClientAddress = 10;
+	}
+
+	// A name not found costs a try too, so the form cannot reveal who plays here.
+	public sealed class AccountSocialLimiter : AttemptLimiter
+	{
+		public const int PerAccount = 20;
 	}
 
 	// Without Mail:delivery_method nothing is sent and nothing waits for a confirmation.

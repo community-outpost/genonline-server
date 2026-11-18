@@ -387,4 +387,509 @@
   <data name="Reset.Done.Body" xml:space="preserve">
     <value>سجّل الدخول بكلمة المرور الجديدة. انتهت جميع جلسات تسجيل الدخول الأخرى لهذا الحساب.</value>
   </data>
+  <data name="Agreements.Card.Description" xml:space="preserve">
+    <value>Rule {0} of {1}</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.Agree" xml:space="preserve">
+    <value>Agree</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.ReadRules" xml:space="preserve">
+    <value>Read the full rules</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.RulesChanged" xml:space="preserve">
+    <value>The rules changed on {0}.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.RulesChangedNoDate" xml:space="preserve">
+    <value>The rules changed.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.TermsChanged" xml:space="preserve">
+    <value>The Terms of Service changed on {0}.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.TermsChangedNoDate" xml:space="preserve">
+    <value>The Terms of Service changed.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.Terms.Title" xml:space="preserve">
+    <value>Terms of Service</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.Terms.Description" xml:space="preserve">
+    <value>One last step before you play.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.Terms.Intro" xml:space="preserve">
+    <value>Read the Terms of Service and the Privacy Policy before you start playing.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.Terms.Tick" xml:space="preserve">
+    <value>I agree to the Terms of Service</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.Terms.Required" xml:space="preserve">
+    <value>Tick the box to agree to the Terms of Service.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.TermsLink" xml:space="preserve">
+    <value>Terms of Service</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.PrivacyLink" xml:space="preserve">
+    <value>Privacy Policy</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Agreements.Start" xml:space="preserve">
+    <value>Start playing</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.respect.Title" xml:space="preserve">
+    <value>Respect</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.respect.Intro" xml:space="preserve">
+    <value>Treat every player with respect, whether they are your teammate, your opponent or new to the game.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.respect.1" xml:space="preserve">
+    <value>No racism, hate or discrimination.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.respect.2" xml:space="preserve">
+    <value>No politics or religion.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.respect.3" xml:space="preserve">
+    <value>No harassment.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.respect.4" xml:space="preserve">
+    <value>No threats.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.respect.5" xml:space="preserve">
+    <value>No doxxing.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.chat.Title" xml:space="preserve">
+    <value>Chat, names and clan tags</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.chat.Intro" xml:space="preserve">
+    <value>Keep chat readable and your name fit for everyone to see.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.chat.1" xml:space="preserve">
+    <value>No spamming.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.chat.2" xml:space="preserve">
+    <value>No disruptive behaviour.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.chat.3" xml:space="preserve">
+    <value>No offensive names or clan tags.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.fair_play.Title" xml:space="preserve">
+    <value>Fair play</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.fair_play.Intro" xml:space="preserve">
+    <value>Win with your own skill.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.fair_play.1" xml:space="preserve">
+    <value>No cheating.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.fair_play.2" xml:space="preserve">
+    <value>No smurfing.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.fair_play.3" xml:space="preserve">
+    <value>No win trading or boosting.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.fair_play.4" xml:space="preserve">
+    <value>No throwing.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.match.Title" xml:space="preserve">
+    <value>Match behaviour</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.match.Intro" xml:space="preserve">
+    <value>Play the match through.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.match.1" xml:space="preserve">
+    <value>No quitting on purpose.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.match.2" xml:space="preserve">
+    <value>No bug or disconnect abuse.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.match.3" xml:space="preserve">
+    <value>Respect the host and lobby rules.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.accounts.Title" xml:space="preserve">
+    <value>Accounts</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.accounts.Intro" xml:space="preserve">
+    <value>Your account is yours, and you are responsible for what happens on it.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.accounts.1" xml:space="preserve">
+    <value>No sharing accounts.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.accounts.2" xml:space="preserve">
+    <value>No impersonation.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.accounts.3" xml:space="preserve">
+    <value>No ban evasion.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.service.Title" xml:space="preserve">
+    <value>The service</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.service.Intro" xml:space="preserve">
+    <value>Generals Online is run by volunteers. Help us keep it running.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.service.1" xml:space="preserve">
+    <value>No attacks on the service.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Rules.service.2" xml:space="preserve">
+    <value>Found a security problem? Tell us privately.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.Title" xml:space="preserve">
+    <value>Agreements</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.Description" xml:space="preserve">
+    <value>The rules and terms you agreed to on this environment.</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.Rules" xml:space="preserve">
+    <value>Rules of Engagement</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.Terms" xml:space="preserve">
+    <value>Terms of Service</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.Agreed" xml:space="preserve">
+    <value>Version {0}, agreed on {1}</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.NotAgreed" xml:space="preserve">
+    <value>Not agreed</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.NewVersion" xml:space="preserve">
+    <value>Version {0} waits for your agreement</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.Read" xml:space="preserve">
+    <value>Read</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Account.Agreements.Agree" xml:space="preserve">
+    <value>Agree now</value>
+    <comment>TODO translate</comment>
+  </data>
+  <data name="Footer.Rules" xml:space="preserve">
+    <value>قواعد الاشتباك</value>
+  </data>
+  <data name="Footer.Label" xml:space="preserve">
+    <value>الوثائق</value>
+  </data>
+  <data name="Steps.Label" xml:space="preserve">
+    <value>الخطوات</value>
+  </data>
+  <data name="Steps.Name" xml:space="preserve">
+    <value>الاسم</value>
+  </data>
+  <data name="Steps.Rules" xml:space="preserve">
+    <value>القواعد</value>
+  </data>
+  <data name="Steps.Ready" xml:space="preserve">
+    <value>جاهز</value>
+  </data>
+  <data name="BackToSignIn" xml:space="preserve">
+    <value>العودة إلى تسجيل الدخول</value>
+  </data>
+  <data name="Account.Back" xml:space="preserve">
+    <value>العودة إلى حسابك</value>
+  </data>
+  <data name="Account.Area" xml:space="preserve">
+    <value>حسابك</value>
+  </data>
+  <data name="Account.EditProfile" xml:space="preserve">
+    <value>تعديل الملف الشخصي</value>
+  </data>
+  <data name="Account.MenuLabel" xml:space="preserve">
+    <value>قائمة الحساب، {0}</value>
+  </data>
+  <data name="TwoFactor.UseRecovery" xml:space="preserve">
+    <value>استخدم رمز الاسترداد بدلاً من ذلك</value>
+  </data>
+  <data name="TwoFactor.NoApp" xml:space="preserve">
+    <value>لا يمكنك الوصول إلى تطبيقك؟</value>
+  </data>
+  <data name="TwoFactor.UseApp" xml:space="preserve">
+    <value>استخدم تطبيق المصادقة بدلاً من ذلك</value>
+  </data>
+  <data name="TwoFactor.CodeHint" xml:space="preserve">
+    <value>يتغير الرمز كل 30 ثانية.</value>
+  </data>
+  <data name="TwoFactor.RecoveryHint" xml:space="preserve">
+    <value>يعمل كل رمز استرداد مرة واحدة فقط.</value>
+  </data>
+  <data name="SignIn.Heading" xml:space="preserve">
+    <value>تسجيل الدخول إلى Generals Online</value>
+  </data>
+  <data name="SignIn.WithEmail" xml:space="preserve">
+    <value>تسجيل الدخول بالبريد الإلكتروني</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="SignIn.OtherWay" xml:space="preserve">
+    <value>تسجيل الدخول بطريقة أخرى</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="SignIn.Or" xml:space="preserve">
+    <value>أو</value>
+  </data>
+  <data name="Name.TagLabel" xml:space="preserve">
+    <value>وسمك هو {0}</value>
+  </data>
+  <data name="Name.Seen" xml:space="preserve">
+    <value>يراك الآخرون باسم {0}.</value>
+  </data>
+  <data name="Name.Range" xml:space="preserve">
+    <value>من {0} إلى {1} حرفًا.</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>رجوع</value>
+  </data>
+  <data name="Account.StaffTools" xml:space="preserve">
+    <value>أدوات الطاقم</value>
+  </data>
+  <data name="Social.Friends.Title" xml:space="preserve">
+    <value>الأصدقاء</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friends.Intro" xml:space="preserve">
+    <value>التغييرات هنا تظهر في اللعبة فورًا.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Requests.Count" xml:space="preserve">
+    <value>{0} طلبات صداقة</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Add.Title" xml:space="preserve">
+    <value>إضافة صديق</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Add.Placeholder" xml:space="preserve">
+    <value>الاسم#0000 أو معرّف اللاعب</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Add.Hint" xml:space="preserve">
+    <value>اسمه الكامل مع الوسم كما يظهر في اللعبة، أو معرّف اللاعب (رقم مثل 1042291).</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Add.Submit" xml:space="preserve">
+    <value>إرسال الطلب</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Requests.Title" xml:space="preserve">
+    <value>الطلبات</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Requests.Description" xml:space="preserve">
+    <value>الواردة: {0}. التي أرسلتها: {1}.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Requests.EmptyTitle" xml:space="preserve">
+    <value>لا توجد طلبات معلّقة</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Requests.EmptyBody" xml:space="preserve">
+    <value>ستظهر طلبات الصداقة الجديدة هنا.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Request.Incoming" xml:space="preserve">
+    <value>يريد أن يصبح صديقك</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Request.Outgoing" xml:space="preserve">
+    <value>أرسلت طلبًا</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Accept" xml:space="preserve">
+    <value>قبول</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Decline" xml:space="preserve">
+    <value>رفض</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Cancel" xml:space="preserve">
+    <value>إلغاء الطلب</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friends.List.Title" xml:space="preserve">
+    <value>أصدقاؤك</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friends.List.Description" xml:space="preserve">
+    <value>{0} من {1} أصدقاء.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friends.EmptyTitle" xml:space="preserve">
+    <value>لا أصدقاء بعد</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friends.EmptyBody" xml:space="preserve">
+    <value>أضف صديقًا بالاسم والوسم أعلاه.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Presence.Offline" xml:space="preserve">
+    <value>غير متصل</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Presence.Online" xml:space="preserve">
+    <value>متصل</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Presence.Lobby" xml:space="preserve">
+    <value>متصل، في غرفة انتظار</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Presence.Matchmaking" xml:space="preserve">
+    <value>متصل، في البحث عن مباراة</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Presence.InGame" xml:space="preserve">
+    <value>متصل، في لعبة</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friend.More" xml:space="preserve">
+    <value>المزيد لـ {0}</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friend.Remove" xml:space="preserve">
+    <value>إزالة الصديق</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friends.MenuNote" xml:space="preserve">
+    <value>تحتوي قائمة كل صديق على «إزالة الصديق» و«حظر».</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Done.Sent" xml:space="preserve">
+    <value>تم إرسال طلب الصداقة.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Done.Accepted" xml:space="preserve">
+    <value>أصبحتما صديقين الآن.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Done.Declined" xml:space="preserve">
+    <value>تم رفض الطلب.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Done.Cancelled" xml:space="preserve">
+    <value>تم إلغاء الطلب.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Done.Removed" xml:space="preserve">
+    <value>تمت إزالة الصديق.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Error.Neutral" xml:space="preserve">
+    <value>تعذّر إرسال هذا الطلب.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Error.Full" xml:space="preserve">
+    <value>قائمة الأصدقاء ممتلئة (الحد الأقصى {0} صديق)، لذلك تعذّر ذلك.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Error.Self" xml:space="preserve">
+    <value>هذا أنت. أدخل لاعبًا آخر.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Error.Gone" xml:space="preserve">
+    <value>تغيّر هذا بالفعل. تعرض الصفحة الحالة الحالية.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Error.TooMany" xml:space="preserve">
+    <value>محاولات كثيرة جدًا. انتظر بضع دقائق ثم حاول مجددًا.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Blocked.Title" xml:space="preserve">
+    <value>اللاعبون المحظورون</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Blocked.Intro" xml:space="preserve">
+    <value>اللاعبون الذين حظرتهم هنا أو في اللعبة. يمكنك إلغاء الحظر في أي وقت؛ ولن يُبلَّغوا في الحالتين.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Block.Title" xml:space="preserve">
+    <value>حظر لاعب</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Block.Hint" xml:space="preserve">
+    <value>اسمه الكامل مع الوسم، أو معرّف اللاعب.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Block.Submit" xml:space="preserve">
+    <value>حظر</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Blocked.Meta" xml:space="preserve">
+    <value>محظور</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Unblock" xml:space="preserve">
+    <value>إلغاء الحظر</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Blocked.EmptyTitle" xml:space="preserve">
+    <value>لا يوجد لاعبون محظورون</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Blocked.EmptyBody" xml:space="preserve">
+    <value>اللاعبون الذين تحظرهم يظهرون هنا. يمكنك إلغاء حظرهم في أي وقت.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Blocked.ReportNote" xml:space="preserve">
+    <value>هل يخالف أحدهم القواعد؟ الحظر يخفيه عنك أنت فقط. أبلغ عنه داخل اللعبة ليتمكن مشرف من التصرف.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Friend.Block" xml:space="preserve">
+    <value>حظر</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Done.Blocked" xml:space="preserve">
+    <value>تم حظر اللاعب.</value>
+    <comment>needs native review</comment>
+  </data>
+  <data name="Social.Done.Unblocked" xml:space="preserve">
+    <value>تم إلغاء حظر اللاعب.</value>
+    <comment>needs native review</comment>
+  </data>
 </root>

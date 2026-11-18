@@ -225,6 +225,7 @@ namespace GenOnlineService.Identity
 			services.TryAddTransient<Mail.IEmailSender, Mail.DisabledEmailSender>();
 			services.AddScoped<AccountMail>();
 			services.TryAddSingleton<AccountMailLimiter>();
+			services.TryAddSingleton<AccountSocialLimiter>();
 			services.TryAddSingleton<Names.PlayerNames>();
 
 			services.AddAntiforgery(options =>

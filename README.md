@@ -29,6 +29,14 @@ docker run -p 8080:8080 -v ./appsettings.json:/app/appsettings.json:ro -v ./data
 
 The image listens on port 8080 over plain HTTP; put TLS in front of it. Start `./data` from a copy of `GenOnlineService/data`, and make it writable for the container's non-root user.
 
+## Tests
+
+```
+dotnet test GenOnlineService.Tests/GenOnlineService.Tests.csproj -p:Platform=x64
+```
+
+The database tests run when `GENONLINE_PROBE_POSTGRES`, `GENONLINE_PROBE_MARIADB` or `GENONLINE_PROBE_MYSQL` holds a connection string to a server they can create databases on.
+
 ## Contributing
 
 Changes land on `main` through pull requests. A model change needs an EF Core migration for both `PostgresAppDbContext` and `MySqlAppDbContext`.
