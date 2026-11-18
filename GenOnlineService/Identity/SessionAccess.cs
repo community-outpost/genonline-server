@@ -364,7 +364,10 @@ namespace GenOnlineService.Identity
 			return client != null && client.SessionType != EUserSessionType.None;
 		}
 
-		public static async Task<int> RevokeUser(Int64 userID, bool bOnlyGameClients, string reason, PlayBan? ban = null)
+		public static Task<int> RevokeUser(Int64 userID, bool bOnlyGameClients, string reason, PlayBan? ban = null)
+			=> RevokeUser(ServiceLocator.Services, userID, bOnlyGameClients, reason, ban);
+
+		public static async Task<int> RevokeUser(IServiceProvider services, Int64 userID, bool bOnlyGameClients, string reason, PlayBan? ban = null)
 		{
 			var revoked = new HashSet<string>(StringComparer.Ordinal);
 
@@ -376,7 +379,7 @@ namespace GenOnlineService.Identity
 
 			try
 			{
-				using IServiceScope scope = ServiceLocator.Services.CreateScope();
+				using IServiceScope scope = services.CreateScope();
 				var authorizations = scope.ServiceProvider.GetRequiredService<IOpenIddictAuthorizationManager>();
 				var applications = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 				var tokens = scope.ServiceProvider.GetRequiredService<IOpenIddictTokenManager>();

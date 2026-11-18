@@ -163,6 +163,41 @@ namespace GenOnlineService.Identity
 			user.LastSignInAt = now;
 		}
 
+		// Written only while the stamp is still the one the link was issued against, so the link is single-use even when several requests (on several copies) redeem it at once.
+		public async Task<bool> RedeemReset(User user, string passwordHash)
+		{
+			Int64 userID = user.ID;
+			string? stamp = user.SecurityStamp;
+			DateTime now = DateTime.UtcNow;
+			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
+			await using var transaction = await db.Database.BeginTransactionAsync();
+			int updated = await db.Users.Where(u => u.ID == userID && u.SecurityStamp == stamp).ExecuteUpdateAsync(setters => setters
+				.SetProperty(u => u.PasswordHash, passwordHash)
+				.SetProperty(u => u.SecurityStamp, Guid.NewGuid().ToString("N"))
+				.SetProperty(u => u.LockoutEndAt, (DateTime?)null)
+				.SetProperty(u => u.FailedSignInCount, 0)
+				.SetProperty(u => u.UpdatedAt, now));
+			if (updated == 0)
+			{
+				return false;
+			}
+			db.AuditLog.Add(new AuditLogEntry
+			{
+				CreatedAt = DateTime.UtcNow,
+				ActorKind = AuditActorKinds.User,
+				ActorID = userID,
+				Actor = $"user:{userID}",
+				Action = UserResets.PasswordResetAction,
+				TargetKind = AuditTargetKinds.User,
+				TargetID = userID,
+				Source = "web",
+				Details = "{}"
+			});
+			await db.SaveChangesAsync();
+			await transaction.CommitAsync();
+			return true;
+		}
+
 		private static string? ParseEmail(string? email)
 		{
 			string trimmed = (email ?? String.Empty).Trim();
