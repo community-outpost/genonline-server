@@ -32,7 +32,6 @@ namespace GenOnlineService.Names
 			m_dbFactory = dbFactory;
 		}
 
-		// The player renames themselves, the tag stays
 		public async Task<Result<Empty>> RenameSelfAsync(Int64 me, string? requested)
 		{
 			string name = requested ?? String.Empty;
@@ -46,7 +45,6 @@ namespace GenOnlineService.Names
 			return result;
 		}
 
-		// The player chooses the name they owe, with the rules of a rename; a taken tag draws a free one instead
 		public async Task<Result<Empty>> ChooseAsync(Int64 me, string? requested)
 		{
 			string name = (requested ?? String.Empty).Trim();
@@ -209,7 +207,7 @@ namespace GenOnlineService.Names
 			NameChange? change;
 			await using (AppDbContext db = await m_dbFactory.CreateDbContextAsync())
 			{
-				(outcome, change) = await Database.DisplayNames.RenameKeepingTag(db, userID, name, changedBy);
+				(outcome, change) = await Database.DisplayNames.Rename(db, userID, name, changedBy);
 			}
 
 			switch (outcome)

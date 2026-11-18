@@ -90,3 +90,30 @@ public sealed class ProbeDatabase : IAsyncDisposable
 		await db.Database.EnsureDeletedAsync();
 	}
 }
+
+public class DisplayNameProbeTests
+{
+	private static async Task<User> AddUser(AppDbContext db, string name, int tag)
+	{
+		var user = new User { Username = name, UsernameNormalized = NameNormalizer.Normalize(name), NameTag = tag, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+		db.Users.Add(user);
+		await db.SaveChangesAsync();
+		return user;
+	}
+
+	private static async Task<long> Scalar(AppDbContext db, string sql)
+	{
+		await db.Database.OpenConnectionAsync();
+		await using System.Data.Common.DbCommand command = db.Database.GetDbConnection().CreateCommand();
+		command.CommandText = sql;
+		return Convert.ToInt64(await command.ExecuteScalarAsync());
+	}
+
+	private static Task<long> UniqueKeyIndexColumns(AppDbContext db, string provider)
+	{
+		return Scalar(db, provider == "postgres"
+			? "SELECT COUNT(*) FROM pg_indexes WHERE tablename = 'users' AND indexname = 'ux_users_name_key_name_tag' AND indexdef LIKE 'CREATE UNIQUE INDEX%(name_key, name_tag)'"
+			: "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = 'users' AND index_name = 'ux_users_name_key_name_tag' AND non_unique = 0");
+	}
+
+}

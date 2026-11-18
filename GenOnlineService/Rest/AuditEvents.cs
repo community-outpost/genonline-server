@@ -147,6 +147,8 @@ namespace GenOnlineService.Rest
 		}
 
 		[AllowSignInCookie]
+		[EndpointSummary("Lists audit log entries, newest first.")]
+		[ProducesResponseType<AuditEventsResponse>(StatusCodes.Status200OK)]
 		[HttpGet("~/api/v1/audit_events")]
 		public async Task<IActionResult> List()
 		{

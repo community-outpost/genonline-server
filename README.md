@@ -20,6 +20,8 @@ The game services behind Command & Conquer: Generals Online (Zero Hour): sign-in
 
 To upgrade, stop the service, run `GenOnlineService migrate --yes` and start the new version.
 
+Once it's running, the API docs are at `/api/docs`.
+
 ## Docker
 
 ```
@@ -46,3 +48,4 @@ Releases are tags named after the month, `vYYYY.MM.P`. A release candidate (`vYY
 ## License
 
 AGPL-3.0, see [LICENSE](LICENSE).
+Third-party notices are in [LICENSE-THIRD-PARTY.md](LICENSE-THIRD-PARTY.md).

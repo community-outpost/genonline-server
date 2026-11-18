@@ -63,19 +63,11 @@ namespace GenOnlineService.Realtime
 			return null;
 		}
 
-		// The first reserved word anywhere in the name, as the plugin's NameRules.check finds it: both sides lower-cased
-		// with Java's Locale.ROOT rules, then a substring match. Returns the word as the list spells it.
+		// The listed word that refuses the name, as the list spells it, null when it passes. A word with anything but letters keeps the plugin's NameRules.check
+		// rule: both sides lower-cased with Java's Locale.ROOT rules, then a substring match.
 		public static string? ReservedWordIn(string name)
 		{
-			string lower = Names.NameKey.LowerRoot(name);
-			foreach (string word in ReservedNameWords)
-			{
-				if (!String.IsNullOrWhiteSpace(word) && lower.Contains(Names.NameKey.LowerRoot(word), StringComparison.Ordinal))
-				{
-					return word;
-				}
-			}
-			return null;
+			return TextRules.TextChecks.RefusedNameWord(name);
 		}
 	}
 }

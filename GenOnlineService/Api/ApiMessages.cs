@@ -165,6 +165,9 @@ namespace GenOnlineService.Api
 		public string? ResolvedByKind { get; init; }
 		public Member? ResolvedBy { get; init; }
 		public string? ResolutionNote { get; init; }
+		// The text of the reported message as the report stored it, in GET /api/v1/reports/search only
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? MessageContent { get; init; }
 	}
 
 	[ApiFixture("get-reports.response")]
@@ -180,6 +183,19 @@ namespace GenOnlineService.Api
 		public string? Status { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public string? ResolutionNote { get; init; }
+	}
+
+	[ApiFixture("post-players-account_support.request")]
+	public sealed record AccountSupportRequest
+	{
+		public string? Reason { get; init; }
+	}
+
+	// Shown only in this answer
+	[ApiFixture("post-players-password_reset.response")]
+	public sealed record PasswordResetResponse
+	{
+		public string Password { get; init; } = String.Empty;
 	}
 
 	public sealed record ResetNameRequest

@@ -83,6 +83,9 @@ namespace GenOnlineService.Rest
 			m_dbFactory = dbFactory;
 		}
 
+		[AllowSignInCookie]
+		[EndpointSummary("Sends an announcement to every connected player.")]
+		[ProducesResponseType<AnnouncementResponse>(StatusCodes.Status200OK)]
 		[HttpPost("~/api/v1/announcements")]
 		public async Task<IActionResult> Post([FromBody] AnnouncementRequest? body)
 		{

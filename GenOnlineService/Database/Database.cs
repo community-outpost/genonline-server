@@ -67,16 +67,20 @@ public static class DbHelpers
 
 // One model for both providers; provider differences live in Database.Providers.cs.
 // Every model change needs a migration for BOTH contexts.
-public abstract class AppDbContext : DbContext
+public abstract partial class AppDbContext : DbContext
 {
 	public DbSet<User> Users => Set<User>();
 	public DbSet<UserUsernameHistory> UserUsernameHistory => Set<UserUsernameHistory>();
+	public DbSet<NameReservation> NameReservations => Set<NameReservation>();
 	public DbSet<UserIdentity> Identities => Set<UserIdentity>();
 	public DbSet<UserRecoveryCode> UserRecoveryCodes => Set<UserRecoveryCode>();
 	public DbSet<UserAgreement> UserAgreements => Set<UserAgreement>();
 	public DbSet<ApplicationSetting> ApplicationSettings => Set<ApplicationSetting>();
 	public DbSet<Client> Clients => Set<Client>();
 	public DbSet<ClientBuild> ClientBuilds => Set<ClientBuild>();
+
+	public DbSet<FlagRow> Flags => Set<FlagRow>();
+	public DbSet<FlagRevision> FlagRevisions => Set<FlagRevision>();
 
 	public DbSet<UserRole> UserRoles => Set<UserRole>();
 	public DbSet<Sanction> Sanctions => Set<Sanction>();
@@ -119,6 +123,10 @@ public abstract class AppDbContext : DbContext
 	public DbSet<ServiceAccountPermission> ServiceAccountPermissions => Set<ServiceAccountPermission>();
 	public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
 
+	public DbSet<GenOnlineService.TextRules.TextRuleTerm> TextRuleTerms => Set<GenOnlineService.TextRules.TextRuleTerm>();
+	public DbSet<GenOnlineService.TextRules.TextRuleException> TextRuleExceptions => Set<GenOnlineService.TextRules.TextRuleException>();
+	public DbSet<GenOnlineService.TextRules.TextRuleWorkflow> TextRuleWorkflows => Set<GenOnlineService.TextRules.TextRuleWorkflow>();
+
 	public DbSet<GenOnlineService.Identity.DataProtectionKeyRow> DataProtectionKeys => Set<GenOnlineService.Identity.DataProtectionKeyRow>();
 
 	// Non-generic so the derived contexts can pass their own DbContextOptions<TDerived>
@@ -149,6 +157,13 @@ public abstract class AppDbContext : DbContext
 				entry.Entity.NameKey = NameKey.Of(entry.Entity.Username);
 			}
 		}
+		foreach (EntityEntry<NameReservation> entry in ChangeTracker.Entries<NameReservation>())
+		{
+			if (entry.State == EntityState.Added || entry.State == EntityState.Modified && entry.Property(r => r.Name).IsModified)
+			{
+				entry.Entity.NameKey = NameKey.Of(entry.Entity.Name);
+			}
+		}
 	}
 
 	protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -170,6 +185,11 @@ public abstract class AppDbContext : DbContext
 		configure(modelBuilder.Entity<AuditLogEntry>().Property(e => e.Details));
 		configure(modelBuilder.Entity<ApplicationSetting>().Property(e => e.Value));
 		configure(modelBuilder.Entity<PlayerReport>().Property(e => e.Evidence));
+		configure(modelBuilder.Entity<FlagRow>().Property(e => e.Definition));
+		configure(modelBuilder.Entity<FlagRevision>().Property(e => e.Document));
+		ConfigurePlaylistJson(modelBuilder, configure);
+		ConfigureChannelJson(modelBuilder, configure);
+		ConfigureBroadcastJson(modelBuilder, configure);
 	}
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -184,6 +204,11 @@ public abstract class AppDbContext : DbContext
 			modelBuilder.Entity<User>().Property(u => u.NameKey).UseCollation("utf8mb4_bin");
 		}
 		modelBuilder.ApplyConfiguration(new UserUsernameHistoryConfiguration());
+		modelBuilder.ApplyConfiguration(new NameReservationConfiguration());
+		if (this is MySqlAppDbContext)
+		{
+			modelBuilder.Entity<NameReservation>().Property(r => r.NameKey).UseCollation("utf8mb4_bin");
+		}
 		modelBuilder.ApplyConfiguration(new UserIdentityConfiguration());
 		modelBuilder.ApplyConfiguration(new UserRecoveryCodeConfiguration());
 		modelBuilder.ApplyConfiguration(new UserAgreementConfiguration());
@@ -224,6 +249,25 @@ public abstract class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new ServiceAccountConfiguration());
 		modelBuilder.ApplyConfiguration(new ServiceAccountPermissionConfiguration());
 		modelBuilder.ApplyConfiguration(new ApiTokenConfiguration());
+		modelBuilder.ApplyConfiguration(new GenOnlineService.TextRules.TextRuleTermConfiguration());
+		modelBuilder.ApplyConfiguration(new GenOnlineService.TextRules.TextRuleExceptionConfiguration());
+		modelBuilder.ApplyConfiguration(new GenOnlineService.TextRules.TextRuleWorkflowConfiguration());
+		modelBuilder.ApplyConfiguration(new FlagRowConfiguration());
+		modelBuilder.ApplyConfiguration(new FlagRevisionConfiguration());
+		ConfigurePlaylists(modelBuilder);
+		ConfigureChannels(modelBuilder);
+		ConfigureBroadcasts(modelBuilder);
 		OpenIddictModel.Configure(modelBuilder);
 	}
+}
+
+// Each catalog area (Catalog/*) implements its own hooks in its own file
+public abstract partial class AppDbContext
+{
+	partial void ConfigurePlaylists(ModelBuilder modelBuilder);
+	partial void ConfigureChannels(ModelBuilder modelBuilder);
+	partial void ConfigureBroadcasts(ModelBuilder modelBuilder);
+	static partial void ConfigurePlaylistJson(ModelBuilder modelBuilder, Action<PropertyBuilder> configure);
+	static partial void ConfigureChannelJson(ModelBuilder modelBuilder, Action<PropertyBuilder> configure);
+	static partial void ConfigureBroadcastJson(ModelBuilder modelBuilder, Action<PropertyBuilder> configure);
 }

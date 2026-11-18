@@ -652,8 +652,6 @@ namespace GenOnlineService
 			return true;
 		}
 
-		// "GenOnlineService migrate [--yes]": applies pending migrations without starting the web host, then brings every
-		// users.name_key up to date and stops with a report when look-alike names collide (NameKeyBackfill).
 		private static async Task<int> RunMigrateCommand(string[] args)
 		{
 			bool assumeYes = args.Skip(1).Any(a => a.Equals("--yes", StringComparison.OrdinalIgnoreCase));
@@ -675,7 +673,7 @@ namespace GenOnlineService
 				if (pending.Count == 0)
 				{
 					Console.WriteLine("Database is up to date.");
-					return await Names.NameKeyBackfill.RunCommand(db, Console.Out, Console.Error);
+					return await RunNameBackfills(db);
 				}
 
 				Console.WriteLine($"Pending migrations: {pending.Count}");
@@ -712,13 +710,20 @@ namespace GenOnlineService
 
 				await db.Database.MigrateAsync();
 				Console.WriteLine($"Applied {pending.Count} migration(s) successfully.");
-				return await Names.NameKeyBackfill.RunCommand(db, Console.Out, Console.Error);
+				return await RunNameBackfills(db);
 			}
 			catch (Exception ex)
 			{
 				Console.Error.WriteLine($"Migration failed: {ex}");
 				return 1;
 			}
+		}
+
+		private static async Task<int> RunNameBackfills(AppDbContext db)
+		{
+			int keys = await Names.NameKeyBackfill.RunCommand(db, Console.Out, Console.Error);
+			await Names.NameReservationBackfill.RunCommand(db, Console.Out);
+			return keys;
 		}
 
 		private static async Task<int> RunImportCommand(string[] args)
@@ -1087,6 +1092,9 @@ namespace GenOnlineService
 
 			g_Config = builder.Configuration;
 
+			// display name tags derive from this secret; outside Development a missing one stops the service here
+			Names.NameTags.Configure(builder.Configuration, builder.Environment);
+
 			// Process the original client IP, request scheme, and host only when
 			// one or more trusted reverse proxies are configured.
 			bool useForwardedHeaders = TryConfigureForwardedHeaders(builder.Services, builder.Configuration);
@@ -1223,6 +1231,9 @@ namespace GenOnlineService
 
 			builder.Services.AddSingleton<GenOnlineService.Names.PlayerNames>();
 
+			builder.Services.AddSingleton<GenOnlineService.Investigation.IAddressDirectory>(_ => GenOnlineService.Investigation.MaxMindAddressDirectory.Default);
+			builder.Services.AddSingleton(_ => GenOnlineService.Investigation.OuiRegistry.Default);
+
 			// bearer tokens everywhere, and the sign-in cookie on the /api/v1 routes the staff pages call, where accounts run
 			GenOnlineService.Api.ApiAuthentication.AddApiAuthentication(builder.Services, signInCookie: accountsSettings.Enabled);
 
@@ -1280,8 +1291,7 @@ namespace GenOnlineService
 			{
 				options.InvalidModelStateResponseFactory = GenOnlineService.Rest.RestSetup.InvalidModelState;
 			});
-			// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-			//builder.Services.AddOpenApi();
+			GenOnlineService.OpenApi.ApiDocs.AddApiDocs(builder.Services, builder.Configuration);
 
 			ReloadingPemCertificateProvider? certificateProvider = null;
 
@@ -1481,6 +1491,10 @@ namespace GenOnlineService
 				app.Logger.LogWarning("Created the device HMAC key at {DeviceKeyPath}. Back it up with the database: without it stored device values can never be matched again.", deviceKeyPath);
 			}
 
+			// Loaded now rather than on the first staff page, so a missing file shows in the startup log
+			GenOnlineService.Investigation.MaxMindAddressDirectory addressDirectory = GenOnlineService.Investigation.MaxMindAddressDirectory.Default;
+			app.Logger.LogInformation("Staff enrichment: GeoIP city {HasCity}, GeoIP ASN {HasAsn}, {OuiBlocks} OUI blocks", addressDirectory.HasCity, addressDirectory.HasAsn, GenOnlineService.Investigation.OuiRegistry.Default.Count);
+
 			if (useForwardedHeaders)
 			{
 				// Must run before anything that consumes client IP or request scheme.
@@ -1518,12 +1532,6 @@ namespace GenOnlineService
 			// end websocket
 
 			// Configure the HTTP request pipeline.
-			/*
-			if (app.Environment.IsDevelopment())
-			{
-				app.MapOpenApi();
-			}
-			*/
 
 			app.Use((context, next) =>
 			{
@@ -1555,6 +1563,7 @@ namespace GenOnlineService
 			}
 
 			app.MapControllers();
+			GenOnlineService.OpenApi.ApiDocs.MapApiDocs(app, builder.Configuration);
 			if (accountsSettings.Enabled)
 			{
 				app.MapStaticAssets();
@@ -1690,6 +1699,14 @@ namespace GenOnlineService
 						await StaffRoles.Reload(db);
 					}, stopping);
 
+					await RunObservedBackgroundJobAsync("catalog_reload", app.Logger, async () =>
+					{
+						using var scope = app.Services.CreateScope();
+						var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+						await using var db = await factory.CreateDbContextAsync();
+						await GenOnlineService.Catalog.CatalogSignals.ReloadAllAsync(db);
+					}, stopping);
+
 					await RunObservedBackgroundJobAsync("api_tokens_reload", app.Logger, async () =>
 					{
 						using var scope = app.Services.CreateScope();
@@ -1698,6 +1715,14 @@ namespace GenOnlineService
 						await ApiTokenCache.Reload(db);
 						await ApiTokenCache.FlushLastUsed(db);
 						await ApiTokenCache.Housekeeping(db, ApiTokenSettings.Read(builder.Configuration));
+					}, stopping);
+
+					await RunObservedBackgroundJobAsync("text_rules_reload", app.Logger, async () =>
+					{
+						using var scope = app.Services.CreateScope();
+						var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+						await using var db = await factory.CreateDbContextAsync();
+						await GenOnlineService.TextRules.TextChecks.ReloadAsync(db);
 					}, stopping);
 
 					await RunObservedBackgroundJobAsync("oauth_prune", app.Logger, () => OAuthMaintenance.PruneDaily(app.Services), stopping);
@@ -1723,6 +1748,14 @@ namespace GenOnlineService
 				StaffRoles.ValidateRoleDefinitions();
 				await ApiTokenCache.Reload(db);
 				await ClientRegistry.Reload(db);
+
+				await GenOnlineService.TextRules.TextChecks.SeedAsync(db);
+				await GenOnlineService.TextRules.TextChecks.ReloadAsync(db);
+
+				GenOnlineService.Catalog.CatalogSignals.Register(GenOnlineService.Catalog.CatalogResources.Flags, GenOnlineService.Flags.FlagCatalog.Reload);
+				await GenOnlineService.Flags.FlagSeed.EnsureAsync(db);
+				await GenOnlineService.Catalog.CatalogStartup.RunAsync(db);
+				await GenOnlineService.Catalog.CatalogSignals.ReloadAllAsync(db);
 			}
 
 			if (accountsSettings.Enabled)

@@ -17,6 +17,7 @@
 */
 
 using GenOnlineService.Names;
+using GenOnlineService.OpenApi;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +42,9 @@ namespace GenOnlineService.Api
 			m_lobbyManager = lobbyManager;
 		}
 
+		[EndpointSummary("Changes the display name of the caller.")]
+		[ProducesResponseType(StatusCodes.Status204NoContent)]
+		[ApiRequestBody(typeof(UpdateMeRequest))]
 		[HttpPatch("~/api/v1/me")]
 		public async Task<IActionResult> UpdateMe()
 		{
@@ -52,6 +56,9 @@ namespace GenOnlineService.Api
 			return ApiResults.NoContent(await m_names.RenameSelfAsync(Me, body?.Name));
 		}
 
+		[EndpointSummary("Submits the result of the caller in a match.")]
+		[ProducesResponseType<MatchResultResponse>(StatusCodes.Status200OK)]
+		[ApiRequestBody(typeof(MatchResultRequest))]
 		[HttpPut("~/api/v1/matches/{matchID:long}/results/me")]
 		public async Task<IActionResult> SubmitResult(long matchID)
 		{
@@ -63,6 +70,9 @@ namespace GenOnlineService.Api
 			return ApiResults.Answer(await MatchActions.SubmitResultAsync(m_dbFactory, m_lobbyManager, Me, matchID, body ?? new MatchResultRequest()));
 		}
 
+		[EndpointSummary("Lists the matchmaking playlists; If-None-Match with the ETag answers 304.")]
+		[ProducesResponseType<PlaylistsResponse>(StatusCodes.Status200OK)]
+		[ProducesResponseType(StatusCodes.Status304NotModified)]
 		[HttpGet("~/api/v1/matchmaking/playlists")]
 		public IActionResult GetPlaylists()
 		{
