@@ -1495,6 +1495,11 @@ namespace GenOnlineService
 			GenOnlineService.Investigation.MaxMindAddressDirectory addressDirectory = GenOnlineService.Investigation.MaxMindAddressDirectory.Default;
 			app.Logger.LogInformation("Staff enrichment: GeoIP city {HasCity}, GeoIP ASN {HasAsn}, {OuiBlocks} OUI blocks", addressDirectory.HasCity, addressDirectory.HasAsn, GenOnlineService.Investigation.OuiRegistry.Default.Count);
 
+			IConfigurationSection automatedRules = builder.Configuration.GetSection("AutomatedRules");
+			GenOnlineService.Rules.RuleRunner.DuplicateWindow = TimeSpan.FromSeconds(automatedRules.GetValue("duplicate_window_s", 600));
+			GenOnlineService.Rules.RuleRunner.BreakerLimitPerHour = automatedRules.GetValue("breaker_actions_per_hour", 20);
+			GenOnlineService.Rules.RuleRunner.Configure(new GenOnlineService.Rules.RuleEnvironment(app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>(), addressDirectory, GenOnlineService.Investigation.OuiRegistry.Default));
+
 			if (useForwardedHeaders)
 			{
 				// Must run before anything that consumes client IP or request scheme.
@@ -1753,6 +1758,8 @@ namespace GenOnlineService
 				await GenOnlineService.TextRules.TextChecks.ReloadAsync(db);
 
 				GenOnlineService.Catalog.CatalogSignals.Register(GenOnlineService.Catalog.CatalogResources.Flags, GenOnlineService.Flags.FlagCatalog.Reload);
+
+				GenOnlineService.Catalog.CatalogSignals.Register(GenOnlineService.Catalog.CatalogResources.Rules, GenOnlineService.Rules.RuleEngine.ReloadAsync);
 				await GenOnlineService.Flags.FlagSeed.EnsureAsync(db);
 				await GenOnlineService.Catalog.CatalogStartup.RunAsync(db);
 				await GenOnlineService.Catalog.CatalogSignals.ReloadAllAsync(db);

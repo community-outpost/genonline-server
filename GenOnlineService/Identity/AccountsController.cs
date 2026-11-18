@@ -253,6 +253,7 @@ namespace GenOnlineService.Identity
 			if (result.Error == null)
 			{
 				await m_passwords.RecordSignIn(result.User!);
+				RaiseSignIn(result.User!.ID, PasswordAccounts.PasswordMethod);
 				await m_signIn.SignInAsync(result.User!, isPersistent: false, authenticationMethod: PasswordAccounts.PasswordMethod);
 				return LocalRedirect(target);
 			}
@@ -361,6 +362,7 @@ namespace GenOnlineService.Identity
 			if (result.Succeeded)
 			{
 				await m_passwords.RecordSignIn(pending);
+				RaiseSignIn(pending.ID, PasswordAccounts.PasswordMethod);
 			}
 
 			return result.Succeeded ? LocalRedirect(target) : TwoFactorForm(401, target, T("TwoFactor.WrongCode"), recoveryCode != null);
@@ -583,6 +585,7 @@ namespace GenOnlineService.Identity
 			}
 
 			await m_passwords.RecordSignIn(result.User!);
+			RaiseSignIn(result.User!.ID, PasswordAccounts.PasswordMethod);
 			await m_signIn.SignInAsync(result.User!, isPersistent: false, authenticationMethod: "password");
 			return LocalRedirect(target);
 		}
@@ -733,6 +736,7 @@ namespace GenOnlineService.Identity
 			}
 
 			await m_signIn.SignInAsync(signIn.User, isPersistent: false, authenticationMethod: provider);
+			RaiseSignIn(signIn.User.ID, provider);
 			string? returnUrl = steam ? result.Properties!.GetString(SteamReturnUrlItem) : result.Properties?.RedirectUri;
 			if (signIn.User.NameRequiredAt != null)
 			{
@@ -1022,6 +1026,13 @@ namespace GenOnlineService.Identity
 		private static class TokenValidationParametersDefaults
 		{
 			public const string AuthenticationType = "accounts";
+		}
+
+		// The automated rules check a sign-in after it happened, it never waits for them
+		private void RaiseSignIn(Int64 userID, string method)
+		{
+			GenOnlineService.Rules.RuleRunner.Raise(GenOnlineService.Rules.RuleEvent.Of(GenOnlineService.Rules.RuleTriggers.SignIn, userID,
+				IPHelpers.NormalizeIP(HttpContext.Connection.RemoteIpAddress?.ToString()), (GenOnlineService.Rules.RuleEventFields.Provider, method)));
 		}
 	}
 }

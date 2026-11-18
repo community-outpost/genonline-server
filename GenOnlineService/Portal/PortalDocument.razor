@@ -1,6 +1,5 @@
 @using GenOnlineService.Identity
-@* The HTML document of the staff pages: dark only, on the design system. The tokens and fonts that PortalLook links,
-   then the design's Blueprint theme, Blueprint's stylesheet and generals.css, so the design's values win *@
+@* Link order (PortalLook tokens and fonts, Blueprint theme and stylesheet, rule canvas, generals.css) makes the design's values win *@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -14,6 +13,7 @@
     <link rel="stylesheet" href="@PortalLook.FontsPath" />
     <link rel="stylesheet" href="@PortalLook.ThemePath" />
     <link rel="stylesheet" href="@PortalLook.StylesheetPath" />
+    <link rel="stylesheet" href="@PortalLook.BlowPath" />
     <link rel="stylesheet" href="@PortalLook.GeneralsPath" />
     @if (PortalSetup.HostDataOf(HttpContext) is PortalHostData host)
     {

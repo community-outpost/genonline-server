@@ -38,6 +38,8 @@ namespace GenOnlineService.Identity
 		public const string ThemePath = "/portal/theme.css";
 		public const string StylesheetPath = "/_content/BlazorBlueprint.Components/blazorblueprint.css";
 		public const string GeneralsPath = "/portal/generals.css";
+
+		public const string BlowPath = "/_content/Bit.Blow/bit-blow.css";
 		public const string TokensPath = "/portal/tokens.css";
 		public const string FontsPath = "/portal/fonts.css";
 		public const string LogoPath = "/portal/logo.svg";

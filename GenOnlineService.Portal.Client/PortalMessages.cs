@@ -53,6 +53,8 @@ namespace GenOnlineService.Portal.Client
 		public const string StaffInvestigate = "api/v1/staff/investigate";
 		public const string Flags = "api/v1/flags";
 		public const string FlagRevisions = "api/v1/flags/revisions";
+		public const string Rules = "api/v1/staff/rules";
+		public const string RuleMatches = "api/v1/staff/rules/matches";
 		public const string SignIn = "users/sign_in";
 		public const string SignOut = "users/sign_out";
 
@@ -74,8 +76,14 @@ namespace GenOnlineService.Portal.Client
 		public const string TextRulesPage = "/admin/text-rules";
 		public const string InvestigatePage = "/admin/investigate";
 		public const string ConfigPage = "/admin/config";
+		public const string RulesPage = "/admin/rules";
+		public const string RuleMatchesPage = "/admin/rules/matches";
 
 		public static string PlayerPage(long id) => PlayersPage + "/" + id;
+
+		public static string RulePage(long id) => RulesPage + "/" + id;
+
+		public static string RuleMatchesOf(long id) => RuleMatchesPage + "?rule=" + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
 		// one tab of the player page: activity, sanctions, reports, anticheat, roles, matches, signins, duplicates
 		public static string PlayerTab(long id, string tab) => PlayerPage(id) + "?tab=" + tab;
@@ -120,6 +128,7 @@ namespace GenOnlineService.Portal.Client
 		public const string AccountsSupport = "accounts.support";
 		public const string TextRulesManage = "textrules.manage";
 		public const string FlagsManage = "flags.manage";
+		public const string RulesManage = "rules.manage";
 	}
 
 	public static class PortalPartnerPermissions
@@ -185,6 +194,16 @@ namespace GenOnlineService.Portal.Client
 			"flags_rollback" => "Game config rolled back",
 			"flags_import" => "Game config imported",
 			"flags_reset" => "Game config draft reset",
+			"rule_create" => "Automated rule added",
+			"rule_version" => "Automated rule saved",
+			"rule_update" => "Automated rule changed",
+			"rule_archive" => "Automated rule archived",
+			"rule_restore" => "Automated rule restored",
+			"rule_breaker" => "Automated rule fell back to Flag",
+			"rule_match_review" => "Rule match reviewed",
+			"rule_preview" => "Automated rule previewed",
+			"rule_sweep_start" => "Automated rule sweep started",
+			"rule_sweep_cancel" => "Automated rule sweep cancelled",
 			_ => action
 		};
 
@@ -195,7 +214,8 @@ namespace GenOnlineService.Portal.Client
 			"connection_lookup", "anticheat_review", "announcement", "setting_update", "token_mint", "token_rotate",
 			"token_revoke", "sa_create", "sa_update", "sa_grant", "sa_revoke", "sa_disable", "sa_enable", "password_reset",
 			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "text_term_add", "text_term_update",
-			"text_term_remove", "text_exception_add", "text_exception_remove", "text_workflow_update", "text_rules_seed", "investigate_search", "flag_create", "flag_update", "flag_archive", "flag_restore", "flags_publish", "flags_rollback", "flags_import", "flags_reset"
+			"text_term_remove", "text_exception_add", "text_exception_remove", "text_workflow_update", "text_rules_seed", "investigate_search", "flag_create", "flag_update", "flag_archive", "flag_restore", "flags_publish", "flags_rollback", "flags_import", "flags_reset",
+			"rule_create", "rule_version", "rule_update", "rule_archive", "rule_restore", "rule_breaker", "rule_match_review", "rule_preview", "rule_sweep_start", "rule_sweep_cancel"
 		];
 	}
 
@@ -402,6 +422,9 @@ namespace GenOnlineService.Portal.Client
 		public DateTime? ExpiresAt { get; init; }
 		public DateTime? LiftedAt { get; init; }
 		public PortalMember? CreatedBy { get; init; }
+
+		public string? CreatedByKind { get; init; }
+		public string? CreatedByName { get; init; }
 		public bool Active { get; init; }
 
 		public string? LiftedByKind { get; init; }
