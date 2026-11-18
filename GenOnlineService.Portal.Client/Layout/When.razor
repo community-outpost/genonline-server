@@ -1,0 +1,19 @@
+@if (Value is DateTime value)
+{
+    <time datetime="@value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture)" title="@(PortalText.Date(value) + " UTC")" class="go-nowrap">@(Exact ? PortalText.Date(value) : PortalText.Recent(value, DateTime.UtcNow))</time>
+}
+else
+{
+    <span class="go-muted">@Empty</span>
+}
+
+@code {
+    [Parameter]
+    public DateTime? Value { get; set; }
+
+    [Parameter]
+    public bool Exact { get; set; }
+
+    [Parameter]
+    public string Empty { get; set; } = "—";
+}

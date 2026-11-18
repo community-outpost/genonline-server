@@ -34,6 +34,8 @@ public class AnticheatModuleReport
 	public string ModuleName { get; set; } = null!;
 	public string ModulePath { get; set; } = null!;
 	public Int64 ModuleSize { get; set; }
+	// null for rows stored before the column existed; the lists then show the match start
+	public DateTime? CreatedAt { get; set; }
 
 	// Null until a staff member marks the row reviewed, a review never deletes the row
 	public DateTime? ReviewedAt { get; set; }
@@ -129,6 +131,8 @@ public class AnticheatNewAccountGame
 	public Int64 ReportId { get; set; }
 	public Int64 UserId { get; set; }
 	public Int64 MatchId { get; set; }
+	// When the row was raised; null for a row stored before the column existed, the lists then show the match start
+	public DateTime? CreatedAt { get; set; }
 	public DateTime? ReviewedAt { get; set; }
 	public Int64? ReviewedBy { get; set; }
 }
@@ -139,6 +143,8 @@ public class AnticheatProbeReport
 	public Int64 UserId { get; set; }
 	public Int64 MatchId { get; set; }
 	public string Reason { get; set; } = null!;
+	// When the row was raised; null for a row stored before the column existed, the lists then show the match start
+	public DateTime? CreatedAt { get; set; }
 	public DateTime? ReviewedAt { get; set; }
 	public Int64? ReviewedBy { get; set; }
 }
@@ -209,6 +215,7 @@ public class AnticheatModuleReportConfiguration : IEntityTypeConfiguration<Antic
 		entity.Property(e => e.ModuleSize)
 			.HasColumnName("module_size");
 
+		entity.Property(e => e.CreatedAt).HasColumnName("created_at");
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_module_reports_reviewed_at");
@@ -237,6 +244,7 @@ public class AnticheatNewAccountGameConfiguration : IEntityTypeConfiguration<Ant
 		entity.Property(e => e.MatchId)
 			.HasColumnName("match_id");
 
+		entity.Property(e => e.CreatedAt).HasColumnName("created_at");
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_new_account_games_reviewed_at");
@@ -266,6 +274,7 @@ public class AnticheatProbeReportConfiguration : IEntityTypeConfiguration<Antich
 			.HasMaxLength(256)
 			.IsRequired();
 
+		entity.Property(e => e.CreatedAt).HasColumnName("created_at");
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_probe_reports_reviewed_at");
@@ -332,6 +341,8 @@ namespace Database
 		public int? PlaylistID { get; init; }
 		public string? Method { get; init; }
 		public string? Sides { get; init; }
+
+		// null for a row stored before the other kinds kept the time
 		public DateTime? ReportedAt { get; init; }
 
 		public DateTime? ReviewedAt { get; init; }
@@ -348,11 +359,11 @@ namespace Database
 			{
 				AntiCheatReviewKinds.NewAccounts => db.AnticheatNewAccountGames.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
-					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
 				}),
 				AntiCheatReviewKinds.Modules => db.AnticheatModuleReports.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
-					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
 				}),
 				AntiCheatReviewKinds.QuickMatchRules => db.AnticheatQuickMatchReports.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
@@ -361,7 +372,7 @@ namespace Database
 				}),
 				_ => Probes(db, kind).AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
-					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, Reason = r.Reason, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, Reason = r.Reason, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
 				})
 			};
 		}
@@ -444,6 +455,12 @@ namespace Database
 			return postgres ? new NpgsqlParameter(name, value) : new MySqlParameter(name, value);
 		}
 
+		// Both providers store microseconds, so a stored time reads back as it was written
+		private static DateTime TruncateToMicroseconds(DateTime value)
+		{
+			return new DateTime(value.Ticks - (value.Ticks % 10), DateTimeKind.Utc);
+		}
+
 		// false on a real database error; true when stored or already there
 		public static async Task<bool> FlagAccountForReview_Modules(
 	AppDbContext db,
@@ -459,6 +476,7 @@ namespace Database
 			try
 			{
 				const int ChunkSize = 200;
+				DateTime now = TruncateToMicroseconds(DateTime.UtcNow);
 
 				for (int offset = 0; offset < modules.Count; offset += ChunkSize)
 				{
@@ -466,10 +484,11 @@ namespace Database
 					bool postgres = db.Database.IsNpgsql();
 
 					// Only parameter placeholders are concatenated here, all values are bound as parameters
-					StringBuilder sql = new StringBuilder("INSERT INTO anticheat_module_reports (user_id, match_id, module_name, module_path, module_size) VALUES ");
-					List<object> parameters = new List<object>(2 + (count * 3));
+					StringBuilder sql = new StringBuilder("INSERT INTO anticheat_module_reports (user_id, match_id, module_name, module_path, module_size, created_at) VALUES ");
+					List<object> parameters = new List<object>(3 + (count * 3));
 					parameters.Add(CreateParameter(postgres, "@uid", userId));
 					parameters.Add(CreateParameter(postgres, "@mid", (long)matchId));
+					parameters.Add(CreateParameter(postgres, "@at", now));
 
 					for (int i = 0; i < count; ++i)
 					{
@@ -480,7 +499,7 @@ namespace Database
 							sql.Append(',');
 						}
 
-						sql.Append("(@uid, @mid, @n").Append(i).Append(", @p").Append(i).Append(", @s").Append(i).Append(')');
+						sql.Append("(@uid, @mid, @n").Append(i).Append(", @p").Append(i).Append(", @s").Append(i).Append(", @at)");
 						parameters.Add(CreateParameter(postgres, "@n" + i, module.ModuleName));
 						parameters.Add(CreateParameter(postgres, "@p" + i, module.ModulePath));
 						parameters.Add(CreateParameter(postgres, "@s" + i, (long)module.ModuleSize));
@@ -524,7 +543,8 @@ namespace Database
 				{
 					UserId = userId,
 					MatchId = (long)matchId,
-					Reason = reason
+					Reason = reason,
+					CreatedAt = TruncateToMicroseconds(DateTime.UtcNow)
 				});
 
 				await db.SaveChangesAsync();
@@ -571,7 +591,8 @@ namespace Database
 				db.AnticheatNewAccountGames.Add(new AnticheatNewAccountGame
 				{
 					UserId = userId,
-					MatchId = (long)matchId
+					MatchId = (long)matchId,
+					CreatedAt = TruncateToMicroseconds(DateTime.UtcNow)
 				});
 
 				await db.SaveChangesAsync();
