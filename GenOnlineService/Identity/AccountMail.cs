@@ -149,23 +149,23 @@ namespace GenOnlineService.Identity
 
 		public bool MustConfirm(User user) => Enabled && user.PasswordHash != null && user.Email != null && user.EmailConfirmedAt == null;
 
-		public async Task<bool> SendConfirmation(User user)
+		public async Task<bool> SendConfirmation(User user, CultureInfo? culture = null)
 		{
 			string token = await m_users.GenerateEmailConfirmationTokenAsync(user);
-			return await Send(EmailTemplates.Confirmation, user, Link(m_settings.Issuer, ConfirmationPath, ConfirmationTokenField, Pack(user.ID, token)));
+			return await Send(EmailTemplates.Confirmation, user, Link(m_settings.Issuer, ConfirmationPath, ConfirmationTokenField, Pack(user.ID, token)), culture);
 		}
 
-		public async Task<bool> SendPasswordReset(User user)
+		public async Task<bool> SendPasswordReset(User user, CultureInfo? culture = null)
 		{
 			string token = await m_users.GeneratePasswordResetTokenAsync(user);
-			return await Send(EmailTemplates.PasswordReset, user, Link(m_settings.Issuer, ResetPasswordEditPath, ResetPasswordTokenField, Pack(user.ID, token)));
+			return await Send(EmailTemplates.PasswordReset, user, Link(m_settings.Issuer, ResetPasswordEditPath, ResetPasswordTokenField, Pack(user.ID, token)), culture);
 		}
 
-		private async Task<bool> Send(string template, User user, string link)
+		private async Task<bool> Send(string template, User user, string link, CultureInfo? culture)
 		{
 			// the address stands in while a name is still owed
 			string name = user.NameRequiredAt == null && user.Username.Length > 0 ? Database.DisplayNames.Format(user.Username, user.NameTag) : user.Email!;
-			EmailMessage message = EmailTemplates.Render(template, user.Email!, new Dictionary<string, string> { ["name"] = name, ["link"] = link });
+			EmailMessage message = EmailTemplates.Render(template, user.Email!, new Dictionary<string, string> { ["name"] = name, ["link"] = link }, culture);
 			try
 			{
 				await m_sender.SendAsync(message);
