@@ -57,8 +57,7 @@ namespace GenOnlineService.Portal.Client
 		public const string SignOut = "users/sign_out";
 
 		public const string AccountPage = "/profile";
-		// the logo of the sign-in pages (PortalLook.LogoPath on the host)
-		public const string LogoPath = "/portal/logo.png";
+		public const string LogoPath = "/portal/logo.svg";
 		public const string AdminPages = "/admin";
 		public const string OverviewPage = AdminPages;
 		public const string ReportsPage = "/admin/reports";
@@ -1197,7 +1196,7 @@ namespace GenOnlineService.Portal.Client
 
 	public static class PortalTextChoices
 	{
-		public static readonly IReadOnlyList<(string Value, string Title)> Kinds = [("display_name", "Display name"), ("lobby_name", "Lobby name"), ("chat", "Chat message")];
+		public static readonly IReadOnlyList<(string Value, string Title)> Kinds = [("display_name", "Player name"), ("lobby_name", "Lobby name"), ("chat", "Chat message")];
 		public static readonly IReadOnlyList<(string Value, string Title)> Languages = [("en", "English"), ("ar", "Arabic")];
 		public static readonly IReadOnlyList<string> Categories = ["slur", "sexual", "profanity", "insult", "impersonation", "reserved"];
 		public static readonly IReadOnlyList<string> Severities = ["block", "flag"];

@@ -32,20 +32,13 @@ namespace GenOnlineService.Identity
 	// the sign-out form is the controller's (it carries the antiforgery token)
 	public sealed record AccountShell(string Name, string Tag, string? PlayerId, string? Role, bool Staff, string SignOutForm);
 
-	// The look of the sign-in and account pages: the Generals Online design system (tokens.css, generals.css gp-* classes),
-	// dark only, Play and IBM Plex Sans served from this service. The boards are the design's Main (sign in), ChooseName
-	// (name, rules, ready), TwoFactor, CheckEmail, Refused, PhoneArabic and Account. The pages need no script: the language
-	// menu and the account menu are <details>. Every file is linked by its fingerprinted address (PortalAssets). The
-	// staff area (PortalDocument) keeps its own stylesheets and only shares generals.css, so it never uses these classes.
+	// Pages need no script: the language and account menus are <details>.
 	public static class PortalLook
 	{
-		// The staff pages' stylesheets; the sign-in and account pages no longer load the first two
 		public const string ThemePath = "/portal/theme.css";
 		public const string StylesheetPath = "/_content/BlazorBlueprint.Components/blazorblueprint.css";
 		public const string GeneralsPath = "/portal/generals.css";
-		// The design system's tokens (--go-*), linked first on every sign-in and account page
 		public const string TokensPath = "/portal/tokens.css";
-		// Their self-hosted fonts, linked after the tokens and before generals.css (which the staff area shares)
 		public const string FontsPath = "/portal/fonts.css";
 		public const string LogoPath = "/portal/logo.svg";
 		public const string GameReplaysLogoPath = "/portal/gamereplays.png";

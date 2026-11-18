@@ -41,6 +41,16 @@ namespace GenOnlineService.Realtime
 			return null;
 		}
 
+		// The playlist sets the map, the starting cash and the superweapon limit of a quick match lobby, so no member changes them
+		public static Failure? RefuseQuickMatchSettings(Lobby lobby, UpdateLobbyRequest request)
+		{
+			if (lobby.LobbyType == ELobbyType.QuickMatch && (request.Map != null || request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null))
+			{
+				return Result.Fail(ErrorCodes.LobbyNotHost);
+			}
+			return null;
+		}
+
 		public static AnticheatQuickMatchReport QuickMatchRuleReportOf(Lobby lobby, Int64 userID, string method, IEnumerable<int?> sides, DateTime now)
 		{
 			string sideList = String.Join(",", sides.OfType<int>().Select(side => side.ToString(System.Globalization.CultureInfo.InvariantCulture)));
