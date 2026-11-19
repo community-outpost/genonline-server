@@ -130,8 +130,8 @@ namespace GenOnlineService.Portal.Client
 
 		public Task<PortalAnswer<PortalPlayer>> GetPlayerAsync(long userID) => GetAsync<PortalPlayer>($"{PortalRoutes.Players}/{userID}/staff_view");
 
-		// The host writes an audit row for this read
-		public Task<PortalAnswer<PortalInspection>> GetInspectionAsync(long userID) => GetAsync<PortalInspection>($"{PortalRoutes.Players}/{userID}/inspection");
+		// The host writes an audit row for this read, and with raw a device_reveal row on every call
+		public Task<PortalAnswer<PortalInspection>> GetInspectionAsync(long userID, bool raw = false) => GetAsync<PortalInspection>($"{PortalRoutes.Players}/{userID}/inspection{(raw ? "?raw=true" : "")}");
 
 		public Task<PortalAnswer<PortalMatch>> GetMatchAsync(long matchID) => GetAsync<PortalMatch>($"{PortalRoutes.Matches}/{matchID}");
 
@@ -144,10 +144,10 @@ namespace GenOnlineService.Portal.Client
 
 		public Task<PortalAnswer<PortalConnectionReports>> GetLobbyConnectionsAsync(long lobbyID) => GetAsync<PortalConnectionReports>($"{PortalRoutes.Lobbies}/{lobbyID}/connection_reports");
 
-		// Every account that used one identifier, value or the key of a device; the host writes an audit row for each search
-		public async Task<PortalAnswer<PortalInvestigation>> InvestigateAsync(string kind, string? value, string? key, int page, int perPage, CancellationToken cancellationToken = default)
+		// the host audits each search; raw (with a key only) reveals the value the client sent and writes a device_reveal row
+		public async Task<PortalAnswer<PortalInvestigation>> InvestigateAsync(string kind, string? value, string? key, int page, int perPage, CancellationToken cancellationToken = default, bool raw = false)
 		{
-			string what = key != null ? "key=" + Uri.EscapeDataString(key) : "value=" + Uri.EscapeDataString(value ?? "");
+			string what = key != null ? "key=" + Uri.EscapeDataString(key) + (raw ? "&raw=true" : "") : "value=" + Uri.EscapeDataString(value ?? "");
 			using HttpResponseMessage response = await m_http.GetAsync($"{PortalRoutes.StaffInvestigate}?kind={Uri.EscapeDataString(kind)}&{what}&page={Math.Max(page, 1)}&per_page={Math.Clamp(perPage, 1, MaximumPerPage)}", cancellationToken);
 			if (!response.IsSuccessStatusCode)
 			{

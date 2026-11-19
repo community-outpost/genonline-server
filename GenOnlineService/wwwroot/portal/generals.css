@@ -1236,6 +1236,17 @@ a.go-list-item:hover {
   white-space: nowrap;
 }
 
+.go-flag {
+  display: inline-block;
+  width: 1.333em;
+  height: 1em;
+  margin-inline-end: 0.3em;
+  vertical-align: -0.125em;
+  border-radius: var(--go-radius-sm);
+  box-shadow: 0 0 0 1px var(--go-color-border-subtle);
+  object-fit: cover;
+}
+
 .go-settings {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

@@ -88,6 +88,7 @@ public static class ModerationActions
 	public const string ConnectionLookup = "connection_lookup";
 
 	public const string PlayerInspect = "player_inspect";
+	public const string DeviceReveal = "device_reveal";
 	public const string InvestigateSearch = "investigate_search";
 	public const string AnticheatReview = "anticheat_review";
 }

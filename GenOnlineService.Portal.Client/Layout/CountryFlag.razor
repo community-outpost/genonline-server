@@ -1,0 +1,10 @@
+@* Decorative: the code beside it reads. Flags are served locally, nothing loads from another site *@
+@if (PortalText.CountryFlag(Country) is string flag)
+{
+    <img class="go-flag" src="@flag" alt="" title="@Country!.ToUpperInvariant()" width="20" height="15" loading="lazy" decoding="async" data-testid="country-flag" />
+}
+
+@code {
+    [Parameter]
+    public string? Country { get; set; }
+}

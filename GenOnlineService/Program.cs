@@ -814,6 +814,11 @@ namespace GenOnlineService
 			return policyBuilder.Build();
 		}
 
+		internal static string SentryEnvironmentFor(string? configured, ServiceEnvironment environment)
+		{
+			return string.IsNullOrWhiteSpace(configured) ? environment.Name : configured;
+		}
+
 		private static bool TryConfigureForwardedHeaders(IServiceCollection services, IConfiguration configuration)
 		{
 			string[] trustedProxyValues = (configuration.GetSection("TrustedProxies").Get<string[]>() ?? Array.Empty<string>())
@@ -1095,6 +1100,10 @@ namespace GenOnlineService
 			// display name tags derive from this secret; outside Development a missing one stops the service here
 			Names.NameTags.Configure(builder.Configuration, builder.Environment);
 
+			// the deploy environment is live, test or dev, and outside Development a missing or unknown one stops the service here
+			ServiceEnvironment serviceEnvironment = ServiceEnvironment.Configure(builder.Configuration, builder.Environment);
+			builder.Services.AddSingleton(serviceEnvironment);
+
 			// Process the original client IP, request scheme, and host only when
 			// one or more trusted reverse proxies are configured.
 			bool useForwardedHeaders = TryConfigureForwardedHeaders(builder.Services, builder.Configuration);
@@ -1122,10 +1131,7 @@ namespace GenOnlineService
 				throw new Exception("sentry_dsn missing in config");
 			}
 
-			if (sentry_env == null)
-			{
-				sentry_env = "production";
-			}
+			sentry_env = SentryEnvironmentFor(sentry_env, serviceEnvironment);
 
 			string buildVersion = GenOnlineService.Rest.Compatibility.ServiceVersion;
 
