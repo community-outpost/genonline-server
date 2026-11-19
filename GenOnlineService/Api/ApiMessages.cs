@@ -105,6 +105,18 @@ namespace GenOnlineService.Api
 		public long SanctionId { get; init; }
 	}
 
+	public sealed record HoldEvidenceRequest
+	{
+		public long? MatchId { get; init; }
+	}
+
+	// Screenshots past their 90 days are already gone
+	public sealed record HoldEvidenceResponse
+	{
+		public IReadOnlyList<string> Held { get; init; } = [];
+		public int Missing { get; init; }
+	}
+
 	// created_by is null when a tool or a sign-in provider created the sanction
 	public sealed record SanctionInfo
 	{

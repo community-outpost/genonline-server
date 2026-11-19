@@ -71,17 +71,16 @@ namespace GenOnlineService.Identity
 		// no return address, or a foreign one: nothing serves /
 		private string SafeReturnUrl(string? returnUrl) => !String.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) ? returnUrl : AccountPath;
 
-		private ContentResult Page(int status, string title, string body, string? description = null, string? icon = null, int? step = null, string? below = null, string? heading = null)
+		private ContentResult Page(int status, string title, string body, string? description = null, string? icon = null, int? step = null, string? below = null, string? heading = null, bool wide = false)
 		{
 			return new ContentResult
 			{
 				StatusCode = status,
 				ContentType = "text/html; charset=utf-8",
-				Content = PortalLook.Document(title, body, description, Language, Site, icon, step, below, heading)
+				Content = PortalLook.Document(title, body, description, Language, Site, icon, step, below, heading, wide)
 			};
 		}
 
-		// The cover images and the document links of the footer, from the settings
 		private PortalSite Site => new(m_settings.CoverImages, m_settings.Agreements.TermsDocument.Url, m_settings.Agreements.PrivacyUrl, m_settings.Agreements.RulesDocument.Url);
 
 		// There is no appeal or help page yet, so neither is linked.

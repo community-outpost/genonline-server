@@ -78,7 +78,7 @@ namespace GenOnlineService.Identity
 			await EndLive(db, userID, live, tokens, "two-factor reset");
 		}
 
-		private static async Task<(int SignIns, int Tokens)> RevokeSignIns(AppDbContext db, Int64 userID, Database.ModerationActor actor, string action)
+		internal static async Task<(int SignIns, int Tokens)> RevokeSignIns(AppDbContext db, Int64 userID, Database.ModerationActor actor, string action)
 		{
 			int signIns = await SignInRevocation.RevokeStored(db, userID);
 			await Database.GameSessionStore.DeleteUser(db, userID, null);
@@ -99,7 +99,7 @@ namespace GenOnlineService.Identity
 			return (signIns, tokens);
 		}
 
-		private static async Task EndLive(AppDbContext db, Int64 userID, bool live, int tokens, string reason)
+		internal static async Task EndLive(AppDbContext db, Int64 userID, bool live, int tokens, string reason)
 		{
 			if (tokens > 0)
 			{

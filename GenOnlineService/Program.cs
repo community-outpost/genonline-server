@@ -1643,7 +1643,7 @@ namespace GenOnlineService
 				});
 			}
 
-			// Devices, session events, chat messages and resolved reports past their retention are purged hourly
+			// Devices, session events, chat messages, resolved reports, ended sanctions and the staff log past their retention are
 			{
 				GenOnlineService.Service.SelfRestartingTimer.Start(TimeSpan.FromHours(1).TotalMilliseconds, stopping, app.Logger, "Retention purge timer failed", async () =>
 				{
@@ -1677,6 +1677,45 @@ namespace GenOnlineService
 						catch (Exception ex) when (!GenOnlineService.Service.SelfRestartingTimer.IsShutdownFault(ex, stopping))
 						{
 							app.Logger.LogError(ex, "Chat retention purge failed");
+						}
+
+						try
+						{
+							var (sanctions, auditLog) = await Database.Moderation.PurgeExpired(db, DateTime.UtcNow);
+							if (sanctions > 0 || auditLog > 0)
+							{
+								app.Logger.LogInformation("Retention purge removed {SanctionCount} sanctions and {AuditLogCount} staff log rows", sanctions, auditLog);
+							}
+						}
+						catch (Exception ex) when (!GenOnlineService.Service.SelfRestartingTimer.IsShutdownFault(ex, stopping))
+						{
+							app.Logger.LogError(ex, "Sanction and staff log retention purge failed");
+						}
+
+						try
+						{
+							int holds = await GenOnlineService.Identity.IdentifierHashes.PurgeEndedHolds(db, DateTime.UtcNow);
+							if (holds > 0)
+							{
+								app.Logger.LogInformation("Retention purge removed {HoldCount} identifier hashes of erased accounts whose ban ended", holds);
+							}
+						}
+						catch (Exception ex) when (!GenOnlineService.Service.SelfRestartingTimer.IsShutdownFault(ex, stopping))
+						{
+							app.Logger.LogError(ex, "Ban hold identifier hash purge failed");
+						}
+
+						try
+						{
+							int evidence = await Database.SanctionEvidenceStore.PurgeExpired(db, S3CredentialManager.Store, DateTime.UtcNow);
+							if (evidence > 0)
+							{
+								app.Logger.LogInformation("Retention purge removed {EvidenceCount} sanction evidence screenshots", evidence);
+							}
+						}
+						catch (Exception ex) when (!GenOnlineService.Service.SelfRestartingTimer.IsShutdownFault(ex, stopping))
+						{
+							app.Logger.LogError(ex, "Sanction evidence retention purge failed");
 						}
 					}, stopping);
 				});

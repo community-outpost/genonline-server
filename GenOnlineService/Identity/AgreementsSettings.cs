@@ -20,8 +20,7 @@ using System.Globalization;
 
 namespace GenOnlineService.Identity
 {
-	// One document a player agrees to: the version in force, the day it took effect and where to read it.
-	// Without a version the document is not required, and nobody is asked to agree to it.
+	// Without a version the document is not required and nobody is asked to agree.
 	public sealed class AgreementDocument
 	{
 		public const int VersionMaxLength = 32;
@@ -30,12 +29,12 @@ namespace GenOnlineService.Identity
 		public string? Version { get; init; }
 		public DateOnly? Date { get; init; }
 		public string? Url { get; init; }
+		public bool BuiltIn { get; init; }
 
 		public bool Required => Version != null;
 	}
 
-	// Agreements: the Rules of Engagement ("rules") and the Terms of Service ("terms") each account agrees to, and the
-	// Privacy Policy, which is only linked. Neither version configured means nothing is gated at all (self-hosters, tests).
+	// Neither version configured means nothing is gated (self-hosters, tests).
 	// A wording-only fix keeps the version; a new version asks every player again at their next sign-in.
 	public sealed class AgreementsSettings
 	{
@@ -56,18 +55,28 @@ namespace GenOnlineService.Identity
 
 		public AgreementDocument? Find(string? name) => Documents.FirstOrDefault(d => d.Name == name);
 
-		public static AgreementsSettings Read(IConfigurationSection section)
+		// issuer: Accounts:issuer. With it built-in links are absolute so the game client can open them; otherwise they are relative.
+		public static AgreementsSettings Read(IConfigurationSection section, string? issuer = null)
 		{
 			string? privacy = Url(section.GetSection("privacy"), "Agreements:privacy:url");
 			return new AgreementsSettings
 			{
-				RulesDocument = ReadDocument(section, Rules),
-				TermsDocument = ReadDocument(section, Terms),
-				PrivacyUrl = privacy
+				RulesDocument = ReadDocument(section, Rules, BuiltInLink(issuer, LegalPages.RulesPath)),
+				TermsDocument = ReadDocument(section, Terms, BuiltInLink(issuer, LegalPages.TermsPath)),
+				PrivacyUrl = privacy ?? BuiltInLink(issuer, LegalPages.PrivacyPath)
 			};
 		}
 
-		private static AgreementDocument ReadDocument(IConfigurationSection section, string name)
+		private static string BuiltInLink(string? issuer, string path)
+		{
+			string value = (issuer ?? String.Empty).Trim();
+			return Uri.TryCreate(value, UriKind.Absolute, out Uri? parsed) && (parsed.Scheme == Uri.UriSchemeHttps || parsed.Scheme == Uri.UriSchemeHttp)
+				&& String.IsNullOrEmpty(parsed.Query) && String.IsNullOrEmpty(parsed.Fragment)
+				? value.TrimEnd('/') + path
+				: path;
+		}
+
+		private static AgreementDocument ReadDocument(IConfigurationSection section, string name, string builtIn)
 		{
 			IConfigurationSection document = section.GetSection(name);
 			string? version = Blank(document.GetValue<string>("version"));
@@ -89,16 +98,11 @@ namespace GenOnlineService.Identity
 				{
 					throw new InvalidOperationException($"Agreements:{name}:version must be at most {AgreementDocument.VersionMaxLength} characters.");
 				}
-				if (url == null)
-				{
-					throw new InvalidOperationException($"Agreements:{name}:url is required when Agreements:{name}:version is set: players must be able to read what they agree to.");
-				}
 			}
 
-			return new AgreementDocument { Name = name, Version = version, Date = date, Url = url };
+			return new AgreementDocument { Name = name, Version = version, Date = date, Url = url ?? builtIn, BuiltIn = url == null };
 		}
 
-		// A document's address, which every page's footer links: an absolute http or https URL, without whitespace or quotes
 		private static string? Url(IConfigurationSection section, string key)
 		{
 			string? url = Blank(section.GetValue<string>("url"));

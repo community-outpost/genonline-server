@@ -25,8 +25,6 @@ namespace GenOnlineService.Identity
 {
 	public sealed record PortalLanguage(CultureInfo Culture, string ReturnUrl);
 
-	// What the pages need to know about this service beyond the language: the cover images (Accounts:cover_images) and the
-	// addresses of the documents the footer links (Agreements:*:url). A document without an address is left out.
 	public sealed record PortalSite(IReadOnlyList<string> CoverImages, string? TermsUrl, string? PrivacyUrl, string? RulesUrl);
 
 	// the sign-out form is the controller's (it carries the antiforgery token)
@@ -80,13 +78,8 @@ namespace GenOnlineService.Identity
 		private static string Logo(CultureInfo culture, string href = "/profile")
 			=> $"<a href=\"{E(href)}\" class=\"gp-logo\"><img src=\"{PortalAssets.Url(LogoPath)}\" alt=\"{E(AccountsText.Get("Brand", culture))}\"></a>";
 
-		// A whole page of the sign-in: the radar-van logo, the cover under its vignette, and one centred column.
-		//   icon: the card that opens with an icon tile, the title and the description (two-factor, check your email, refusals)
-		//   step: the account wizard's card (1 Name, 2 Rules, 3 Ready), with the title and description inside
-		//   neither: the title over a card that holds the body (sign in, sign up, password reset)
-		// body is already encoded. Without a language (the staff pages' refusals) there is no language menu, and without a
-		// site there is no cover and no document links.
-		public static string Document(string title, string body, string? description = null, PortalLanguage? language = null, PortalSite? site = null, string? icon = null, int? step = null, string? below = null, string? heading = null)
+		// Without a language (the staff pages' refusals) there is no language menu, and without a site there is no cover and no document links.
+		public static string Document(string title, string body, string? description = null, PortalLanguage? language = null, PortalSite? site = null, string? icon = null, int? step = null, string? below = null, string? heading = null, bool wide = false)
 		{
 			CultureInfo culture = AccountsText.Resolve(language?.Culture);
 			var page = new StringBuilder(Head(title, culture));
@@ -113,7 +106,7 @@ namespace GenOnlineService.Identity
 			}
 			else
 			{
-				page.Append($"<div class=\"gp-stack\">{h1}{(description == null ? String.Empty : $"<p class=\"gp-lead gp-title-centre\">{E(description)}</p>")}<div class=\"gp-card\">{body}</div>{below}</div>");
+				page.Append($"<div class=\"gp-stack{(wide ? " gp-stack-doc" : String.Empty)}\">{h1}{(description == null ? String.Empty : $"<p class=\"gp-lead gp-title-centre\">{E(description)}</p>")}<div class=\"gp-card\">{body}</div>{below}</div>");
 			}
 			page.Append(Footer(language, site, culture)).Append("</main></div></body></html>");
 			return page.ToString();
