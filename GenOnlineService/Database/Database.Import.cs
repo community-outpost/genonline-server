@@ -251,9 +251,10 @@ namespace Database
 			return db.Model.GetEntityTypes().Select(e => e.GetTableName()!).Distinct().OrderBy(t => t, StringComparer.Ordinal);
 		}
 
+		// matches has no identity: the service sets every match id (snowflakes since MatchIdsWithoutIdentity), the import keeps the old ids
 		private static readonly string[] IdentityTables =
 		{
-			"users", "user_username_history", "identities", "sanctions", "audit_log", "devices", "session_events", "matches",
+			"users", "user_username_history", "identities", "sanctions", "audit_log", "devices", "session_events",
 			"anticheat_module_reports", "anticheat_new_account_games", "anticheat_probe_reports"
 		};
 
@@ -275,7 +276,7 @@ namespace Database
 			}
 		}
 
-		private static async Task<bool> VerifySequences(AppDbContext db, ImportReport report)
+		internal static async Task<bool> VerifySequences(AppDbContext db, ImportReport report)
 		{
 			report.Line();
 			report.Line("Identity sequences (next id must be max(id) + 1 or higher):");
@@ -1410,8 +1411,9 @@ namespace Database
 					continue;
 				}
 
-				// grouped by mailbox, as the service compares them (one account per person): a +tag or Gmail's dots are the same one
-				candidates.Add((user, email, GenOnlineService.Identity.IdentifierHashes.CanonicalEmail(email) ?? NameNormalizer.Normalize(email)));
+				// grouped by the exact address, as the service compares them (the address is the login identifier); a +tag or a
+				// dot is a different address and keeps its own account
+				candidates.Add((user, email, NameNormalizer.Normalize(email)));
 			}
 
 			foreach (var group in candidates.GroupBy(c => c.Normalized))

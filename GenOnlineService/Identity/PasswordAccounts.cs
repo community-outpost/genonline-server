@@ -216,10 +216,8 @@ namespace GenOnlineService.Identity
 		}
 	}
 
-	// Identity's own user validator assumes unique user names; display names are not (Name#tag), so only the email
-	// address, when there is one, must belong to no other account
-	// One account per person: the same mailbox written another way (a +tag, Gmail's dots or googlemail.com) is taken too,
-	// and so is the mailbox of an erased account while its ban lasts (IdentifierHashes)
+	// Identity's own validator assumes unique user names; display names are not (Name#tag).
+	// An address is only a login identifier: a +tag or a dot makes another, and an address a ban holds is refused (IdentifierHashes).
 	public sealed class GoUserValidator : IUserValidator<User>
 	{
 		public const string DuplicateEmail = nameof(IdentityErrorDescriber.DuplicateEmail);
@@ -238,15 +236,22 @@ namespace GenOnlineService.Identity
 				return IdentityResult.Success;
 			}
 
-			User? holder = await manager.FindByEmailAsync(user.Email);
-			bool taken = holder != null && holder.ID != user.ID;
-			if (!taken)
+			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
+			string normalized = NameNormalizer.Normalize(user.Email);
+			string? stored = user.ID == 0 ? null : await db.Users.AsNoTracking().Where(u => u.ID == user.ID).Select(u => u.EmailNormalized).FirstOrDefaultAsync();
+			if (user.ID != 0 && String.Equals(stored, normalized, StringComparison.Ordinal))
 			{
-				await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
-				taken = await IdentifierHashes.EmailHeldByOther(db, user.Email, user.ID);
+				return IdentityResult.Success;
 			}
+
+			if (await Database.Users.AddressHeldByOther(db, normalized, user.ID))
+			{
+				return IdentityResult.Failed(new IdentityError { Code = DuplicateEmail, Description = "This email address is already used by another account." });
+			}
+
+			bool taken = await IdentifierHashes.EmailHeldByBan(db, user.Email, user.ID, DateTime.UtcNow);
 			return taken
-				? IdentityResult.Failed(new IdentityError { Code = DuplicateEmail, Description = "An account with this email address already exists." })
+				? IdentityResult.Failed(new IdentityError { Code = DuplicateEmail, Description = "This email address cannot be used while a ban on it is active." })
 				: IdentityResult.Success;
 		}
 	}
