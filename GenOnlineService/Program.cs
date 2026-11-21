@@ -1816,8 +1816,8 @@ namespace GenOnlineService
 				// seeds user state and bans before any token is validated
 				await AccessControl.Reload(db);
 				await AccessControl.SweepBlockedUsers(factory);
+				await Database.StoredRoles.EnsureSeedAsync(db, DateTime.UtcNow);
 				await StaffRoles.Reload(db);
-				StaffRoles.ValidateRoleDefinitions();
 				await ApiTokenCache.Reload(db);
 				await ClientRegistry.Reload(db);
 

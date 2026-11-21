@@ -1016,14 +1016,14 @@ a.go-list-item:hover {
 }
 
 .dark .go-page a[class~="bb:inline"],
-.dark table a {
+table a {
   color: var(--go-color-text-primary);
   font-weight: var(--go-font-weight-semibold);
   text-decoration: none;
 }
 
 .dark .go-page a[class~="bb:inline"]:hover,
-.dark table a:hover {
+table a:hover {
   color: var(--go-color-accent-hover);
   text-decoration: none;
 }

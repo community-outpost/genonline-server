@@ -185,7 +185,7 @@
                         </BbSidebarMenu>
                     </BbSidebarGroup>
                 }
-                @if (staff.Can(PortalPermissions.AuditRead) || staff.Can(PortalPermissions.TokensManage) || staff.Can(PortalPermissions.FlagsManage) || staff.Can(PortalPermissions.RulesManage))
+                @if (staff.Can(PortalPermissions.AuditRead) || staff.Can(PortalPermissions.TokensManage) || staff.Can(PortalPermissions.FlagsManage) || staff.Can(PortalPermissions.RulesManage) || staff.Can(PortalPermissions.RolesManage))
                 {
                     <BbSidebarGroup>
                         <BbSidebarGroupLabel>Administration</BbSidebarGroupLabel>
@@ -214,6 +214,15 @@
                                     <BbSidebarMenuButton Href="@PortalRoutes.PartnersPage" Tooltip="Partners">
                                         <LucideIcon Name="handshake" Class="bb:h-4 bb:w-4" />
                                         <span>Partners</span>
+                                    </BbSidebarMenuButton>
+                                </BbSidebarMenuItem>
+                            }
+                            @if (staff.Can(PortalPermissions.RolesManage))
+                            {
+                                <BbSidebarMenuItem>
+                                    <BbSidebarMenuButton Href="@PortalRoutes.RolesPage" Tooltip="Roles">
+                                        <LucideIcon Name="shield" Class="bb:h-4 bb:w-4" />
+                                        <span>Roles</span>
                                     </BbSidebarMenuButton>
                                 </BbSidebarMenuItem>
                             }
@@ -430,6 +439,13 @@
                 else if (item != null)
                 {
                     yield return ("Rule " + item, null);
+                }
+                break;
+            case "roles":
+                yield return ("Roles", item == null ? null : PortalRoutes.RolesPage);
+                if (item != null)
+                {
+                    yield return ("Role " + Uri.UnescapeDataString(item), null);
                 }
                 break;
             case "anticheat":

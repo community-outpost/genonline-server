@@ -102,6 +102,8 @@ public abstract partial class AppDbContext : DbContext
 	public DbSet<FlagRevision> FlagRevisions => Set<FlagRevision>();
 
 	public DbSet<UserRole> UserRoles => Set<UserRole>();
+	public DbSet<StoredRole> StoredRoles => Set<StoredRole>();
+	public DbSet<StoredRolePermission> StoredRolePermissions => Set<StoredRolePermission>();
 	public DbSet<Sanction> Sanctions => Set<Sanction>();
 	public DbSet<AuditLogEntry> AuditLog => Set<AuditLogEntry>();
 	public DbSet<SanctionEvidence> SanctionEvidence => Set<SanctionEvidence>();
@@ -245,6 +247,8 @@ public abstract partial class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new ClientBuildConfiguration());
 		modelBuilder.ApplyConfiguration(new GenOnlineService.Identity.DataProtectionKeyConfiguration());
 		modelBuilder.ApplyConfiguration(new UserRoleConfiguration());
+		modelBuilder.ApplyConfiguration(new StoredRoleConfiguration());
+		modelBuilder.ApplyConfiguration(new StoredRolePermissionConfiguration());
 		modelBuilder.ApplyConfiguration(new SanctionConfiguration());
 		modelBuilder.ApplyConfiguration(new AuditLogConfiguration());
 		modelBuilder.ApplyConfiguration(new SanctionEvidenceConfiguration());

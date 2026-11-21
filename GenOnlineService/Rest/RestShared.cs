@@ -42,6 +42,14 @@ namespace GenOnlineService.Rest
 
 		// A role held only through a sign-in provider, which follows that provider's sign-ins
 		public const string RoleUpstream = "roles.upstream";
+
+		// Role definitions: a role with that name exists, two roles would share a position, a permission the caller does not hold,
+		// owner (never editable) and a built-in role (never deleted)
+		public const string RoleExists = "roles.exists";
+		public const string RolePositionTaken = "roles.position_taken";
+		public const string RolePermissionNotHeld = "roles.permission_not_held";
+		public const string RoleLocked = "roles.locked";
+		public const string RoleBuiltIn = "roles.builtin";
 	}
 
 	public static class PlayerTags
@@ -64,6 +72,11 @@ namespace GenOnlineService.Rest
 			[RestCodes.MethodNotAllowed] = StatusCodes.Status405MethodNotAllowed,
 			[RestCodes.RoleRank] = StatusCodes.Status403Forbidden,
 			[RestCodes.RoleUpstream] = StatusCodes.Status409Conflict,
+			[RestCodes.RoleExists] = StatusCodes.Status409Conflict,
+			[RestCodes.RolePositionTaken] = StatusCodes.Status409Conflict,
+			[RestCodes.RolePermissionNotHeld] = StatusCodes.Status403Forbidden,
+			[RestCodes.RoleLocked] = StatusCodes.Status403Forbidden,
+			[RestCodes.RoleBuiltIn] = StatusCodes.Status403Forbidden,
 			[GenOnlineService.Flags.FlagCodes.Stale] = StatusCodes.Status409Conflict,
 			[GenOnlineService.Flags.FlagCodes.Exists] = StatusCodes.Status409Conflict,
 		};

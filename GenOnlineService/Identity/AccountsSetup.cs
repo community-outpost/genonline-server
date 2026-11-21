@@ -126,6 +126,9 @@ namespace GenOnlineService.Identity
 				if (settings.Enabled)
 				{
 					options.UseLocalServer();
+					// every revocation (logout, resets, bans, revoke_sessions, a disabled client) also revokes the sign-in's stored tokens,
+					// so checking the access token's own entry stops it at once
+					options.EnableTokenEntryValidation();
 				}
 				else
 				{

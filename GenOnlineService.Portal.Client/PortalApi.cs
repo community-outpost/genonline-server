@@ -366,6 +366,19 @@ namespace GenOnlineService.Portal.Client
 
 		public Task<PortalOutcome> RevokeRoleAsync(long userID, string role) => SendAsync(HttpMethod.Delete, $"{PortalRoutes.Players}/{userID}/roles/{Uri.EscapeDataString(role)}", new { });
 
+		public Task<PortalAnswer<PortalRoleList>> ListRolesAsync(CancellationToken cancellationToken = default) => GetAsync<PortalRoleList>(PortalRoutes.Roles, cancellationToken);
+
+		public Task<PortalAnswer<PortalPermissionList>> ListPermissionsAsync(CancellationToken cancellationToken = default) => GetAsync<PortalPermissionList>(PortalRoutes.Permissions, cancellationToken);
+
+		public Task<PortalRuleOutcome<PortalRoleDefinition>> CreateRoleAsync(PortalRoleWrite role) => SendRuleAsync<PortalRoleDefinition>(HttpMethod.Post, PortalRoutes.Roles, role);
+
+		public Task<PortalRuleOutcome<PortalRoleDefinition>> UpdateRoleAsync(string name, PortalRoleWrite change) => SendRuleAsync<PortalRoleDefinition>(HttpMethod.Patch, $"{PortalRoutes.Roles}/{Uri.EscapeDataString(name)}", change);
+
+		public Task<PortalOutcome> DeleteRoleAsync(string name) => SendAsync(HttpMethod.Delete, $"{PortalRoutes.Roles}/{Uri.EscapeDataString(name)}", new { });
+
+		// Up to 200 holders, with the total
+		public Task<PortalAnswer<PortalRoleMembers>> RoleMembersAsync(string name, CancellationToken cancellationToken = default) => GetAsync<PortalRoleMembers>($"{PortalRoutes.Roles}/{Uri.EscapeDataString(name)}/members", cancellationToken);
+
 		public Task<PortalAnswer<PortalAuditPage>> GetAuditAsync(PortalAuditQuery filter, long? afterID, int perPage, CancellationToken cancellationToken)
 		{
 			var query = new List<string> { "per_page=" + Math.Clamp(perPage, 1, MaximumPerPage) };

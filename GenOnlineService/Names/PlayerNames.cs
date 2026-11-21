@@ -35,7 +35,7 @@ namespace GenOnlineService.Names
 		public async Task<Result<Empty>> RenameSelfAsync(Int64 me, string? requested)
 		{
 			string name = requested ?? String.Empty;
-			Failure? invalid = CheckRules(me, name);
+			Failure? invalid = CheckRules(me, me, name);
 			if (invalid != null)
 			{
 				return invalid.Value;
@@ -48,7 +48,7 @@ namespace GenOnlineService.Names
 		public async Task<Result<Empty>> ChooseAsync(Int64 me, string? requested)
 		{
 			string name = (requested ?? String.Empty).Trim();
-			Failure? invalid = CheckRules(me, name);
+			Failure? invalid = CheckRules(me, me, name);
 			if (invalid != null)
 			{
 				return invalid.Value;
@@ -94,7 +94,7 @@ namespace GenOnlineService.Names
 			}
 
 			string name = requested ?? String.Empty;
-			Failure? invalid = CheckRules(target, name);
+			Failure? invalid = CheckRules(target, actor.UserID, name);
 			if (invalid != null)
 			{
 				return invalid.Value;
@@ -183,13 +183,19 @@ namespace GenOnlineService.Names
 			return null;
 		}
 
-		// The rules of a chosen name; reserved words apply unless the name's owner holds names.protected
-		private static Failure? CheckRules(Int64 owner, string name)
+		// reserved words apply unless the owner holds names.protected or the chooser (owner or renaming staff) holds names.unrestricted,
+		// which still never allows the name of an erased account
+		private static Failure? CheckRules(Int64 owner, Int64? actor, string name)
 		{
 			Failure? invalid = ProfileActions.CheckNameRules(name);
 			if (invalid != null)
 			{
 				return invalid;
+			}
+			bool unrestricted = actor is Int64 actorID && StaffRoles.HasPermission(actorID, Permissions.NamesUnrestricted);
+			if (unrestricted && !AccountErasure.IsTombstoneShaped(name))
+			{
+				return null;
 			}
 			if (!StaffRoles.HasPermission(owner, Permissions.NamesProtected))
 			{

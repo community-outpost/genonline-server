@@ -64,7 +64,7 @@ namespace GenOnlineService.Rest
 		public static async Task<int> RankAsync(AppDbContext db, long userID) => StaffRoles.RankOf((await Database.Moderation.GetRoles(db, userID)).Select(r => r.Role));
 
 		// The account acting: a session or a user's token; a service account token stores its own id in UserID
-		private static long? AccountOf(Database.ModerationActor actor) => actor.Kind == AuditActorKinds.User ? actor.UserID : null;
+		internal static long? AccountOf(Database.ModerationActor actor) => actor.Kind == AuditActorKinds.User ? actor.UserID : null;
 
 		// A caller without an account (a service account token) keeps admin standing, as for staff renames
 		public static async Task<int> CallerRankAsync(AppDbContext db, Database.ModerationActor actor) => AccountOf(actor) is long id ? await RankAsync(db, id) : StaffRoles.AdminRank;
@@ -80,7 +80,7 @@ namespace GenOnlineService.Rest
 			}
 			foreach (string role in changed)
 			{
-				if (StaffRoles.RankOf([role]) >= actorRank)
+				if (StaffRoles.PositionOf([role]) >= actorRank)
 				{
 					return Result.Fail(RestCodes.RoleRank, new { Role = role });
 				}
@@ -94,7 +94,7 @@ namespace GenOnlineService.Rest
 			{
 				return [];
 			}
-			return StaffRoles.All.Where(role => StaffRoles.RankOf([role]) < actorRank).Order(StringComparer.Ordinal).ToList();
+			return StaffRoles.All.Where(role => StaffRoles.PositionOf([role]) < actorRank).Order(StringComparer.Ordinal).ToList();
 		}
 	}
 

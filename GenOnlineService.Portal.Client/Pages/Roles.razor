@@ -1,0 +1,229 @@
+@page "/admin/roles"
+@inject PortalApi Api
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+<PageTitle>Roles · Generals Online</PageTitle>
+
+<PageHeader Description="What each role may do and who holds it. You can change the roles below your own highest role. Every change is in the audit log.">
+    <Title>Roles</Title>
+    <Actions>
+        @if (Session.Can(PortalPermissions.RolesManage))
+        {
+            <BbButton Size="ButtonSize.Small" OnClick="OpenCreate" Disabled="@(m_permissions == null)" data-testid="new-role">
+                <LucideIcon Name="plus" Class="bb:h-4 bb:w-4" />
+                New role
+            </BbButton>
+        }
+    </Actions>
+</PageHeader>
+
+@if (!Session.Can(PortalPermissions.RolesManage))
+{
+    <Refusal Title="Roles" Description="Managing roles needs the roles.manage permission." Icon="lock" />
+}
+else if (m_error != null)
+{
+    <BbAlert Variant="AlertVariant.Danger">
+        <Icon>
+            <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+        </Icon>
+        <ChildContent>
+            <BbAlertTitle>The roles could not load</BbAlertTitle>
+            <BbAlertDescription>@PortalText.Error(m_error)</BbAlertDescription>
+        </ChildContent>
+    </BbAlert>
+}
+else
+{
+    <BbCard>
+        <BbCardHeader>
+            <BbCardTitle As="h2">All roles</BbCardTitle>
+            <BbCardDescription>The highest role is first. Everyone holds the Everyone role without being listed as a member.</BbCardDescription>
+        </BbCardHeader>
+        <BbCardContent>
+            @if (m_roles == null)
+            {
+                <FeedSkeleton />
+            }
+            else
+            {
+                <div class="go-table-frame">
+                <BbDataTable TData="PortalRoleDefinition" Data="@m_roles" ShowToolbar="false" ShowPagination="false" AriaLabel="Roles">
+                    <Columns>
+                        <BbDataTableColumn TData="PortalRoleDefinition" TValue="string" Property="@(r => r.DisplayName)" Header="Role">
+                            <CellTemplate Context="row">
+                                <span class="bb:inline-flex bb:items-center bb:gap-2" data-testid="role-row">
+                                    <span class="bb:inline-block bb:h-3 bb:w-3 bb:rounded-full" style="@($"background-color: {PortalRoleText.ColorOf(row.Color)}")" aria-hidden="true"></span>
+                                    <BbLink Href="@PortalRoutes.RolePage(row.Name)">@row.DisplayName</BbLink>
+                                    <span class="bb:font-mono bb:text-xs bb:text-muted-foreground">@row.Name</span>
+                                </span>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalRoleDefinition" TValue="string" Property="@(r => r.Locked ? "locked" : r.BuiltIn ? "built-in" : "")" Header="Kind">
+                            <CellTemplate Context="row">
+                                <span class="go-cell-badges">
+                                    @if (row.Locked)
+                                    {
+                                        <BbBadge Variant="BadgeVariant.SoftDestructive">Locked</BbBadge>
+                                    }
+                                    else if (row.BuiltIn)
+                                    {
+                                        <BbBadge Variant="BadgeVariant.Secondary">Built-in</BbBadge>
+                                    }
+                                </span>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalRoleDefinition" TValue="string" Property="@(r => r.Permissions.Count.ToString())" Header="Permissions" CellClass="go-nowrap" />
+                        <BbDataTableColumn TData="PortalRoleDefinition" TValue="string" Property="@(r => r.MemberCount.ToString())" Header="Members" CellClass="go-nowrap" />
+                        <BbDataTableColumn TData="PortalRoleDefinition" TValue="string" Property="@(r => r.Name)" Header="Edit" HeaderClass="go-sr-header">
+                            <CellTemplate Context="row">
+                                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Href="@PortalRoutes.RolePage(row.Name)" aria-label="@($"Open the role {row.DisplayName}")">@(row.Manageable ? "Edit" : "View")</BbButton>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                    </Columns>
+                    <EmptyTemplate>
+                        <BbEmpty Size="EmptySize.Small" Title="No roles" Description="The service has no roles stored.">
+                            <Icon>
+                                <LucideIcon Name="shield-off" />
+                            </Icon>
+                        </BbEmpty>
+                    </EmptyTemplate>
+                </BbDataTable>
+                </div>
+            }
+        </BbCardContent>
+    </BbCard>
+
+    <BbDialog @bind-Open="m_createOpen">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>New role</BbDialogTitle>
+                <BbDialogDescription>A role sits below your own highest role. You can only give permissions you hold yourself.</BbDialogDescription>
+            </BbDialogHeader>
+            <div class="bb:space-y-4" style="max-height: 60vh; overflow-y: auto">
+                <div class="bb:space-y-2">
+                    <BbLabel For="role-name">Name</BbLabel>
+                    <BbInput Id="role-name" @bind-Value="m_name" UpdateTiming="UpdateTiming.Immediate" Placeholder="support_lead" autocomplete="off" spellcheck="false" />
+                    <p class="@(String.IsNullOrEmpty(m_name) || PortalRoleText.IsValidName(m_name) ? "bb:text-xs bb:text-muted-foreground" : "bb:text-xs bb:text-destructive")">2 to 32 lowercase letters, digits or underscores, starting with a letter. It cannot change later.</p>
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="role-display-name">Display name</BbLabel>
+                    <BbInput Id="role-display-name" @bind-Value="m_displayName" UpdateTiming="UpdateTiming.Immediate" Placeholder="Support lead" autocomplete="off" />
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="role-color">Colour (optional)</BbLabel>
+                    <div class="bb:flex bb:items-center bb:gap-2">
+                        <BbInput Id="role-color" @bind-Value="m_color" UpdateTiming="UpdateTiming.Immediate" Placeholder="#3b82f6" autocomplete="off" spellcheck="false" Class="bb:w-32" />
+                        <span class="bb:inline-block bb:h-4 bb:w-4 bb:rounded-full" style="@($"background-color: {PortalRoleText.ColorOf(m_color)}")" aria-hidden="true"></span>
+                    </div>
+                    @if (!String.IsNullOrWhiteSpace(m_color) && !PortalRoleText.IsValidColor(m_color.Trim()))
+                    {
+                        <p class="bb:text-xs bb:text-destructive" role="alert">Write the colour as #rrggbb.</p>
+                    }
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="role-description">Description (optional)</BbLabel>
+                    <BbTextarea Id="role-description" @bind-Value="m_description" Placeholder="What this role is for…" autocomplete="off" />
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="role-above">Place directly above</BbLabel>
+                    @if (m_places.Count == 0)
+                    {
+                        <p class="bb:text-sm bb:text-muted-foreground">You manage no role, so you cannot create one.</p>
+                    }
+                    else
+                    {
+                        <BbNativeSelect TValue="string" Id="role-above" Value="@PlaceChoice" ValueChanged="@((string value) => m_above = value)" Class="bb:w-64">
+                            @foreach ((string value, string label) in m_places)
+                            {
+                                <option value="@value">@label</option>
+                            }
+                        </BbNativeSelect>
+                    }
+                </div>
+                <div class="bb:space-y-2">
+                    <p class="bb:text-sm bb:font-medium">Permissions</p>
+                    <RolePermissions Permissions="@(m_permissions ?? [])" Chosen="@m_chosen" IdPrefix="new-role" />
+                </div>
+            </div>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_createOpen = false)" Disabled="@m_saving">Cancel</BbButton>
+                <BbButton OnClick="CreateAsync" Loading="@m_saving" Disabled="@(!CanCreate)" data-testid="create-role">Create</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
+}
+
+@code {
+    private List<PortalRoleDefinition>? m_roles;
+    private IReadOnlyList<PortalPermissionEntry>? m_permissions;
+    private IReadOnlyList<(string Value, string Label)> m_places = [];
+    private string? m_error;
+    private bool m_createOpen;
+    private bool m_saving;
+    private string? m_name;
+    private string? m_displayName;
+    private string? m_color;
+    private string? m_description;
+    private string? m_above;
+    private readonly HashSet<string> m_chosen = new(StringComparer.Ordinal);
+
+    private PortalSessionInfo Session => Api.Session!;
+
+    private string PlaceChoice => m_above != null && m_places.Any(p => p.Value == m_above) ? m_above : m_places[0].Value;
+
+    private bool CanCreate => PortalRoleText.IsValidName(m_name) && !String.IsNullOrWhiteSpace(m_displayName) && m_places.Count > 0
+        && (String.IsNullOrWhiteSpace(m_color) || PortalRoleText.IsValidColor(m_color.Trim()));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.Can(PortalPermissions.RolesManage))
+        {
+            return;
+        }
+
+        PortalAnswer<PortalRoleList> roles = await Api.ListRolesAsync();
+        PortalAnswer<PortalPermissionList> permissions = await Api.ListPermissionsAsync();
+        m_error = roles.Error ?? permissions.Error;
+        m_roles = roles.Value?.Roles.ToList();
+        m_permissions = permissions.Value?.Permissions;
+        m_places = PortalRoleText.Placements(m_roles ?? []);
+    }
+
+    private void OpenCreate()
+    {
+        m_name = null;
+        m_displayName = null;
+        m_color = null;
+        m_description = null;
+        m_above = null;
+        m_chosen.Clear();
+        m_createOpen = true;
+    }
+
+    private async Task CreateAsync()
+    {
+        m_saving = true;
+        var role = new PortalRoleWrite
+        {
+            Name = m_name!.Trim(),
+            DisplayName = m_displayName!.Trim(),
+            Color = String.IsNullOrWhiteSpace(m_color) ? null : m_color.Trim(),
+            Description = String.IsNullOrWhiteSpace(m_description) ? null : m_description.Trim(),
+            Above = PlaceChoice,
+            Permissions = m_chosen.Order(StringComparer.Ordinal).ToList()
+        };
+        PortalRuleOutcome<PortalRoleDefinition> created = await Api.CreateRoleAsync(role);
+        m_saving = false;
+        if (!created.Ok)
+        {
+            Toasts.Error(PortalText.RoleError(created.Error, created.Failure?.Field), "Not created");
+            return;
+        }
+
+        m_createOpen = false;
+        Toasts.Show($"{created.Value!.DisplayName} is created and in the audit log.", "Done", ToastVariant.Success, 4000);
+        Navigation.NavigateTo(PortalRoutes.RolePage(created.Value.Name));
+    }
+}

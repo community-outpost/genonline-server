@@ -1,0 +1,457 @@
+@* Read-only for the owner role and for roles that rank the same as or above the caller *@
+@page "/admin/roles/{Name}"
+@inject PortalApi Api
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+<PageTitle>@(m_role?.DisplayName ?? "Role") · Generals Online</PageTitle>
+
+@if (!Session.Can(PortalPermissions.RolesManage))
+{
+    <Refusal Title="Roles" Description="Managing roles needs the roles.manage permission." Icon="lock" />
+}
+else if (m_error != null)
+{
+    @if (m_error == "not_found")
+    {
+        <Refusal Title="@($"No role {Name}")" Description="No role has this name." Icon="shield-off" />
+    }
+    else
+    {
+        <Refusal Title="The role could not load" Description="@PortalText.Error(m_error)" Icon="circle-alert" />
+    }
+}
+else if (m_role == null || m_permissions == null)
+{
+    <div class="bb:space-y-4">
+        <BbSkeleton Class="bb:h-8 bb:w-full bb:max-w-sm" />
+        <BbSkeleton Class="go-skeleton-panel" />
+    </div>
+}
+else
+{
+    PortalRoleDefinition role = m_role;
+    <PageHeader Description="@(role.Description ?? "No description.")">
+        <Title>
+            <span class="bb:inline-flex bb:items-center bb:gap-2">
+                <span class="bb:inline-block bb:h-3 bb:w-3 bb:rounded-full" style="@($"background-color: {PortalRoleText.ColorOf(role.Color)}")" aria-hidden="true"></span>
+                <span data-testid="role-title">@role.DisplayName</span>
+            </span>
+        </Title>
+        <Below>
+            <div class="bb:flex bb:flex-wrap bb:items-center bb:gap-2 bb:pt-1">
+                <BbBadge Variant="BadgeVariant.Outline" Class="bb:font-mono">@role.Name</BbBadge>
+                @if (role.Locked)
+                {
+                    <BbBadge Variant="BadgeVariant.SoftDestructive"><BbBadgeIcon Name="lock" />Locked</BbBadge>
+                }
+                else if (role.BuiltIn)
+                {
+                    <BbBadge Variant="BadgeVariant.Secondary">Built-in</BbBadge>
+                }
+                <BbBadge Variant="BadgeVariant.Outline">@role.Permissions.Count @(role.Permissions.Count == 1 ? "permission" : "permissions")</BbBadge>
+                <BbBadge Variant="BadgeVariant.Outline">@role.MemberCount @(role.MemberCount == 1 ? "member" : "members")</BbBadge>
+            </div>
+        </Below>
+        <Actions>
+            <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Href="@PortalRoutes.RolesPage">
+                <LucideIcon Name="arrow-left" Class="bb:h-4 bb:w-4" />
+                All roles
+            </BbButton>
+        </Actions>
+    </PageHeader>
+
+    @if (ReadOnly)
+    {
+        <BbAlert Variant="AlertVariant.Default" Class="bb:mb-4" data-testid="role-readonly">
+            <Icon>
+                <LucideIcon Name="lock" Class="bb:h-4 bb:w-4" />
+            </Icon>
+            <ChildContent>
+                <BbAlertTitle>You can only read this role</BbAlertTitle>
+                <BbAlertDescription>@(role.Locked ? "The owner role cannot be changed in the service." : "This role ranks the same as or above your own highest role.")</BbAlertDescription>
+            </ChildContent>
+        </BbAlert>
+    }
+
+    <BbTabs Value="@m_tab" ValueChanged="@((string tab) => ShowTab(tab))">
+        <BbTabsList>
+            <BbTabsTrigger Value="settings">Settings</BbTabsTrigger>
+            <BbTabsTrigger Value="members" data-testid="tab-members">Members (@role.MemberCount)</BbTabsTrigger>
+        </BbTabsList>
+
+        <BbTabsContent Value="settings" Class="bb:mt-4">
+            <BbCard>
+                <BbCardHeader>
+                    <BbCardTitle As="h2">Settings</BbCardTitle>
+                    <BbCardDescription>
+                        @if (role.BuiltIn)
+                        {
+                            <span>A built-in role keeps its name and its place and cannot be deleted. Every change is in the audit log.</span>
+                        }
+                        else
+                        {
+                            <span>The name cannot change. Every change is in the audit log.</span>
+                        }
+                    </BbCardDescription>
+                </BbCardHeader>
+                <BbCardContent Class="bb:space-y-4">
+                    <div class="bb:space-y-2">
+                        <BbLabel For="role-display-name">Display name</BbLabel>
+                        <BbInput Id="role-display-name" @bind-Value="m_displayName" UpdateTiming="UpdateTiming.Immediate" Disabled="@ReadOnly" autocomplete="off" Class="bb:max-w-md" />
+                    </div>
+                    <div class="bb:space-y-2">
+                        <BbLabel For="role-color">Colour</BbLabel>
+                        <div class="bb:flex bb:items-center bb:gap-2">
+                            <BbInput Id="role-color" @bind-Value="m_color" UpdateTiming="UpdateTiming.Immediate" Disabled="@ReadOnly" Placeholder="#3b82f6" autocomplete="off" spellcheck="false" Class="bb:w-32" />
+                            <span class="bb:inline-block bb:h-4 bb:w-4 bb:rounded-full" style="@($"background-color: {PortalRoleText.ColorOf(m_color)}")" aria-hidden="true"></span>
+                        </div>
+                        @if (!ColorValid)
+                        {
+                            <p class="bb:text-xs bb:text-destructive" role="alert">Write the colour as #rrggbb, or leave it empty.</p>
+                        }
+                    </div>
+                    <div class="bb:space-y-2">
+                        <BbLabel For="role-description">Description</BbLabel>
+                        <BbTextarea Id="role-description" @bind-Value="m_description" Disabled="@ReadOnly" autocomplete="off" />
+                    </div>
+                    @if (!role.BuiltIn && !ReadOnly)
+                    {
+                        <div class="bb:space-y-2">
+                            <BbLabel For="role-above">Place directly above</BbLabel>
+                            <BbNativeSelect TValue="string" Id="role-above" Value="@m_above" ValueChanged="@((string value) => m_above = value)" Class="bb:w-64">
+                                <option value="">Keep the current place</option>
+                                @foreach ((string value, string label) in m_places)
+                                {
+                                    <option value="@value">@label</option>
+                                }
+                            </BbNativeSelect>
+                        </div>
+                    }
+                    <div class="bb:space-y-2">
+                        <p class="bb:text-sm bb:font-medium">Permissions</p>
+                        <RolePermissions Permissions="@m_permissions" Chosen="@m_chosen" ReadOnly="@ReadOnly" IdPrefix="role-permission" Changed="@(() => Task.CompletedTask)" />
+                    </div>
+                </BbCardContent>
+                @if (!ReadOnly)
+                {
+                    <BbCardFooter Class="bb:flex bb:flex-wrap bb:gap-2">
+                        <BbButton OnClick="SaveAsync" Loading="@m_saving" Disabled="@(!CanSave)" data-testid="save-role">
+                            <LucideIcon Name="save" Class="bb:h-4 bb:w-4" />
+                            Save changes
+                        </BbButton>
+                        @if (!role.BuiltIn)
+                        {
+                            <BbButton Variant="ButtonVariant.Destructive" OnClick="@(() => m_deleteOpen = true)" Disabled="@m_saving" data-testid="delete-role">
+                                <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4" />
+                                Delete role
+                            </BbButton>
+                        }
+                    </BbCardFooter>
+                }
+            </BbCard>
+        </BbTabsContent>
+
+        <BbTabsContent Value="members" Class="bb:mt-4">
+            <BbCard>
+                <BbCardHeader>
+                    <BbCardTitle As="h2">Members</BbCardTitle>
+                    <BbCardDescription>
+                        @if (role.Name == "everyone")
+                        {
+                            <span>Every player holds this role, so no members are listed.</span>
+                        }
+                        else
+                        {
+                            <span>A local role is given and taken away here. A role from a sign-in provider follows that provider's sign-ins and cannot be changed here.</span>
+                        }
+                    </BbCardDescription>
+                </BbCardHeader>
+                <BbCardContent Class="bb:space-y-4">
+                    @if (m_membersError != null)
+                    {
+                        <p class="bb:text-sm bb:text-destructive" role="alert">@PortalText.Error(m_membersError)</p>
+                    }
+                    else if (m_members == null)
+                    {
+                        <FeedSkeleton />
+                    }
+                    else
+                    {
+                        <p class="bb:text-sm bb:text-muted-foreground" data-testid="member-total">@PortalText.Count(m_members.Total) @(m_members.Total == 1 ? "member" : "members")@(m_members.Members.Count < m_members.Total ? $", the first {PortalText.Count(m_members.Members.Count)} are listed" : "")</p>
+                        <BbDataTable TData="PortalRoleMember" Data="@m_members.Members" ShowToolbar="false" ShowPagination="false" AriaLabel="Members of the role">
+                            <Columns>
+                                <BbDataTableColumn TData="PortalRoleMember" TValue="string" Property="@(m => m.Name)" Header="Player">
+                                    <CellTemplate Context="member">
+                                        <BbLink Href="@PortalRoutes.PlayerPage(member.UserId)" data-testid="member-row">@member.Name</BbLink>
+                                    </CellTemplate>
+                                </BbDataTableColumn>
+                                <BbDataTableColumn TData="PortalRoleMember" TValue="string" Property="@(m => m.Source)" Header="Source">
+                                    <CellTemplate Context="member">
+                                        @if (member.Local)
+                                        {
+                                            <BbBadge Variant="BadgeVariant.Outline">local</BbBadge>
+                                        }
+                                        else
+                                        {
+                                            <BbBadge Variant="BadgeVariant.Secondary"><BbBadgeIcon Name="link" />from <span class="go-capitalize">@member.Source.Replace("upstream:", "")</span></BbBadge>
+                                        }
+                                    </CellTemplate>
+                                </BbDataTableColumn>
+                                <BbDataTableColumn TData="PortalRoleMember" TValue="string" Property="@(m => m.GrantedBy ?? "")" Header="Granted by" CellClass="bb:text-muted-foreground" />
+                                <BbDataTableColumn TData="PortalRoleMember" TValue="string" Property="@(m => PortalText.Date(m.GrantedAt))" Header="Granted at" CellClass="go-nowrap" />
+                                @if (!ReadOnly)
+                                {
+                                    <BbDataTableColumn TData="PortalRoleMember" TValue="string" Property="@(m => m.Name)" Header="Remove" HeaderClass="go-sr-header">
+                                        <CellTemplate Context="member">
+                                            <span title="@(member.Local ? null : "Follows the sign-in provider")">
+                                                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => RemoveAsync(member))" Disabled="@(!member.Local || m_busy)" aria-label="@($"Remove {member.Name} from the role")" data-testid="remove-member">Remove</BbButton>
+                                            </span>
+                                        </CellTemplate>
+                                    </BbDataTableColumn>
+                                }
+                            </Columns>
+                            <EmptyTemplate>
+                                <BbEmpty Size="EmptySize.Small" Title="No members" Description="Nobody holds this role yet.">
+                                    <Icon>
+                                        <LucideIcon Name="users" />
+                                    </Icon>
+                                </BbEmpty>
+                            </EmptyTemplate>
+                        </BbDataTable>
+                    }
+
+                    @if (!ReadOnly && role.Name != "everyone")
+                    {
+                        <form class="bb:flex bb:flex-wrap bb:items-end bb:gap-2" @onsubmit="AddAsync">
+                            <div class="bb:space-y-2">
+                                <BbLabel For="member-id">Add player</BbLabel>
+                                <BbInput Id="member-id" @bind-Value="m_playerId" UpdateTiming="UpdateTiming.Immediate" Placeholder="Player id or name" autocomplete="off" spellcheck="false" Class="bb:w-64" />
+                            </div>
+                            <BbButton Type="ButtonType.Submit" Size="ButtonSize.Small" Loading="@m_busy" Disabled="@(!PortalRoleText.IsMemberTerm(m_playerId))" data-testid="add-member">
+                                <LucideIcon Name="shield-plus" Class="bb:h-4 bb:w-4" />
+                                Add
+                            </BbButton>
+                        </form>
+                    }
+                </BbCardContent>
+            </BbCard>
+        </BbTabsContent>
+    </BbTabs>
+
+    <BbDialog @bind-Open="m_deleteOpen">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>Delete @role.DisplayName?</BbDialogTitle>
+                <BbDialogDescription>The role is taken from everyone who holds it, and its permissions go with it. This cannot be undone.</BbDialogDescription>
+            </BbDialogHeader>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_deleteOpen = false)" Disabled="@m_saving">Cancel</BbButton>
+                <BbButton Variant="ButtonVariant.Destructive" OnClick="DeleteAsync" Loading="@m_saving" data-testid="confirm-delete-role">Delete</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
+}
+
+@code {
+    [Parameter]
+    public string Name { get; set; } = "";
+
+    private PortalRoleDefinition? m_role;
+    private IReadOnlyList<PortalPermissionEntry>? m_permissions;
+    private IReadOnlyList<(string Value, string Label)> m_places = [];
+    private PortalRoleMembers? m_members;
+    private string? m_error;
+    private string? m_membersError;
+    private string m_tab = "settings";
+    private string? m_loaded;
+    private bool m_saving;
+    private bool m_busy;
+    private bool m_deleteOpen;
+    private string? m_displayName;
+    private string? m_color;
+    private string? m_description;
+    private string m_above = "";
+    private string? m_playerId;
+    private readonly HashSet<string> m_chosen = new(StringComparer.Ordinal);
+
+    private PortalSessionInfo Session => Api.Session!;
+
+    private bool ReadOnly => m_role == null || m_role.Locked || !m_role.Manageable;
+
+    private bool ColorValid => String.IsNullOrWhiteSpace(m_color) || PortalRoleText.IsValidColor(m_color.Trim());
+
+    private bool Changed => m_role != null && (Trimmed(m_displayName) != m_role.DisplayName || Trimmed(m_color) != (m_role.Color ?? "") || Trimmed(m_description) != (m_role.Description ?? "")
+        || m_above != "" || !PortalRoleText.SameSet(m_chosen, m_role.Permissions));
+
+    private bool CanSave => Changed && ColorValid && Trimmed(m_displayName).Length > 0;
+
+    private static string Trimmed(string? text) => text?.Trim() ?? "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (m_loaded == Name)
+        {
+            return;
+        }
+
+        m_loaded = Name;
+        m_role = null;
+        m_members = null;
+        m_error = null;
+        m_tab = "settings";
+        if (Session.Can(PortalPermissions.RolesManage))
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        PortalAnswer<PortalRoleList> roles = await Api.ListRolesAsync();
+        PortalAnswer<PortalPermissionList> permissions = await Api.ListPermissionsAsync();
+        m_error = roles.Error ?? permissions.Error;
+        if (m_error != null)
+        {
+            return;
+        }
+
+        PortalRoleDefinition? role = roles.Value!.Roles.FirstOrDefault(r => r.Name == Name.ToLowerInvariant());
+        if (role == null)
+        {
+            m_error = "not_found";
+            return;
+        }
+
+        m_permissions = permissions.Value!.Permissions;
+        m_places = PortalRoleText.Placements(roles.Value.Roles, role.Name);
+        Show(role);
+        if (m_tab == "members")
+        {
+            await LoadMembersAsync();
+        }
+    }
+
+    private void Show(PortalRoleDefinition role)
+    {
+        m_role = role;
+        m_displayName = role.DisplayName;
+        m_color = role.Color;
+        m_description = role.Description;
+        m_above = "";
+        m_chosen.Clear();
+        m_chosen.UnionWith(role.Permissions);
+    }
+
+    private async Task ShowTab(string tab)
+    {
+        m_tab = tab;
+        if (tab == "members" && m_members == null)
+        {
+            await LoadMembersAsync();
+        }
+    }
+
+    private async Task LoadMembersAsync()
+    {
+        PortalAnswer<PortalRoleMembers> answer = await Api.RoleMembersAsync(m_role!.Name);
+        m_membersError = answer.Ok ? null : answer.Error;
+        m_members = answer.Value;
+    }
+
+    private async Task SaveAsync()
+    {
+        PortalRoleDefinition role = m_role!;
+        m_saving = true;
+        var change = new PortalRoleWrite
+        {
+            DisplayName = Trimmed(m_displayName) != role.DisplayName ? Trimmed(m_displayName) : null,
+            Color = Trimmed(m_color) != (role.Color ?? "") ? Trimmed(m_color) : null,
+            Description = Trimmed(m_description) != (role.Description ?? "") ? Trimmed(m_description) : null,
+            Above = m_above != "" ? m_above : null,
+            Permissions = PortalRoleText.SameSet(m_chosen, role.Permissions) ? null : m_chosen.Order(StringComparer.Ordinal).ToList()
+        };
+        PortalRuleOutcome<PortalRoleDefinition> saved = await Api.UpdateRoleAsync(role.Name, change);
+        m_saving = false;
+        if (!saved.Ok)
+        {
+            Toasts.Error(PortalText.RoleError(saved.Error, saved.Failure?.Field), "Not saved");
+            return;
+        }
+
+        Toasts.Show($"{saved.Value!.DisplayName} is saved and in the audit log.", "Done", ToastVariant.Success, 4000);
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        m_saving = true;
+        PortalOutcome outcome = await Api.DeleteRoleAsync(m_role!.Name);
+        m_saving = false;
+        m_deleteOpen = false;
+        if (!outcome.Ok)
+        {
+            Toasts.Error(PortalText.Error(outcome.Error), "Not deleted");
+            return;
+        }
+
+        Toasts.Show($"{m_role.DisplayName} is deleted and in the audit log.", "Done", ToastVariant.Success, 4000);
+        Navigation.NavigateTo(PortalRoutes.RolesPage);
+    }
+
+    private async Task AddAsync()
+    {
+        string term = m_playerId?.Trim() ?? "";
+        if (!PortalRoleText.IsMemberTerm(term))
+        {
+            return;
+        }
+
+        m_busy = true;
+        string label = "Player " + term;
+        if (!Int64.TryParse(term, out long id) || id <= 0)
+        {
+            PortalAnswer<PortalPlayerPage> found = await Api.ListPlayersAsync(new PortalPlayerQuery { Search = term }, 0, 10, default);
+            (PortalPlayerRow? player, string? error) = found.Ok ? PortalRoleText.PickMember(found.Value!.Players, term) : (null, PortalText.Error(found.Error));
+            if (player == null)
+            {
+                m_busy = false;
+                Toasts.Error(error!, "Not added");
+                return;
+            }
+            id = player.Id;
+            label = player.FullName;
+        }
+
+        PortalOutcome outcome = await Api.GrantRoleAsync(id, m_role!.Name);
+        m_busy = false;
+        if (outcome.Ok)
+        {
+            Toasts.Show($"{label} now holds {m_role.DisplayName}.", "Done", ToastVariant.Success, 4000);
+            m_playerId = null;
+            await LoadAsync();
+            await LoadMembersAsync();
+        }
+        else
+        {
+            Toasts.Error(outcome.Error == "not_found" ? "No player with that id." : PortalText.Error(outcome.Error), "Not added");
+        }
+    }
+
+    private async Task RemoveAsync(PortalRoleMember member)
+    {
+        m_busy = true;
+        PortalOutcome outcome = await Api.RevokeRoleAsync(member.UserId, m_role!.Name);
+        m_busy = false;
+        if (outcome.Ok)
+        {
+            Toasts.Show($"{member.Name} no longer holds {m_role.DisplayName}.", "Done", ToastVariant.Success, 4000);
+            await LoadAsync();
+            await LoadMembersAsync();
+        }
+        else
+        {
+            Toasts.Error(PortalText.Error(outcome.Error), "Not removed");
+        }
+    }
+}

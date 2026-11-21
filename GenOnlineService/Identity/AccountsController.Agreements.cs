@@ -43,6 +43,17 @@ namespace GenOnlineService.Identity
 
 		private static string TermsStepUrl(string target, string rules) => $"{AgreementsUrl(target)}&{AgreementStepField}={TermsStep}&{AgreementRulesField}={Uri.EscapeDataString(rules)}";
 
+		private async Task<string> AfterName(Int64 userID, string target)
+			=> (await OwedAgreements(userID)).Count > 0 ? AgreementsUrl(target) : target;
+
+		private async Task AcceptRequiredAgreements(Int64 userID)
+		{
+			foreach (AgreementDocument document in AgreementSettings.Required)
+			{
+				await Agreements.AcceptAsync(DbFactory, AgreementSettings, userID, document.Name, document.Version!, AgreementSource);
+			}
+		}
+
 		private AgreementsSettings AgreementSettings => m_settings.Agreements;
 
 		private IDbContextFactory<AppDbContext> DbFactory => HttpContext.RequestServices.GetRequiredService<IDbContextFactory<AppDbContext>>();

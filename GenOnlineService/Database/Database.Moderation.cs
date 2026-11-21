@@ -60,6 +60,7 @@ public static class AuditTargetKinds
 	public const string Setting = "setting";
 	public const string Announcement = "announcement";
 	public const string Lobby = "lobby";
+	public const string Role = "role";
 	public const string Flag = "flag";
 	public const string FlagRevision = "flag_revision";
 	public const string AnticheatReport = "anticheat_report";
@@ -78,6 +79,9 @@ public static class ModerationActions
 	public const string NameReset = "name_reset";
 	public const string RoleGrant = "role_grant";
 	public const string RoleRevoke = "role_revoke";
+	public const string RoleCreate = "role_create";
+	public const string RoleUpdate = "role_update";
+	public const string RoleDelete = "role_delete";
 	public const string MessageDelete = "message_delete";
 	public const string MessageLookup = "message_lookup";
 	public const string StaffMessage = "staff_message";

@@ -55,6 +55,8 @@ namespace GenOnlineService.Portal.Client
 		public const string FlagRevisions = "api/v1/flags/revisions";
 		public const string Rules = "api/v1/staff/rules";
 		public const string RuleMatches = "api/v1/staff/rules/matches";
+		public const string Roles = "api/v1/roles";
+		public const string Permissions = "api/v1/permissions";
 		public const string SignIn = "users/sign_in";
 		public const string SignOut = "users/sign_out";
 
@@ -78,10 +80,13 @@ namespace GenOnlineService.Portal.Client
 		public const string ConfigPage = "/admin/config";
 		public const string RulesPage = "/admin/rules";
 		public const string RuleMatchesPage = "/admin/rules/matches";
+		public const string RolesPage = "/admin/roles";
 
 		public static string PlayerPage(long id) => PlayersPage + "/" + id;
 
 		public static string RulePage(long id) => RulesPage + "/" + id;
+
+		public static string RolePage(string name) => RolesPage + "/" + Uri.EscapeDataString(name);
 
 		public static string RuleMatchesOf(long id) => RuleMatchesPage + "?rule=" + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
@@ -146,6 +151,9 @@ namespace GenOnlineService.Portal.Client
 		public static string LabelOf(string action) => action switch
 		{
 			"role_grant" => "Role granted",
+			"role_create" => "Role created",
+			"role_update" => "Role changed",
+			"role_delete" => "Role deleted",
 			"role_revoke" => "Role revoked",
 			"kick" => "Kick",
 			"mute" => "Mute",
@@ -210,7 +218,7 @@ namespace GenOnlineService.Portal.Client
 
 		public static readonly IReadOnlyList<string> All =
 		[
-			"role_grant", "role_revoke", "kick", "mute", "unmute", "ban", "unban", "rename", "name_reset",
+			"role_grant", "role_revoke", "role_create", "role_update", "role_delete", "kick", "mute", "unmute", "ban", "unban", "rename", "name_reset",
 			"message_delete", "message_lookup", "staff_message", "report_view", "report_close", "player_inspect",
 			"device_reveal", "connection_lookup", "anticheat_review", "announcement", "setting_update", "token_mint", "token_rotate",
 			"token_revoke", "sa_create", "sa_update", "sa_grant", "sa_revoke", "sa_disable", "sa_enable", "password_reset",
@@ -476,6 +484,75 @@ namespace GenOnlineService.Portal.Client
 		public string? AgreedVersion { get; init; }
 		public DateTime? AgreedAt { get; init; }
 		public bool Current { get; init; }
+	}
+
+	public sealed record PortalRoleDefinition
+	{
+		public string Name { get; init; } = "";
+		public string DisplayName { get; init; } = "";
+		public string? Color { get; init; }
+		public string? Description { get; init; }
+		public int Position { get; init; }
+		public bool BuiltIn { get; init; }
+
+		// Owner: nobody edits it in the service
+		public bool Locked { get; init; }
+
+		// The caller may edit or delete it: it sits below their own highest role
+		public bool Manageable { get; init; }
+		public IReadOnlyList<string> Permissions { get; init; } = [];
+		public int MemberCount { get; init; }
+	}
+
+	public sealed record PortalRoleList
+	{
+		public IReadOnlyList<PortalRoleDefinition> Roles { get; init; } = [];
+	}
+
+	public sealed record PortalPermissionEntry
+	{
+		public string Name { get; init; } = "";
+		public string Area { get; init; } = "";
+		public string Label { get; init; } = "";
+		public string Description { get; init; } = "";
+		public bool Held { get; init; }
+	}
+
+	public sealed record PortalPermissionList
+	{
+		public IReadOnlyList<PortalPermissionEntry> Permissions { get; init; } = [];
+	}
+
+	public sealed record PortalRoleMember
+	{
+		public long UserId { get; init; }
+		public string Name { get; init; } = "";
+
+		public string Source { get; init; } = "";
+		public DateTime GrantedAt { get; init; }
+		public string? GrantedBy { get; init; }
+
+		[JsonIgnore]
+		public bool Local => Source == "local";
+	}
+
+	public sealed record PortalRoleMembers
+	{
+		public int Total { get; init; }
+		public IReadOnlyList<PortalRoleMember> Members { get; init; } = [];
+	}
+
+	// A new role takes every field, a change only the fields to change; "" clears the color or the description
+	public sealed record PortalRoleWrite
+	{
+		public string? Name { get; init; }
+		public string? DisplayName { get; init; }
+		public string? Color { get; init; }
+		public string? Description { get; init; }
+		public int? Position { get; init; }
+
+		public string? Above { get; init; }
+		public IReadOnlyList<string>? Permissions { get; init; }
 	}
 
 	public sealed record PortalRoleGrant

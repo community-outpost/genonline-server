@@ -117,7 +117,7 @@ else
                                 }
                                 else
                                 {
-                                    <span class="bb:text-muted-foreground">@entry.TargetKind.Replace('_', ' ')@(entry.TargetId is long id ? " " + id : "")</span>
+                                    <span class="bb:text-muted-foreground">@entry.TargetKind.Replace('_', ' ')@(RoleNameOf(entry) is string roleName ? " " + roleName : entry.TargetId is long id ? " " + id : "")</span>
                                 }
                             </CellTemplate>
                         </BbDataTableColumn>
@@ -248,12 +248,18 @@ else
         }
     }
 
+    // role_create, role_update and role_delete rows carry the role's name in details.role
+    private static string? RoleNameOf(PortalAuditEvent entry) =>
+        entry.TargetKind == "role" && entry.Details is System.Text.Json.JsonElement d && d.ValueKind == System.Text.Json.JsonValueKind.Object
+        && d.TryGetProperty("role", out var role) && role.ValueKind == System.Text.Json.JsonValueKind.String ? role.GetString() : null;
+
     private static string DetailsOf(PortalAuditEvent entry)
     {
         if (entry.Details is not System.Text.Json.JsonElement details || details.ValueKind != System.Text.Json.JsonValueKind.Object)
         {
             return "";
         }
-        return String.Join(", ", details.EnumerateObject().Select(p => p.Name.Replace('_', ' ') + " " + (p.Value.ValueKind == System.Text.Json.JsonValueKind.String ? p.Value.GetString() : p.Value.GetRawText())));
+        // a role row lists only what changed: no false flags, nulls or empty lists; other rows show every field
+        return String.Join(", ", details.EnumerateObject().Where(p => entry.TargetKind != "role" || p.Value.ValueKind is not (System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.False) && !(p.Value.ValueKind == System.Text.Json.JsonValueKind.Array && p.Value.GetArrayLength() == 0)).Select(p => p.Name.Replace('_', ' ') + " " + (p.Value.ValueKind == System.Text.Json.JsonValueKind.String ? p.Value.GetString() : p.Value.GetRawText())));
     }
 }

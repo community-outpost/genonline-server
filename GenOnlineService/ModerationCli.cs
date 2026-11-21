@@ -197,15 +197,17 @@ namespace GenOnlineService
 				Int64 userID = ParseUserID(parsed.Positional[1]);
 				string role = parsed.Positional[2].ToLowerInvariant();
 
-				if (!StaffRoles.IsKnown(role))
-				{
-					throw new CliException($"Unknown role {role}. Known roles: {string.Join(", ", StaffRoles.All)}.");
-				}
-
 				string reason = ParseReason(parsed, required: false);
 				ModerationActor actor = ParseActor(parsed);
 
 				await using AppDbContext db = await OpenDatabase();
+
+				RoleCatalog catalog = await Database.StoredRoles.LoadCatalogAsync(db);
+				if (!catalog.IsKnown(role))
+				{
+					throw new CliException($"Unknown role {role}. Known roles: {string.Join(", ", catalog.Assignable.Select(r => r.Name))}.");
+				}
+
 				await RequireUser(db, userID);
 
 				if (verb == "grant")

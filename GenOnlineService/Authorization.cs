@@ -33,6 +33,7 @@ namespace GenOnlineService
 		public const string ChatMessageAnyone = "chat.message_anyone";
 		public const string ChatStaffBadge = "chat.staff_badge";
 		public const string NamesProtected = "names.protected";
+		public const string NamesUnrestricted = "names.unrestricted";
 		public const string SocialUnblockable = "social.unblockable";
 		public const string RolesManage = "roles.manage";
 		public const string ServerStats = "server.stats";
@@ -64,7 +65,7 @@ namespace GenOnlineService
 
 		public static readonly IReadOnlySet<string> Human = new HashSet<string>(StringComparer.Ordinal)
 		{
-			ModerationKick, ModerationBan, ModerationMute, ModerationRename, ChatDeleteAny, ChatMessageAnyone, ChatStaffBadge, NamesProtected, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage, AuditRead, SettingsManage, AnticheatReview, PlayersInspect, AccountsSupport, TextRulesManage, RulesManage, FlagsManage, PlaylistsManage, LaddersManage, ChannelsManage, BroadcastsManage
+			ModerationKick, ModerationBan, ModerationMute, ModerationRename, ChatDeleteAny, ChatMessageAnyone, ChatStaffBadge, NamesProtected, NamesUnrestricted, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage, AuditRead, SettingsManage, AnticheatReview, PlayersInspect, AccountsSupport, TextRulesManage, RulesManage, FlagsManage, PlaylistsManage, LaddersManage, ChannelsManage, BroadcastsManage
 		};
 
 		public static readonly IReadOnlySet<string> Machine = new HashSet<string>(StringComparer.Ordinal)
@@ -100,103 +101,53 @@ namespace GenOnlineService
 	{
 		private static readonly ILogger s_log = AppLog.For(typeof(StaffRoles));
 
-		public const string Moderator = "moderator";
-		public const string Admin = "admin";
+		public const string Moderator = RoleCatalog.Moderator;
+		public const string Admin = RoleCatalog.Admin;
 
 		// The top rank: admin's permissions, and the only rank above admin, so an owner manages admins. Granted with the
 		// roles CLI only (nobody outranks it), and never by a sign-in provider (Database.Upstream drops it)
-		public const string Owner = "owner";
+		public const string Owner = RoleCatalog.Owner;
 
 		// Caster grants no permission and no rank, it only switches on client features through Features:roles
-		public const string Caster = "caster";
+		public const string Caster = RoleCatalog.Caster;
 
-		private static readonly string[] s_moderatorPermissions =
-		{
-			Permissions.ModerationKick,
-			Permissions.ModerationMute,
-			Permissions.ModerationRename,
-			Permissions.ChatDeleteAny,
-			Permissions.ChatMessageAnyone
-		};
+		public const string Everyone = RoleCatalog.Everyone;
 
-		private static readonly string[] s_adminPermissions = s_moderatorPermissions.Concat(new[]
-		{
-			Permissions.ModerationBan,
-			Permissions.ChatStaffBadge,
-			Permissions.NamesProtected,
-			Permissions.SocialUnblockable,
-			Permissions.RolesManage,
-			Permissions.ServerStats,
-			Permissions.AnnouncementsSend,
-			Permissions.TokensManage,
-			Permissions.AuditRead,
-			Permissions.SettingsManage,
-			Permissions.AnticheatReview,
-			Permissions.PlayersInspect,
-			Permissions.AccountsSupport,
-			Permissions.TextRulesManage,
-			Permissions.RulesManage,
-			Permissions.FlagsManage,
-			Permissions.PlaylistsManage,
-			Permissions.LaddersManage,
-			Permissions.ChannelsManage,
-			Permissions.BroadcastsManage
-		}).ToArray();
+		// Staff rank decides who may moderate whom, it is the position of the highest role that carries a permission,
+		// and a player without such a role ranks 0
+		public const int AdminRank = RoleCatalog.AdminPosition;
+		public const int OwnerRank = RoleCatalog.OwnerPosition;
 
-		private static readonly Dictionary<string, HashSet<string>> s_rolePermissions = new(StringComparer.Ordinal)
-		{
-			[Moderator] = new HashSet<string>(s_moderatorPermissions, StringComparer.Ordinal),
-			[Admin] = new HashSet<string>(s_adminPermissions, StringComparer.Ordinal),
-			[Owner] = new HashSet<string>(s_adminPermissions, StringComparer.Ordinal),
-			[Caster] = new HashSet<string>(StringComparer.Ordinal)
-		};
-
-		// Staff rank decides who may moderate whom, a role the code does not know ranks as a player
-		public const int AdminRank = 2;
-		public const int OwnerRank = 3;
-
-		private static readonly Dictionary<string, int> s_roleRanks = new(StringComparer.Ordinal)
-		{
-			[Moderator] = 1,
-			[Admin] = AdminRank,
-			[Owner] = OwnerRank
-		};
-
+		private static volatile RoleCatalog s_catalog = RoleCatalog.Defaults;
 		private static volatile Dictionary<Int64, HashSet<string>> s_permissionsByUser = new();
 		private static volatile Dictionary<Int64, HashSet<string>> s_rolesByUser = new();
 		private static string s_lastUnknownRoles = String.Empty;
 
-		public static IReadOnlyCollection<string> All => s_rolePermissions.Keys;
+		public static RoleCatalog Catalog => s_catalog;
 
-		public static bool IsKnown(string role) => s_rolePermissions.ContainsKey(role);
+		public static IReadOnlyCollection<string> All => s_catalog.Assignable.Select(r => r.Name).ToList();
 
-		// A staff role carries a permission or a rank, so caster is a known role but not staff
-		public static bool IsStaff(string role) => (s_rolePermissions.TryGetValue(role, out HashSet<string>? permissions) && permissions.Count > 0) || s_roleRanks.ContainsKey(role);
+		public static bool IsKnown(string role) => s_catalog.IsKnown(role);
+
+		public static bool IsStaff(string role) => s_catalog.IsStaff(role);
 
 		public static bool HasPermission(Int64 userID, string permission)
 		{
-			return s_permissionsByUser.TryGetValue(userID, out HashSet<string>? permissions) && permissions.Contains(permission);
+			return s_permissionsByUser.TryGetValue(userID, out HashSet<string>? permissions)
+				? permissions.Contains(permission)
+				: s_catalog.EveryoneRole.Permissions.Contains(permission);
 		}
 
 		public static IReadOnlyCollection<string> PermissionsOf(Int64 userID)
 		{
-			return s_permissionsByUser.TryGetValue(userID, out HashSet<string>? permissions) ? permissions : Array.Empty<string>();
+			return s_permissionsByUser.TryGetValue(userID, out HashSet<string>? permissions) ? permissions : s_catalog.EveryoneRole.Permissions;
 		}
 
 		public static int Rank(Int64 userID) => RankOf(RolesOf(userID));
 
-		public static int RankOf(IEnumerable<string> roles)
-		{
-			int rank = 0;
-			foreach (string role in roles)
-			{
-				if (s_roleRanks.TryGetValue(role, out int roleRank) && roleRank > rank)
-				{
-					rank = roleRank;
-				}
-			}
-			return rank;
-		}
+		public static int RankOf(IEnumerable<string> roles) => s_catalog.RankOf(roles);
+
+		public static int PositionOf(IEnumerable<string> roles) => s_catalog.PositionOf(roles);
 
 		// Only a strictly higher rank may act on a user, so staff never moderate their peers or seniors
 		public static bool Outranks(int actorRank, Int64 targetID) => actorRank > Rank(targetID);
@@ -208,39 +159,14 @@ namespace GenOnlineService
 			return s_rolesByUser.TryGetValue(userID, out HashSet<string>? roles) ? roles : Array.Empty<string>();
 		}
 
-		// A role the code does not know grants nothing, so a typo in the database never widens access
-		public static HashSet<string> PermissionsFor(IEnumerable<string> roles)
-		{
-			var result = new HashSet<string>(StringComparer.Ordinal);
-
-			foreach (string role in roles)
-			{
-				if (s_rolePermissions.TryGetValue(role, out HashSet<string>? permissions))
-				{
-					result.UnionWith(permissions);
-				}
-			}
-
-			// a machine permission on a role is dropped, so no staff role can carry one
-			result.ExceptWith(Permissions.Machine);
-			return result;
-		}
-
-		// Logs a role definition that carries a machine permission; PermissionsFor drops it either way
-		public static void ValidateRoleDefinitions()
-		{
-			foreach ((string role, HashSet<string> permissions) in s_rolePermissions)
-			{
-				string machine = string.Join(", ", permissions.Where(Permissions.IsMachine));
-				if (machine.Length > 0)
-				{
-					s_log.LogError("Staff role {Role} lists machine permission(s) {Permissions}; they are ignored", role, machine);
-				}
-			}
-		}
+		// A role the service does not know grants nothing, so a typo in the database never widens access. Every player also
+		// holds the everyone role.
+		public static HashSet<string> PermissionsFor(IEnumerable<string> roles) => s_catalog.PermissionsFor(roles);
 
 		public static async Task Reload(AppDbContext db)
 		{
+			// the definitions go first, so the user maps below are built with the roles as they are now
+			s_catalog = await Database.StoredRoles.LoadCatalogAsync(db);
 			List<UserRole> rows = await Database.Moderation.GetAllRoles(db);
 
 			var next = rows

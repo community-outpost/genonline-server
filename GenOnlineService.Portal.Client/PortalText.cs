@@ -144,6 +144,11 @@ namespace GenOnlineService.Portal.Client
 			"moderation.reason_too_long" => "The reason is too long.",
 			"roles.rank" => "That role ranks the same as or above your own.",
 			"roles.upstream" => "That role comes from a sign-in provider and follows its sign-ins.",
+			"roles.locked" => "The owner role cannot be changed here.",
+			"roles.builtin" => "A built-in role cannot be deleted or moved.",
+			"roles.exists" => "A role with this name exists already.",
+			"roles.position_taken" => "There is no free place there. Pick another place for the role.",
+			"roles.permission_not_held" => "You can only give or take away permissions you hold yourself.",
 			"conflict" => "That name is in use, or the token is already revoked, expired or rotated.",
 			"token.limit_reached" => "This owner already holds the most active tokens allowed.",
 			"account.no_password" => "This account signs in with a provider only and has no password.",
@@ -153,6 +158,17 @@ namespace GenOnlineService.Portal.Client
 			"flag.in_use" => "The service itself reads this field, so it cannot be archived or moved out of the service.",
 			"flag.exists" => "A field with this key exists already.",
 			_ => "The service answered: " + code
+		};
+
+		public static string RoleError(string? code, string? field) => code != "invalid_argument" || field == null ? Error(code) : field switch
+		{
+			"name" => "The name needs 2 to 32 lowercase letters, digits or underscores, starting with a letter.",
+			"display_name" => "The display name is empty or too long.",
+			"color" => "The color must look like #rrggbb.",
+			"description" => "The description is too long.",
+			"position" => "That place is not allowed for a role.",
+			"permissions" => "A permission is not known or cannot go on a role.",
+			_ => "This is not valid: " + field + "."
 		};
 
 		public static string FlagError(string? code, string? field) => code != "invalid_argument" || field == null ? Error(code) : field switch

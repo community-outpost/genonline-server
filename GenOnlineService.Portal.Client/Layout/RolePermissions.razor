@@ -1,0 +1,56 @@
+<div class="bb:space-y-4" data-testid="role-permissions">
+    @foreach ((string area, IReadOnlyList<PortalPermissionEntry> entries) in PortalRoleText.ByArea(Permissions))
+    {
+        <div class="bb:space-y-2">
+            <p class="bb:text-sm bb:font-medium">@area</p>
+            @foreach (PortalPermissionEntry entry in entries)
+            {
+                bool locked = ReadOnly || !entry.Held;
+                <div class="bb:flex bb:items-center bb:gap-2">
+                    <BbSwitch Id="@($"{IdPrefix}-{entry.Name}")" Checked="@Chosen.Contains(entry.Name)" CheckedChanged="@((bool on) => Set(entry.Name, on))" Disabled="@locked" />
+                    <div class="bb:min-w-0">
+                        <BbLabel For="@($"{IdPrefix}-{entry.Name}")">@entry.Label <span class="bb:font-mono bb:text-xs bb:text-muted-foreground">@entry.Name</span></BbLabel>
+                        <p class="bb:text-xs bb:text-muted-foreground">
+                            @entry.Description
+                            @if (!ReadOnly && !entry.Held)
+                            {
+                                <span> You do not hold this permission.</span>
+                            }
+                        </p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<PortalPermissionEntry> Permissions { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public HashSet<string> Chosen { get; set; } = new(StringComparer.Ordinal);
+
+    [Parameter]
+    public bool ReadOnly { get; set; }
+
+    // keeps switch ids apart when two lists share a page
+    [Parameter]
+    public string IdPrefix { get; set; } = "permission";
+
+    [Parameter]
+    public EventCallback Changed { get; set; }
+
+    private async Task Set(string name, bool on)
+    {
+        if (on)
+        {
+            Chosen.Add(name);
+        }
+        else
+        {
+            Chosen.Remove(name);
+        }
+        await Changed.InvokeAsync();
+    }
+}

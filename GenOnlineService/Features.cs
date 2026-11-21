@@ -27,23 +27,21 @@ namespace GenOnlineService
 
 		public const string ConfigSection = "Features:roles";
 
-		public const string StatsExporter = "stats_exporter";
-		public const string Observer = "observer";
+		public const string LocalApi = "local_api";
 
 		// The lobby side of an observer seat, PLAYERTEMPLATE_OBSERVER in the game
 		public const int ObserverSide = -2;
 
 		private static readonly Regex s_name = new Regex("^[a-z][a-z0-9]*(_[a-z0-9]+)*$", RegexOptions.CultureInvariant);
 
-		public static readonly IReadOnlySet<string> Known = new HashSet<string>(StringComparer.Ordinal) { StatsExporter, Observer };
+		public static readonly IReadOnlySet<string> Known = new HashSet<string>(StringComparer.Ordinal) { LocalApi };
 
 		// Used when the environment has no Features:roles section, an environment that sets one replaces this map entirely
 		public static readonly IReadOnlyDictionary<string, string[]> Defaults = new Dictionary<string, string[]>(StringComparer.Ordinal)
 		{
-			[StaffRoles.Caster] = new[] { StatsExporter, Observer },
-			[StaffRoles.Moderator] = new[] { StatsExporter, Observer },
-			[StaffRoles.Admin] = new[] { StatsExporter, Observer },
-			[StaffRoles.Owner] = new[] { StatsExporter, Observer }
+			[StaffRoles.Caster] = new[] { LocalApi },
+			[StaffRoles.Admin] = new[] { LocalApi },
+			[StaffRoles.Owner] = new[] { LocalApi }
 		};
 
 		private static volatile IReadOnlyDictionary<string, string[]> s_featuresByRole = new Dictionary<string, string[]>(StringComparer.Ordinal);

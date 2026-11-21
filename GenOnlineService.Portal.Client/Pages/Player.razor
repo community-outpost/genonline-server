@@ -557,7 +557,14 @@ else
                                 <CellTemplate Context="grant">
                                     <span class="bb:inline-flex bb:items-center bb:gap-2" data-testid="role-row">
                                         <LucideIcon Name="shield" Class="bb:h-4 bb:w-4 bb:text-muted-foreground" />
-                                        @grant.Role
+                                        @if (Session.Can(PortalPermissions.RolesManage))
+                                        {
+                                            <BbLink Href="@PortalRoutes.RolePage(grant.Role)">@grant.Role</BbLink>
+                                        }
+                                        else
+                                        {
+                                            @grant.Role
+                                        }
                                     </span>
                                 </CellTemplate>
                             </BbDataTableColumn>
