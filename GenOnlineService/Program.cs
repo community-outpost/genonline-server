@@ -1643,7 +1643,29 @@ namespace GenOnlineService
 				});
 			}
 
-			// Devices, session events, chat messages, resolved reports, ended sanctions and the staff log past their retention are
+			{
+				GenOnlineService.Service.SelfRestartingTimer.Start(30000, stopping, app.Logger, "Match file check timer failed", async () =>
+				{
+					await RunObservedBackgroundJobAsync("match_file_check", app.Logger, async () =>
+					{
+						var factory = app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>();
+						await GenOnlineService.Service.MatchFileUploads.CheckDueAsync(factory, S3CredentialManager.Store, DateTime.UtcNow);
+					}, stopping);
+				});
+
+				_ = Task.Run(async () =>
+				{
+					try
+					{
+						await GenOnlineService.Service.MatchFileUploads.RecoverAsync(app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>(), DateTime.UtcNow);
+					}
+					catch (Exception ex)
+					{
+						app.Logger.LogWarning(ex, "Match file recovery failed");
+					}
+				});
+			}
+
 			{
 				GenOnlineService.Service.SelfRestartingTimer.Start(TimeSpan.FromHours(1).TotalMilliseconds, stopping, app.Logger, "Retention purge timer failed", async () =>
 				{

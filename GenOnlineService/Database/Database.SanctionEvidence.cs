@@ -90,11 +90,10 @@ namespace Database
 		// is not stored, so the match start date and the days before it are searched
 		public static IEnumerable<string> ScreenshotFolders(Int64 matchID, Int64 userID, DateTime matchStartedAt)
 		{
-			string user = Helpers.ComputeMD5Hash($"{matchID}_{userID}");
 			for (int daysBefore = -1; daysBefore <= 2; daysBefore++)
 			{
 				DateTime day = matchStartedAt.Date.AddDays(-daysBefore);
-				yield return $"{ScreenshotPrefix}{day.Year}/{day.Month}/{day.Day}/match_{matchID}/user_{user}/";
+				yield return $"{ScreenshotPrefix}{day:yyyyMMdd}/{matchID}/{userID}/";
 			}
 		}
 

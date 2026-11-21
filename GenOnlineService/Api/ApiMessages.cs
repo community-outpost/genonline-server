@@ -245,6 +245,24 @@ namespace GenOnlineService.Api
 	{
 		public string ScreenshotUrl { get; init; } = "";
 		public string ReplayUrl { get; init; } = "";
+
+		// Absent when stats uploads are off
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? StatsUrl { get; init; }
+
+		// Form fields to send before the file when the URL is a form target, not a PUT URL
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public IReadOnlyDictionary<string, string>? ScreenshotFields { get; init; }
+
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public IReadOnlyDictionary<string, string>? ReplayFields { get; init; }
+
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public IReadOnlyDictionary<string, string>? StatsFields { get; init; }
+
+		// When the upload URLs stop working, so the game can end an upload that would be refused anyway
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public DateTime? ExpiresAt { get; init; }
 	}
 
 	[ApiFixture("get-matchmaking-playlists.response")]

@@ -78,6 +78,7 @@ namespace GenOnlineService.Flags
 			"telemetry": {
 				"screenshot_probes": true,
 				"replay_upload": true,
+				"stats_upload": true,
 				"screenshot_width": 1440,
 				"screenshot_height": 700,
 				"screenshot_upload_bytes_per_sec": 131072,

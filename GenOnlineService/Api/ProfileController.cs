@@ -70,6 +70,21 @@ namespace GenOnlineService.Api
 			return ApiResults.Answer(await MatchActions.SubmitResultAsync(m_dbFactory, m_lobbyManager, Me, matchID, body ?? new MatchResultRequest()));
 		}
 
+		// A repeated report changes nothing, and only the storage can make a file uploaded
+		[EndpointSummary("Reports how the upload of one match file of the caller ended.")]
+		[ProducesResponseType<GenOnlineService.Service.MatchFileReportResponse>(StatusCodes.Status200OK)]
+		[ApiRequestBody(typeof(GenOnlineService.Service.MatchFileReportRequest))]
+		[HttpPost("~/api/v1/matches/{matchID:long}/files/me/report")]
+		public async Task<IActionResult> ReportFile(long matchID)
+		{
+			(GenOnlineService.Service.MatchFileReportRequest? body, Failure? malformed) = await ReadBodyAsync<GenOnlineService.Service.MatchFileReportRequest>();
+			if (malformed != null)
+			{
+				return ApiResults.Fail(malformed.Value);
+			}
+			return ApiResults.Answer(await GenOnlineService.Service.MatchFileUploads.ReportAsync(m_dbFactory, S3CredentialManager.Store, Me, matchID, body ?? new GenOnlineService.Service.MatchFileReportRequest(), DateTime.UtcNow));
+		}
+
 		[EndpointSummary("Lists the matchmaking playlists; If-None-Match with the ETag answers 304.")]
 		[ProducesResponseType<PlaylistsResponse>(StatusCodes.Status200OK)]
 		[ProducesResponseType(StatusCodes.Status304NotModified)]

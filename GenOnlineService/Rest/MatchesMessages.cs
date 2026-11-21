@@ -23,12 +23,22 @@ using System.Text.Json.Serialization;
 
 namespace GenOnlineService.Rest
 {
-	public enum MatchFileType { Unknown, Screenshot, Replay }
+	public enum MatchFileType { Unknown, Screenshot, Replay, Stats }
+
+	public enum MatchFileStatus { Issued, Uploaded, Failed, Missing }
 
 	public sealed record MatchFile
 	{
 		public string Name { get; init; } = "";
 		public MatchFileType Type { get; init; }
+
+		// The public address of the file, left out when its storage key was not recorded
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Url { get; init; }
+
+		// Where the upload stands, left out for files stored before statuses were recorded
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public MatchFileStatus? Status { get; init; }
 	}
 
 	// One of the 8 slots of a match in slot order; user_id is null for open, closed and AI slots and for removed accounts.
@@ -133,7 +143,17 @@ namespace GenOnlineService.Rest
 					{
 						EMetadataFileType.FILE_TYPE_SCREENSHOT => MatchFileType.Screenshot,
 						EMetadataFileType.FILE_TYPE_REPLAY => MatchFileType.Replay,
+						EMetadataFileType.FILE_TYPE_STATS => MatchFileType.Stats,
 						_ => MatchFileType.Unknown
+					},
+					Url = S3CredentialManager.PublicUrl(file.file_key),
+					Status = file.file_status switch
+					{
+						EMetadataFileStatus.FILE_STATUS_ISSUED => MatchFileStatus.Issued,
+						EMetadataFileStatus.FILE_STATUS_UPLOADED => MatchFileStatus.Uploaded,
+						EMetadataFileStatus.FILE_STATUS_FAILED => MatchFileStatus.Failed,
+						EMetadataFileStatus.FILE_STATUS_MISSING => MatchFileStatus.Missing,
+						_ => null
 					}
 				}).ToArray()
 			};

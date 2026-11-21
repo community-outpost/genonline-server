@@ -27,6 +27,8 @@ namespace GenOnlineService.Service
 	{
 		Task<IReadOnlyList<string>> ListAsync(string prefix, CancellationToken cancellationToken = default);
 
+		Task<StoredObjectInfo?> HeadAsync(string key, CancellationToken cancellationToken = default);
+
 		// Null when no object has the key, for example a screenshot its TTL removed
 		Task<StoredObject?> GetAsync(string key, CancellationToken cancellationToken = default);
 
@@ -60,6 +62,19 @@ namespace GenOnlineService.Service
 			}
 			while (response.IsTruncated == true);
 			return keys;
+		}
+
+		public async Task<StoredObjectInfo?> HeadAsync(string key, CancellationToken cancellationToken = default)
+		{
+			try
+			{
+				GetObjectMetadataResponse response = await m_client.GetObjectMetadataAsync(m_bucket, key, cancellationToken);
+				return new StoredObjectInfo(response.ContentLength, response.Headers.ContentType ?? "application/octet-stream", response.ETag ?? "");
+			}
+			catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+			{
+				return null;
+			}
 		}
 
 		public async Task<StoredObject?> GetAsync(string key, CancellationToken cancellationToken = default)

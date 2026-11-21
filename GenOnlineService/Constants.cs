@@ -18,6 +18,7 @@
 
 using Amazon.S3;
 using Amazon.S3.Model;
+using GenOnlineService.Service;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -2067,31 +2068,52 @@ namespace GenOnlineService
 			endpoint = s3_endpoint;
 		}
 
-		public static async Task<string?> GetPresignedURL(EMetadataFileType fileType, EScreenshotType screenshotTypeIfScreenshot, UInt64 matchID, Int64 userID, int slotIndex, DateTime matchStartTime)
+		// The name carries the ids so files saved from different matches never collide, the stats name is the replay name with another extension
+		public static DateTime? UrlExpiry()
 		{
 			if (!s_uploadsEnabled || m_s3client == null)
 			{
 				return null;
 			}
 
-			GetS3Config(out int TTL, out string access_key, out string secret_key, out string bucket_name, out string client_endpoint);
-			TimeSpan expiresIn = TimeSpan.FromMinutes(TTL);
+			GetS3Config(out int TTL, out _, out _, out _, out _);
+			return DateTime.UtcNow.AddMinutes(TTL);
+		}
 
-			DateTime utcNow = DateTime.UtcNow;
-			int hour = utcNow.Hour;
-			int minute = utcNow.Minute;
+		internal static string ReplayFileName(UInt64 matchID, Int64 userID) => String.Format("match_{0}_player_{1}.rep", matchID, userID);
+		internal static string StatsFileName(UInt64 matchID, Int64 userID) => String.Format("match_{0}_player_{1}.stats.json.gz", matchID, userID);
 
-			string strPerMatchUserIDKey = Helpers.ComputeMD5Hash(String.Format("{0}_{1}", matchID, userID));
-			string strFileName = null;
+		// One prefix per file type so each type can have its own retention, with the same folders under each
+		internal static string ObjectKey(EMetadataFileType fileType, string fileName, UInt64 matchID, Int64 userID, DateTime matchStartTime)
+		{
+			string prefix = fileType switch
+			{
+				EMetadataFileType.FILE_TYPE_SCREENSHOT => "screenshots",
+				EMetadataFileType.FILE_TYPE_REPLAY => "replays",
+				_ => "stats"
+			};
+			return String.Format("{0}/{1}/{2}/{3}/{4}", prefix, matchStartTime.ToString("yyyyMMdd", CultureInfo.InvariantCulture), matchID, userID, fileName);
+		}
 
-			string strContentType = String.Empty;
-			string strFolderPrefix = String.Empty; ;
+		public static string? PublicUrl(string? objectKey)
+		{
+			IConfigurationSection? section = Program.g_Config?.GetSection("MatchData");
+			string? baseUrl = section?.GetValue<string>("s3_public_base_url");
+			if (baseUrl == null)
+			{
+				string? endpoint = section?.GetValue<string>("s3_endpoint");
+				string? bucket = section?.GetValue<string>("s3_bucket_name");
+				baseUrl = endpoint == null || bucket == null ? null : endpoint.TrimEnd('/') + "/" + bucket;
+			}
 
+			return String.IsNullOrEmpty(objectKey) || baseUrl == null ? null : baseUrl.TrimEnd('/') + "/" + objectKey;
+		}
 
+		private static (string FileName, string ContentType)? Describe(EMetadataFileType fileType, EScreenshotType screenshotTypeIfScreenshot, UInt64 matchID, Int64 userID)
+		{
 			if (fileType == EMetadataFileType.FILE_TYPE_SCREENSHOT)
 			{
-				strContentType = "image/jpeg";
-				fileType = EMetadataFileType.FILE_TYPE_SCREENSHOT;
+				DateTime utcNow = DateTime.UtcNow;
 
 				string screenshotTypePrefix = "screenshot";
 				if (screenshotTypeIfScreenshot == EScreenshotType.SCREENSHOT_TYPE_LOADSCREEN)
@@ -2113,24 +2135,80 @@ namespace GenOnlineService
 					screenshotTypePrefix = "scorescreen";
 				}
 
-				strFileName = String.Format("screenshot_{0}_{1}_{2}.jpg", screenshotTypePrefix, hour, minute);
-				strFolderPrefix = "screenshots";
+				return (String.Format("match_{0}_player_{1}_{2}_{3}_{4}.jpg", matchID, userID, screenshotTypePrefix, utcNow.Hour, utcNow.Minute), "image/jpeg");
 			}
 			else if (fileType == EMetadataFileType.FILE_TYPE_REPLAY)
 			{
-				strContentType = "application/octet-stream";
-				fileType = EMetadataFileType.FILE_TYPE_REPLAY;
-
-				strFileName = String.Format("match_{0}_user_{1}_replay.rep", matchID, strPerMatchUserIDKey);
-				strFolderPrefix = "replays";
+				return (ReplayFileName(matchID, userID), "application/octet-stream");
+			}
+			else if (fileType == EMetadataFileType.FILE_TYPE_STATS)
+			{
+				return (StatsFileName(matchID, userID), "application/gzip");
 			}
 
-			if (strFileName == null)
+			return null;
+		}
+
+		// MatchData:upload_mode is put (a presigned PUT URL, the default) or post (a signed form that lets the storage enforce the size)
+		private static bool UsesPostForms()
+		{
+			return String.Equals(Program.g_Config?.GetSection("MatchData").GetValue<string>("upload_mode"), "post", StringComparison.OrdinalIgnoreCase);
+		}
+
+		public static async Task<UploadTarget?> GetUploadTarget(EMetadataFileType fileType, EScreenshotType screenshotTypeIfScreenshot, UInt64 matchID, Int64 userID, int slotIndex, DateTime matchStartTime)
+		{
+			if (!UsesPostForms())
+			{
+				string? url = await GetPresignedURL(fileType, screenshotTypeIfScreenshot, matchID, userID, slotIndex, matchStartTime);
+				return url == null ? null : new UploadTarget(url);
+			}
+
+			if (!s_uploadsEnabled || m_s3client == null)
 			{
 				return null;
 			}
 
-			string objectKey = String.Format("{3}/{4}/{5}/{6}/match_{0}/user_{1}/{2}", matchID, strPerMatchUserIDKey, strFileName, strFolderPrefix, matchStartTime.Year, matchStartTime.Month, matchStartTime.Day);
+			(string FileName, string ContentType)? file = Describe(fileType, screenshotTypeIfScreenshot, matchID, userID);
+			if (file == null)
+			{
+				return null;
+			}
+
+			GetS3Config(out int TTL, out string access_key, out string secret_key, out string bucket_name, out string client_endpoint);
+			IConfigurationSection section = Program.g_Config!.GetSection("MatchData");
+			string region = section.GetValue<string>("s3_region") ?? throw new Exception("s3_region missing in config");
+			long maxBytes = section.GetValue<long?>("s3_max_upload_bytes") ?? 8L * 1024 * 1024;
+
+			string objectKey = ObjectKey(fileType, file.Value.FileName, matchID, userID, matchStartTime);
+			S3PostForm form = S3PostPolicy.Create(client_endpoint, bucket_name, region, access_key, secret_key, objectKey, file.Value.ContentType,
+				1, maxBytes, DateTime.UtcNow, TimeSpan.FromMinutes(TTL), section.GetValue<string>("s3_object_acl"));
+
+			using var scope = ServiceLocator.Services.CreateScope();
+			var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+			await using var db = await factory.CreateDbContextAsync();
+			await Database.MatchHistory.AttachMatchHistoryMetadata(db, matchID, slotIndex, file.Value.FileName, objectKey, fileType, form.ExpiresAt);
+			MatchFileUploads.Track((long)matchID, slotIndex, objectKey, form.ExpiresAt);
+
+			return new UploadTarget(form.Url, form.Fields.ToDictionary(f => f.Key, f => f.Value));
+		}
+
+		public static async Task<string?> GetPresignedURL(EMetadataFileType fileType, EScreenshotType screenshotTypeIfScreenshot, UInt64 matchID, Int64 userID, int slotIndex, DateTime matchStartTime)
+		{
+			if (!s_uploadsEnabled || m_s3client == null)
+			{
+				return null;
+			}
+
+			GetS3Config(out int TTL, out string access_key, out string secret_key, out string bucket_name, out string client_endpoint);
+			TimeSpan expiresIn = TimeSpan.FromMinutes(TTL);
+
+			(string FileName, string ContentType)? file = Describe(fileType, screenshotTypeIfScreenshot, matchID, userID);
+			if (file == null)
+			{
+				return null;
+			}
+
+			string objectKey = ObjectKey(fileType, file.Value.FileName, matchID, userID, matchStartTime);
 
 			var request = new GetPreSignedUrlRequest
 			{
@@ -2138,7 +2216,7 @@ namespace GenOnlineService
 				Key = objectKey,
 				Verb = HttpVerb.PUT,
 				Expires = DateTime.UtcNow.Add(expiresIn),
-				ContentType = strContentType
+				ContentType = file.Value.ContentType
 			};
 
 			// anytime we get an S3 uri, register the metadata
@@ -2146,7 +2224,8 @@ namespace GenOnlineService
 			var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
 			await using var db = await factory.CreateDbContextAsync();
 
-			await Database.MatchHistory.AttachMatchHistoryMetadata(db, matchID, slotIndex, strFileName, fileType);
+			await Database.MatchHistory.AttachMatchHistoryMetadata(db, matchID, slotIndex, file.Value.FileName, objectKey, fileType, request.Expires!.Value);
+			MatchFileUploads.Track((long)matchID, slotIndex, objectKey, request.Expires!.Value);
 
 			return await m_s3client.GetPreSignedURLAsync(request);
 		}

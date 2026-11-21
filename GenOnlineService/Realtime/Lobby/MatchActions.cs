@@ -42,7 +42,9 @@ namespace GenOnlineService.Realtime
 			UInt64 matchID = (UInt64)matchIDValue;
 			string body = JsonSerializer.Serialize(request, ApiResults.Json);
 			(long, long) key = (matchIDValue, me);
-			if (s_answers.TryGetValue(key, out var kept) && kept.Body == body && DateTime.UtcNow - kept.At < s_answerLifetime)
+			// A kept answer is only reused while its upload URLs still work
+			if (s_answers.TryGetValue(key, out var kept) && kept.Body == body && DateTime.UtcNow - kept.At < s_answerLifetime
+				&& (kept.Answer.ExpiresAt == null || kept.Answer.ExpiresAt > DateTime.UtcNow))
 			{
 				return Result.Success(kept.Answer);
 			}
@@ -77,8 +79,12 @@ namespace GenOnlineService.Realtime
 			// The lobby outlives a disconnected player's session, so the report is kept there for the winner decision
 			outcomeLobby?.RecordPlayerOutcome(me, request.Won);
 
-			string screenshotURL = await S3CredentialManager.GetPresignedURL(EMetadataFileType.FILE_TYPE_SCREENSHOT, EScreenshotType.SCREENSHOT_TYPE_SCORESCREEN, matchID, me, slotIndexInLobby, lobbyCreationTime) ?? String.Empty;
-			string replayURL = await S3CredentialManager.GetPresignedURL(EMetadataFileType.FILE_TYPE_REPLAY, EScreenshotType.NONE, matchID, me, slotIndexInLobby, lobbyCreationTime) ?? String.Empty;
+			DateTime? urlExpiry = S3CredentialManager.UrlExpiry();
+			MatchResultResponse answer = await BuildAnswerAsync(
+				(fileType, screenshotType) => S3CredentialManager.GetUploadTarget(fileType, screenshotType, matchID, me, slotIndexInLobby, lobbyCreationTime),
+				GenOnlineService.Flags.FlagCatalog.Get(StatsUploadFlag, true),
+				GenOnlineService.Flags.FlagCatalog.Get(ReplayUploadFlag, true),
+				urlExpiry);
 
 			MatchStats stats = request.Stats;
 			await using (AppDbContext db = await dbFactory.CreateDbContextAsync())
@@ -91,7 +97,6 @@ namespace GenOnlineService.Realtime
 				(GenOnlineService.Rules.RuleEventFields.MatchId, matchIDValue), (GenOnlineService.Rules.RuleEventFields.Won, request.Won),
 				(GenOnlineService.Rules.RuleEventFields.Desynced, request.Desynced), (GenOnlineService.Rules.RuleEventFields.DurationS, (long)request.DurationS)));
 
-			MatchResultResponse answer = new MatchResultResponse { ScreenshotUrl = screenshotURL, ReplayUrl = replayURL };
 			DateTime now = DateTime.UtcNow;
 			foreach (KeyValuePair<(long MatchID, long UserID), (string Body, MatchResultResponse Answer, DateTime At)> old in s_answers)
 			{
@@ -104,8 +109,29 @@ namespace GenOnlineService.Realtime
 			return Result.Success(answer);
 		}
 
+		public const string StatsUploadFlag = "client.telemetry.stats_upload";
+		public const string ReplayUploadFlag = "client.telemetry.replay_upload";
+
+		internal static async Task<MatchResultResponse> BuildAnswerAsync(Func<EMetadataFileType, EScreenshotType, Task<GenOnlineService.Service.UploadTarget?>> presign, bool statsUploadEnabled, bool replayUploadEnabled, DateTime? expiresAt = null)
+		{
+			GenOnlineService.Service.UploadTarget? screenshot = await presign(EMetadataFileType.FILE_TYPE_SCREENSHOT, EScreenshotType.SCREENSHOT_TYPE_SCORESCREEN);
+			GenOnlineService.Service.UploadTarget? replay = replayUploadEnabled ? await presign(EMetadataFileType.FILE_TYPE_REPLAY, EScreenshotType.NONE) : null;
+			GenOnlineService.Service.UploadTarget? stats = statsUploadEnabled ? await presign(EMetadataFileType.FILE_TYPE_STATS, EScreenshotType.NONE) : null;
+
+			return new MatchResultResponse
+			{
+				ScreenshotUrl = screenshot?.Url ?? String.Empty,
+				ScreenshotFields = screenshot?.Fields,
+				ReplayUrl = replay?.Url ?? String.Empty,
+				ReplayFields = replay?.Fields,
+				StatsUrl = stats?.Url,
+				StatsFields = stats?.Fields,
+				ExpiresAt = expiresAt
+			};
+		}
+
 		// null when the caller did not play in the match
-		private static async Task<(int Slot, DateTime StartedAt, DateTime? FinishedAt)?> FindSeatAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 matchID, Int64 me)
+		internal static async Task<(int Slot, DateTime StartedAt, DateTime? FinishedAt)?> FindSeatAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 matchID, Int64 me)
 		{
 			await using AppDbContext db = await dbFactory.CreateDbContextAsync();
 			var seat = await db.MatchPlayers.AsNoTracking()

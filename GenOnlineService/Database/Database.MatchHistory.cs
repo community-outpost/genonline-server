@@ -222,12 +222,37 @@ namespace GenOnlineService
 	{
 		UNKNOWN = -1,
 		FILE_TYPE_SCREENSHOT = 0,
-		FILE_TYPE_REPLAY = 1
+		FILE_TYPE_REPLAY = 1,
+		FILE_TYPE_STATS = 2
+	};
+
+	public enum EMetadataFileStatus
+	{
+		FILE_STATUS_ISSUED = 0,
+		FILE_STATUS_UPLOADED = 1,
+		FILE_STATUS_FAILED = 2,
+		FILE_STATUS_MISSING = 3
 	};
 
 	public struct MemberMetadataModel
 	{
 		public string file_name { get; set; }
+
+		// The object key in the storage bucket, absent for files stored before keys were recorded
+		public string? file_key { get; set; }
+
+		// Absent for files stored before statuses were recorded
+		public EMetadataFileStatus? file_status { get; set; }
+
+		public DateTime? file_expires_at { get; set; }
+
+		public long? file_size { get; set; }
+		public string? file_etag { get; set; }
+		public DateTime? file_verified_at { get; set; }
+
+		public string? file_failure_reason { get; set; }
+		public int? file_failure_http_status { get; set; }
+		public string? file_failure_detail { get; set; }
 		public EMetadataFileType file_type { get; set; }
 	}
 
@@ -1016,7 +1041,9 @@ namespace Database
 			ulong matchId,
 			int slotIndex,
 			string fileName,
-			EMetadataFileType fileType)
+			string fileKey,
+			EMetadataFileType fileType,
+			DateTime expiresAt)
 		{
 			if (matchId == 0 || slotIndex < 0 || slotIndex >= SlotCount)
 				return;
@@ -1029,9 +1056,14 @@ namespace Database
 
 				MatchPlayerDetails details = ReadDetails(player.Details);
 				details.metadata ??= new List<MemberMetadataModel>();
+
+				details.metadata.RemoveAll(entry => entry.file_name == fileName && entry.file_type == fileType);
 				details.metadata.Add(new MemberMetadataModel
 				{
 					file_name = fileName,
+					file_key = fileKey,
+					file_status = EMetadataFileStatus.FILE_STATUS_ISSUED,
+					file_expires_at = expiresAt,
 					file_type = fileType
 				});
 
@@ -1042,6 +1074,65 @@ namespace Database
 			{
 				db.ChangeTracker.Clear();
 			}
+		}
+
+		public static async Task<MemberMetadataModel?> GetFile(AppDbContext db, long matchId, int slotIndex, string fileKey, CancellationToken cancellationToken = default)
+		{
+			MatchPlayer? player = await db.MatchPlayers.AsNoTracking().FirstOrDefaultAsync(p => p.MatchId == matchId && p.Slot == (short)slotIndex, cancellationToken);
+			if (player == null)
+				return null;
+
+			List<MemberMetadataModel>? files = ReadDetails(player.Details).metadata;
+			if (files == null)
+				return null;
+
+			foreach (MemberMetadataModel file in files)
+			{
+				if (file.file_key == fileKey)
+					return file;
+			}
+			return null;
+		}
+
+		public static async Task SetFile(AppDbContext db, long matchId, int slotIndex, MemberMetadataModel updated, CancellationToken cancellationToken = default)
+		{
+			try
+			{
+				MatchPlayer? player = await GetPlayer(db, matchId, slotIndex, cancellationToken);
+				if (player == null)
+					return;
+
+				MatchPlayerDetails details = ReadDetails(player.Details);
+				int index = details.metadata?.FindIndex(file => file.file_key == updated.file_key) ?? -1;
+				if (index < 0)
+					return;
+
+				details.metadata![index] = updated;
+				player.Details = WriteDetails(details);
+				await db.SaveChangesAsync(cancellationToken);
+			}
+			finally
+			{
+				db.ChangeTracker.Clear();
+			}
+		}
+
+		public static async Task<List<(long MatchId, int Slot, MemberMetadataModel File)>> ListIssuedFiles(AppDbContext db, DateTime startedAfter, CancellationToken cancellationToken = default)
+		{
+			var found = new List<(long, int, MemberMetadataModel)>();
+			var players = await db.MatchPlayers.AsNoTracking()
+				.Where(p => p.Details != null && p.Details.Contains("\"file_status\":0"))
+				.Join(db.Matches.AsNoTracking().Where(m => m.StartedAt > startedAfter), p => p.MatchId, m => m.Id, (p, m) => new { p.MatchId, p.Slot, p.Details })
+				.ToListAsync(cancellationToken);
+			foreach (var player in players)
+			{
+				foreach (MemberMetadataModel file in ReadDetails(player.Details).metadata ?? new List<MemberMetadataModel>())
+				{
+					if (file.file_status == EMetadataFileStatus.FILE_STATUS_ISSUED && file.file_key != null)
+						found.Add((player.MatchId, player.Slot, file));
+				}
+			}
+			return found;
 		}
 
 		public static async Task UpdateLeaderboardAndElo(AppDbContext db, GenOnlineService.Lobby lobby)
