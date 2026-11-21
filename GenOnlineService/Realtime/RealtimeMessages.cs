@@ -579,6 +579,10 @@ namespace GenOnlineService.Realtime
 		public string ChannelId { get; init; } = "";
 		public int Unread { get; init; }
 		public Message? Last { get; init; }
+
+		// The other user of a dm: conversation, so the client can name it when no message of theirs is in view. Omitted for groups
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public Member? Peer { get; init; }
 	}
 
 	public sealed record ConversationsEvent

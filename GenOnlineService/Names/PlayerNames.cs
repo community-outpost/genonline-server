@@ -75,6 +75,7 @@ namespace GenOnlineService.Names
 			{
 				return Result.NotFound("user");
 			}
+			await AccessControl.NameChosen(me);
 			if (change != null)
 			{
 				await RealtimeNames.PublishOne(change);
@@ -220,6 +221,8 @@ namespace GenOnlineService.Names
 					return (Result.Success(), false);
 			}
 
+			// any new name settles one the player owed
+			await AccessControl.NameChosen(userID);
 			await RealtimeNames.PublishOne(change!);
 			return (Result.Success(), true);
 		}

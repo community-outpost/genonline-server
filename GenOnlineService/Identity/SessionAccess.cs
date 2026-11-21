@@ -50,6 +50,24 @@ namespace GenOnlineService.Identity
 
 		private static readonly SemaphoreSlim s_reloadGate = new SemaphoreSlim(1, 1);
 
+		// A name chosen or set here lets the player in at once on this copy; other copies catch up on their reconcile tick.
+		// Behind the reload gate, so a reload that read the database before the change cannot put the player back.
+		public static async Task NameChosen(Int64 userID)
+		{
+			await s_reloadGate.WaitAsync();
+			try
+			{
+				if (s_nameRequired.Contains(userID))
+				{
+					s_nameRequired = new HashSet<Int64>(s_nameRequired.Where(id => id != userID));
+				}
+			}
+			finally
+			{
+				s_reloadGate.Release();
+			}
+		}
+
 		// Moderation calls this right after a ban as well as the reconcile tick, so reloads never overlap
 		public static async Task Reload(AppDbContext db)
 		{

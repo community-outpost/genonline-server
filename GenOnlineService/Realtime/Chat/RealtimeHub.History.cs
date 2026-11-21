@@ -226,7 +226,7 @@ namespace GenOnlineService.Realtime
 			// users without a row no longer exist and are left out
 			List<(DateTime Activity, ConversationInfo Info)> entries = direct
 				.Where(c => names.ContainsKey(c.OtherUserID))
-				.Select(c => (c.Last.CreatedAt, new ConversationInfo { ChannelId = Database.Chat.DirectConversationKey(c.OtherUserID), Unread = c.Unread, Last = ToWire(c.Last, me, names) }))
+				.Select(c => (c.Last.CreatedAt, ToWireDirect(c, me, names)))
 				.ToList();
 
 			Dictionary<long, Database.GroupInfo> groupsByID = groups.ToDictionary(g => g.Group.ID);
@@ -238,6 +238,11 @@ namespace GenOnlineService.Realtime
 
 			ConversationInfo[] list = entries.OrderByDescending(e => e.Activity).Select(e => e.Info).ToArray();
 			await Clients.Caller.Conversations(new ConversationsEvent { Conversations = list, Groups = groups.Select(g => ToWireGroup(g, names)).ToArray() });
+		}
+
+		internal static ConversationInfo ToWireDirect(Database.DirectConversation c, Int64 me, IReadOnlyDictionary<long, (string Name, int Tag)> names)
+		{
+			return new ConversationInfo { ChannelId = Database.Chat.DirectConversationKey(c.OtherUserID), Unread = c.Unread, Last = ToWire(c.Last, me, names), Peer = RealtimeMembers.Of(c.OtherUserID, names) };
 		}
 
 		// blocked: users blocked either way with me. Lists conversations with friends and no block either way, plus staff conversations whatever the friendship or block.
