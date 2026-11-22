@@ -1121,7 +1121,8 @@ namespace Database
 		{
 			var found = new List<(long, int, MemberMetadataModel)>();
 			var players = await db.MatchPlayers.AsNoTracking()
-				.Where(p => p.Details != null && p.Details.Contains("\"file_status\":0"))
+				// Details is jsonb on PostgreSQL, which has no LIKE and reformats the text, so the file status is checked after reading
+				.Where(p => p.Details != null)
 				.Join(db.Matches.AsNoTracking().Where(m => m.StartedAt > startedAfter), p => p.MatchId, m => m.Id, (p, m) => new { p.MatchId, p.Slot, p.Details })
 				.ToListAsync(cancellationToken);
 			foreach (var player in players)
