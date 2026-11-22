@@ -32,6 +32,12 @@ namespace GenOnlineService.Identity
 {
 	public sealed record PlayBan(string Reason, DateTime? ExpiresAt);
 
+	// A play-banned player may still call it with their session token: reading their sanctions and appealing them
+	[AttributeUsage(AttributeTargets.Method)]
+	public sealed class AllowBannedSessionAttribute : Attribute
+	{
+	}
+
 	public static class AccessControl
 	{
 		private static readonly ILogger s_log = AppLog.For(typeof(AccessControl));
@@ -506,8 +512,9 @@ namespace GenOnlineService.Identity
 				return AuthenticateResult.Fail("name required");
 			}
 
+			// a banned player may still read their sanctions and appeal them; every other route, the hub included, refuses the token
 			PlayBan? ban = AccessControl.GetPlayBan(userID);
-			if (ban != null)
+			if (ban != null && Context.GetEndpoint()?.Metadata.GetMetadata<AllowBannedSessionAttribute>() == null)
 			{
 				Context.Items[BanItemKey] = ban;
 				return AuthenticateResult.Fail("banned");

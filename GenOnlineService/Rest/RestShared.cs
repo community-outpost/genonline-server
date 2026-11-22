@@ -38,6 +38,12 @@ namespace GenOnlineService.Rest
 		public const string Conflict = "conflict";
 		public const string MethodNotAllowed = "method_not_allowed";
 
+		// Appeals: the sanction cannot be appealed (a kick, one of a provider, or ended over 30 days ago), the sanction has an appeal
+		// already, the appeal is decided already
+		public const string AppealNotAllowed = "appeal.not_allowed";
+		public const string AppealExists = "appeal.exists";
+		public const string AppealDecided = "appeal.decided";
+
 		public const string RoleRank = "roles.rank";
 
 		// A role held only through a sign-in provider, which follows that provider's sign-ins
@@ -70,6 +76,8 @@ namespace GenOnlineService.Rest
 			[RestCodes.LinkedAccountLocked] = StatusCodes.Status409Conflict,
 			[RestCodes.Conflict] = StatusCodes.Status409Conflict,
 			[RestCodes.MethodNotAllowed] = StatusCodes.Status405MethodNotAllowed,
+			[RestCodes.AppealExists] = StatusCodes.Status409Conflict,
+			[RestCodes.AppealDecided] = StatusCodes.Status409Conflict,
 			[RestCodes.RoleRank] = StatusCodes.Status403Forbidden,
 			[RestCodes.RoleUpstream] = StatusCodes.Status409Conflict,
 			[RestCodes.RoleExists] = StatusCodes.Status409Conflict,

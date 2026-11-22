@@ -34,6 +34,7 @@ namespace GenOnlineService.Portal.Client
 	{
 		public const string Overview = "api/v1/staff/overview";
 		public const string Reports = "api/v1/reports";
+		public const string Appeals = "api/v1/appeals";
 		public const string ReportSearch = "api/v1/reports/search";
 		public const string Players = "api/v1/players";
 		public const string PlayerSearch = "api/v1/players/search";
@@ -65,6 +66,7 @@ namespace GenOnlineService.Portal.Client
 		public const string AdminPages = "/admin";
 		public const string OverviewPage = AdminPages;
 		public const string ReportsPage = "/admin/reports";
+		public const string AppealsPage = "/admin/appeals";
 		public const string PlayersPage = "/admin/players";
 		public const string MatchesPage = "/admin/matches";
 		public const string AntiCheatPage = "/admin/anticheat";
@@ -122,6 +124,7 @@ namespace GenOnlineService.Portal.Client
 		public const string Ban = "moderation.ban";
 		public const string Rename = "moderation.rename";
 		public const string AnticheatReview = "anticheat.review";
+		public const string AppealsReview = "appeals.review";
 		public const string PlayersInspect = "players.inspect";
 		public const string RolesManage = "roles.manage";
 		public const string AuditRead = "audit.read";
@@ -151,6 +154,8 @@ namespace GenOnlineService.Portal.Client
 		public static string LabelOf(string action) => action switch
 		{
 			"role_grant" => "Role granted",
+			"appeal_open" => "Appeal opened",
+			"appeal_decide" => "Appeal decided",
 			"role_create" => "Role created",
 			"role_update" => "Role changed",
 			"role_delete" => "Role deleted",
@@ -218,7 +223,7 @@ namespace GenOnlineService.Portal.Client
 
 		public static readonly IReadOnlyList<string> All =
 		[
-			"role_grant", "role_revoke", "role_create", "role_update", "role_delete", "kick", "mute", "unmute", "ban", "unban", "rename", "name_reset",
+			"appeal_open", "appeal_decide", "role_grant", "role_revoke", "role_create", "role_update", "role_delete", "kick", "mute", "unmute", "ban", "unban", "rename", "name_reset",
 			"message_delete", "message_lookup", "staff_message", "report_view", "report_close", "player_inspect",
 			"device_reveal", "connection_lookup", "anticheat_review", "announcement", "setting_update", "token_mint", "token_rotate",
 			"token_revoke", "sa_create", "sa_update", "sa_grant", "sa_revoke", "sa_disable", "sa_enable", "password_reset",
@@ -381,6 +386,36 @@ namespace GenOnlineService.Portal.Client
 	{
 		public IReadOnlyList<PortalReport> Reports { get; init; } = [];
 		public int Total { get; init; }
+	}
+
+	public sealed record PortalAppeal
+	{
+		public long Id { get; init; }
+		public long SanctionId { get; init; }
+		public PortalMember Player { get; init; } = new PortalMember();
+		public string Status { get; init; } = "";
+		public string Text { get; init; } = "";
+		public DateTime CreatedAt { get; init; }
+		public DateTime? DecidedAt { get; init; }
+		public string? DecisionReason { get; init; }
+		public PortalMember? DecidedBy { get; init; }
+		public string SanctionType { get; init; } = "";
+		public string? SanctionReason { get; init; }
+		public DateTime SanctionCreatedAt { get; init; }
+		public DateTime? SanctionExpiresAt { get; init; }
+		public DateTime? SanctionLiftedAt { get; init; }
+	}
+
+	public sealed record PortalAppealList
+	{
+		public IReadOnlyList<PortalAppeal> Appeals { get; init; } = [];
+	}
+
+	public sealed record PortalAppealDecision
+	{
+		public string? Decision { get; init; }
+		public string? Reason { get; init; }
+		public DateTime? ExpiresAt { get; init; }
 	}
 
 	public sealed record PortalResolveRequest

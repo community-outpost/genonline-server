@@ -1,0 +1,240 @@
+@page "/admin/appeals"
+@inject PortalApi Api
+@inject ToastService Toasts
+
+<PageTitle>Appeals · Generals Online</PageTitle>
+
+<PageHeader Description="Players appeal their mutes and bans. A decision is final, and the reason you write is the answer the player reads. Every decision is in the audit log.">
+    <Title>Appeals</Title>
+    <Actions>
+        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="LoadAsync">
+            <LucideIcon Name="refresh-cw" Class="bb:h-4 bb:w-4" />
+            Refresh
+        </BbButton>
+    </Actions>
+</PageHeader>
+
+@if (!Session.Can(PortalPermissions.AppealsReview))
+{
+    <Refusal Title="Appeals" Description="Reading appeals needs the appeals.review permission." Icon="lock" />
+}
+else
+{
+    @if (m_error != null)
+    {
+        <BbAlert Variant="AlertVariant.Danger">
+            <Icon>
+                <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+            </Icon>
+            <ChildContent>
+                <BbAlertTitle>The appeals could not load</BbAlertTitle>
+                <BbAlertDescription>@PortalText.Error(m_error)</BbAlertDescription>
+            </ChildContent>
+        </BbAlert>
+    }
+
+    <BbCard>
+        <BbCardHeader>
+            <BbCardTitle As="h2">@(m_status == "open" ? "Open appeals" : "Decided appeals")</BbCardTitle>
+            <BbCardDescription>Oldest first, the first 100. The sanction shows as it stands now.</BbCardDescription>
+        </BbCardHeader>
+        <BbCardContent>
+            <div class="bb:mb-4">
+                <BbNativeSelect TValue="string" Value="@m_status" ValueChanged="@(async (string? v) => await ShowAsync(v))" AriaLabel="Status" Class="go-select" data-testid="appeal-status">
+                    <option value="open">Open</option>
+                    <option value="upheld">Upheld</option>
+                    <option value="lifted">Lifted</option>
+                    <option value="shortened">Shortened</option>
+                </BbNativeSelect>
+            </div>
+            @if (m_appeals == null)
+            {
+                <FeedSkeleton />
+            }
+            else
+            {
+                <div class="go-table-frame">
+                <BbDataTable TData="PortalAppeal" Data="@m_appeals" ShowToolbar="false" ShowPagination="false" AriaLabel="Appeals">
+                    <Columns>
+                        <BbDataTableColumn TData="PortalAppeal" TValue="string" Property="@(a => a.CreatedAt.ToString("o"))" Header="Appealed" CellClass="go-nowrap">
+                            <CellTemplate Context="row">
+                                <When Value="@row.CreatedAt" />
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAppeal" TValue="string" Property="@(a => a.Player.FullName)" Header="Player">
+                            <CellTemplate Context="row">
+                                <BbLink Href="@PortalRoutes.PlayerPage(row.Player.Id)">@row.Player.FullName</BbLink>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAppeal" TValue="string" Property="@(a => a.SanctionType)" Header="Sanction">
+                            <CellTemplate Context="row">
+                                <div class="bb:space-y-1">
+                                    <BbBadge Variant="@PortalBadges.OfSanction(row.SanctionLiftedAt == null)">@row.SanctionType</BbBadge>
+                                    <div class="bb:text-xs bb:text-muted-foreground">@(String.IsNullOrEmpty(row.SanctionReason) ? "No reason given" : row.SanctionReason)</div>
+                                </div>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAppeal" TValue="string" Property="@(a => a.Text)" Header="Appeal">
+                            <CellTemplate Context="row">
+                                <span style="white-space: pre-wrap; overflow-wrap: anywhere" data-testid="appeal-text">@row.Text</span>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAppeal" TValue="string" Property="@(a => a.Status)" Header="Status">
+                            <CellTemplate Context="row">
+                                <div class="bb:space-y-1">
+                                    <BbBadge Variant="@PortalBadges.OfAppeal(row.Status)">@row.Status</BbBadge>
+                                    @if (row.DecidedAt is DateTime decided)
+                                    {
+                                        <div class="bb:text-xs bb:text-muted-foreground">
+                                            @if (row.DecidedBy != null)
+                                            {
+                                                <span>by @row.DecidedBy.FullName, </span>
+                                            }
+                                            <When Value="@decided" />
+                                        </div>
+                                        @if (!String.IsNullOrEmpty(row.DecisionReason))
+                                        {
+                                            <div class="bb:text-xs" style="overflow-wrap: anywhere">@row.DecisionReason</div>
+                                        }
+                                    }
+                                </div>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAppeal" TValue="string" Property="@(a => a.Id.ToString())" Header="Decide" HeaderClass="go-sr-header">
+                            <CellTemplate Context="row">
+                                @if (row.Status == "open")
+                                {
+                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => OpenDecision(row))" aria-label="@($"Decide the appeal of {row.Player.FullName}")" data-testid="decide-appeal">Decide</BbButton>
+                                }
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                    </Columns>
+                    <EmptyTemplate>
+                        <BbEmpty Size="EmptySize.Small" Title="@(m_status == "open" ? "Nothing to decide" : "No appeals here")" Description="@(m_status == "open" ? "Every appeal is decided." : "No appeal has this status.")">
+                            <Icon>
+                                <LucideIcon Name="inbox" />
+                            </Icon>
+                        </BbEmpty>
+                    </EmptyTemplate>
+                </BbDataTable>
+                </div>
+            }
+        </BbCardContent>
+    </BbCard>
+
+    <BbDialog @bind-Open="m_dialogOpen">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>Decide the appeal of @m_deciding?.Player.FullName</BbDialogTitle>
+                <BbDialogDescription>
+                    A @m_deciding?.SanctionType@(String.IsNullOrEmpty(m_deciding?.SanctionReason) ? "." : ": " + m_deciding.SanctionReason) The decision is final.
+                </BbDialogDescription>
+            </BbDialogHeader>
+            @if (m_deciding != null)
+            {
+                <p class="bb:text-sm bb:rounded-md bb:border bb:p-3" style="white-space: pre-wrap; overflow-wrap: anywhere">@m_deciding.Text</p>
+            }
+            <div class="bb:space-y-4">
+                <div class="bb:space-y-2">
+                    <BbLabel For="appeal-decision">Decision</BbLabel>
+                    <BbNativeSelect TValue="string" Id="appeal-decision" @bind-Value="m_decision" Class="bb:w-full">
+                        <option value="uphold">Uphold: the sanction stays</option>
+                        <option value="lift">Lift: end the sanction now</option>
+                        <option value="shorten">Shorten: end it sooner</option>
+                    </BbNativeSelect>
+                </div>
+                @if (m_decision == "shorten")
+                {
+                    <div class="bb:space-y-2">
+                        <BbLabel For="appeal-days">Ends in</BbLabel>
+                        <BbNativeSelect TValue="string" Id="appeal-days" @bind-Value="m_days" Class="bb:w-full">
+                            <option value="1">1 day</option>
+                            <option value="3">3 days</option>
+                            <option value="7">7 days</option>
+                            <option value="14">14 days</option>
+                            <option value="30">30 days</option>
+                        </BbNativeSelect>
+                    </div>
+                }
+                <div class="bb:space-y-2">
+                    <BbLabel For="appeal-reason">Answer to the player</BbLabel>
+                    <BbTextarea Id="appeal-reason" @bind-Value="m_reason" Placeholder="The player reads this…" autocomplete="off" />
+                </div>
+            </div>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_dialogOpen = false)" Disabled="@m_saving">Cancel</BbButton>
+                <BbButton OnClick="DecideAsync" Loading="@m_saving" Disabled="@String.IsNullOrWhiteSpace(m_reason)" data-testid="confirm-appeal">Confirm</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
+}
+
+@code {
+    private string m_status = "open";
+    private List<PortalAppeal>? m_appeals;
+    private string? m_error;
+    private bool m_dialogOpen;
+    private bool m_saving;
+    private PortalAppeal? m_deciding;
+    private string m_decision = "uphold";
+    private string m_days = "7";
+    private string? m_reason;
+
+    private PortalSessionInfo Session => Api.Session!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Can(PortalPermissions.AppealsReview))
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task ShowAsync(string? status)
+    {
+        m_status = String.IsNullOrEmpty(status) ? "open" : status;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        m_appeals = null;
+        PortalAnswer<PortalAppealList> answer = await Api.ListAppealsAsync(m_status);
+        m_error = answer.Error;
+        m_appeals = (answer.Value?.Appeals ?? []).ToList();
+    }
+
+    private void OpenDecision(PortalAppeal appeal)
+    {
+        m_deciding = appeal;
+        m_decision = "uphold";
+        m_days = "7";
+        m_reason = null;
+        m_dialogOpen = true;
+    }
+
+    private async Task DecideAsync()
+    {
+        if (m_deciding == null || String.IsNullOrWhiteSpace(m_reason))
+        {
+            return;
+        }
+
+        m_saving = true;
+        DateTime? expiresAt = m_decision == "shorten" && int.TryParse(m_days, out int days) ? DateTime.UtcNow.AddDays(days) : null;
+        PortalOutcome outcome = await Api.DecideAppealAsync(m_deciding.Id, m_decision, m_reason.Trim(), expiresAt);
+        m_saving = false;
+        m_dialogOpen = false;
+
+        if (outcome.Ok)
+        {
+            Toasts.Success($"The appeal of {m_deciding.Player.FullName} is decided.", "Appeal decided");
+        }
+        else
+        {
+            Toasts.Error(PortalText.Error(outcome.Error), "Appeal not decided");
+        }
+
+        await LoadAsync();
+    }
+}

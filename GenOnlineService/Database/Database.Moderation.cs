@@ -96,6 +96,9 @@ public static class ModerationActions
 	public const string InvestigateSearch = "investigate_search";
 	public const string AnticheatReview = "anticheat_review";
 	public const string SanctionEvidence = "sanction_evidence";
+
+	public const string AppealOpen = "appeal_open";
+	public const string AppealDecide = "appeal_decide";
 }
 
 public static class ModerationSources
@@ -252,6 +255,10 @@ namespace Database
 		{
 			DateTime sanctionCutoff = utcNow.AddYears(-SanctionRetentionYears);
 			DateTime auditCutoff = utcNow.AddYears(-AuditLogRetentionYears);
+
+			await db.Appeals
+				.Where(a => db.Sanctions.Any(s => s.ID == a.SanctionID && ((s.LiftedAt != null && s.LiftedAt < sanctionCutoff) || (s.ExpiresAt != null && s.ExpiresAt < sanctionCutoff))))
+				.ExecuteDeleteAsync(cancellationToken);
 
 			int sanctions = await db.Sanctions
 				.Where(s => (s.LiftedAt != null && s.LiftedAt < sanctionCutoff) || (s.ExpiresAt != null && s.ExpiresAt < sanctionCutoff))
@@ -477,7 +484,7 @@ namespace Database
 			return active.Count;
 		}
 
-		private static void Lift(Sanction sanction, string? reason, ModerationActor actor, DateTime now)
+		internal static void Lift(Sanction sanction, string? reason, ModerationActor actor, DateTime now)
 		{
 			sanction.LiftedAt = now;
 			sanction.LiftedByKind = actor.Kind;

@@ -94,6 +94,7 @@ namespace GenOnlineService.Rest
 			(Permissions.ModerationMute, "Moderation", "Mute players", "Stop a player from chatting, and lift the mute."),
 			(Permissions.ModerationBan, "Moderation", "Ban players", "Ban an account and lift the ban."),
 			(Permissions.ModerationRename, "Moderation", "Rename players", "Replace a name that breaks the rules with a placeholder."),
+			(Permissions.AppealsReview, "Moderation", "Review appeals", "Read the appeals of players. Deciding one that lifts or shortens a ban or mute also needs the ban or mute permission."),
 			(Permissions.AnticheatReview, "Moderation", "Review anti-cheat", "Read the anti-cheat review lists and mark rows reviewed."),
 			(Permissions.RulesManage, "Moderation", "Manage automated rules", "Edit, preview and sweep the rules that flag, kick, mute and ban players."),
 			(Permissions.TextRulesManage, "Moderation", "Manage text rules", "Change the word lists, exceptions and rules of the name and chat checks."),

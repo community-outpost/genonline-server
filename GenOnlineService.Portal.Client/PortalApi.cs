@@ -115,6 +115,15 @@ namespace GenOnlineService.Portal.Client
 			return SendAsync(HttpMethod.Patch, $"{PortalRoutes.Reports}/{reportID}", new PortalResolveRequest { Status = status, ResolutionNote = note });
 		}
 
+		// oldest first, the first 100
+		public Task<PortalAnswer<PortalAppealList>> ListAppealsAsync(string status, CancellationToken cancellationToken = default) =>
+			GetAsync<PortalAppealList>($"{PortalRoutes.Appeals}?status={Uri.EscapeDataString(status)}&per_page={MaximumPerPage}", cancellationToken);
+
+		public Task<PortalOutcome> DecideAppealAsync(long appealID, string decision, string reason, DateTime? expiresAt)
+		{
+			return SendAsync(HttpMethod.Post, $"{PortalRoutes.Appeals}/{appealID}/decision", new PortalAppealDecision { Decision = decision, Reason = reason, ExpiresAt = expiresAt });
+		}
+
 		public async Task<PortalAnswer<PortalPlayerPage>> SearchPlayersAsync(string search, int start, int count, CancellationToken cancellationToken)
 		{
 			(PortalAnswer<PortalPlayerPage> answer, int total) = await GetPageAsync<PortalPlayerPage>($"{PortalRoutes.PlayerSearch}?query={Uri.EscapeDataString(search)}&{PageOf(start, count)}", cancellationToken);

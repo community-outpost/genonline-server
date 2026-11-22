@@ -95,6 +95,15 @@
                                 <BbSidebarMenuBadge>@PortalText.Count(m_openReports)</BbSidebarMenuBadge>
                             }
                         </BbSidebarMenuItem>
+                        @if (staff.Can(PortalPermissions.AppealsReview))
+                        {
+                            <BbSidebarMenuItem>
+                                <BbSidebarMenuButton Href="@PortalRoutes.AppealsPage" Tooltip="Appeals">
+                                    <LucideIcon Name="scale" Class="bb:h-4 bb:w-4" />
+                                    <span>Appeals</span>
+                                </BbSidebarMenuButton>
+                            </BbSidebarMenuItem>
+                        }
                     </BbSidebarMenu>
                 </BbSidebarGroup>
                 <BbSidebarGroup>
@@ -376,6 +385,9 @@
                 break;
             case "reports":
                 yield return ("Reports", null);
+                break;
+            case "appeals":
+                yield return ("Appeals", null);
                 break;
             case "players":
                 yield return ("Players", item == null ? null : PortalRoutes.PlayersPage);

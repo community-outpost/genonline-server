@@ -34,6 +34,13 @@ namespace GenOnlineService.Portal.Client
 		public const BadgeVariant Live = BadgeVariant.Soft;
 		public static BadgeVariant OfPlayerState(string state) => state == "active" ? BadgeVariant.Secondary : BadgeVariant.SoftDestructive;
 
+		public static BadgeVariant OfAppeal(string status) => status switch
+		{
+			"open" => BadgeVariant.Soft,
+			"upheld" => BadgeVariant.Outline,
+			_ => BadgeVariant.Secondary
+		};
+
 		public static BadgeVariant OfSanction(bool active) => active ? BadgeVariant.SoftDestructive : BadgeVariant.Outline;
 
 		public static BadgeVariant OfRuleMode(string mode) => mode switch
