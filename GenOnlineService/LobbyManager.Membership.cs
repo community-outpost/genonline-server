@@ -38,13 +38,16 @@ public enum LobbyMembershipStatus
 	BlockedByOwner,
 	FriendshipRequired,
 	PreferencesUnavailable,
-	BuildMismatch
+	BuildMismatch,
+	Banned
 }
 
 public sealed record JoinLobbyCommand(long LobbyID, long UserID, EUserSessionType SessionType,
 	ushort PreferredPort, bool HasMap, string? Password, GameBuild Build);
 public sealed record LeaveLobbyCommand(long LobbyID, long UserID, EUserSessionType SessionType);
-public sealed record KickLobbyMemberCommand(long LobbyID, long ActorUserID, long? TargetUserID);
+public sealed record LobbyInviteEntry(string Id, DateTime Expires);
+
+public sealed record KickLobbyMemberCommand(long LobbyID, long ActorUserID, long? TargetUserID, bool Ban = false);
 public sealed record JoinLobbyResult(LobbyMembershipStatus Status, string TurnUsername = "", string TurnToken = "");
 
 public partial class LobbyManager

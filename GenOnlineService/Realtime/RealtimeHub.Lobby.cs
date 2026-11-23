@@ -23,7 +23,7 @@ namespace GenOnlineService.Realtime
 	// Lobbies, matchmaking and peer networking (sections 5.2, 5.3, 5.6, 6.3, 6.4, 6.6)
 	public sealed partial class RealtimeHub
 	{
-		public const int LobbyNameMaxLength = 255;
+		public const int LobbyNameMaxLength = 140;
 		public const int MapNameMaxLength = 255;
 		public const int MapPathMaxLength = 512;
 		public const int LobbyPasswordMaxLength = 128;
@@ -127,11 +127,9 @@ namespace GenOnlineService.Realtime
 				return handingOver;
 			}
 
-			if (!IsValidText(request.Name, LobbyNameMaxLength)) return Result.Invalid("name");
-			// the text rules refuse a lobby name with a blocked word as a display name is refused
-			if (TextRules.TextChecks.LobbyNameRefusal(request.Name) is Failure disallowed)
+			if (LobbyNameFailure(request.Name) is Failure badName)
 			{
-				return disallowed;
+				return badName;
 			}
 			if (request.Map == null) return Result.Invalid("map");
 			if (!IsValidText(request.Map.Name, MapNameMaxLength)) return Result.Invalid("map.name");
@@ -238,6 +236,7 @@ namespace GenOnlineService.Realtime
 			LobbyMembershipStatus.AlreadyMember => Result.Fail(ErrorCodes.LobbyAlreadyMember),
 			LobbyMembershipStatus.NoOpenSlot => Result.Fail(ErrorCodes.LobbyFull),
 			LobbyMembershipStatus.BlockedByOwner => Result.Fail(ErrorCodes.LobbyBlocked),
+			LobbyMembershipStatus.Banned => Result.Fail(ErrorCodes.LobbyBanned),
 			LobbyMembershipStatus.FriendshipRequired => Result.Fail(ErrorCodes.LobbyFriendsOnly),
 			LobbyMembershipStatus.SessionUnavailable => Result.NotFound("session"),
 			LobbyMembershipStatus.PreferencesUnavailable => Result.NotFound("user"),
@@ -280,7 +279,9 @@ namespace GenOnlineService.Realtime
 			if (request.Settings?.StartingCash < 0) return Invalid("settings.starting_cash");
 			if (request.Settings?.MaxCameraHeight is int height && (height < MinCameraHeight || height > MaxCameraHeight)) return Invalid("settings.max_camera_height");
 			if (request.Visibility is LobbyVisibility visibility && !Enum.IsDefined(visibility)) return Invalid("visibility");
+			if (request.Name != null && LobbyNameFailure(request.Name) is Failure badName) return Task.FromResult<Result<Empty>>(badName);
 
+			// a rename is no game term, so it alone keeps the ready flags
 			bool changes = request.Map != null || request.Visibility != null
 				|| request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null || request.Settings?.MaxCameraHeight != null;
 
@@ -314,6 +315,10 @@ namespace GenOnlineService.Realtime
 				if (request.Visibility is LobbyVisibility newVisibility)
 				{
 					lobby.UpdateJoinability(newVisibility == LobbyVisibility.Friends ? ELobbyJoinability.FriendsOnly : ELobbyJoinability.Public);
+				}
+				if (request.Name != null)
+				{
+					lobby.UpdateName(request.Name);
 				}
 				return null;
 			});
@@ -486,7 +491,11 @@ namespace GenOnlineService.Realtime
 			});
 		}
 
-		public async Task<Result<Empty>> KickFromLobby(UserRequest request)
+		public Task<Result<Empty>> KickFromLobby(UserRequest request) => RemoveFromLobby(request, ban: false);
+
+		public Task<Result<Empty>> BanFromLobby(UserRequest request) => RemoveFromLobby(request, ban: true);
+
+		private async Task<Result<Empty>> RemoveFromLobby(UserRequest request, bool ban)
 		{
 			if (RefuseOnMovingLobby() is Failure moving)
 			{
@@ -508,7 +517,7 @@ namespace GenOnlineService.Realtime
 				return Result.Fail(ErrorCodes.LobbyNotMember);
 			}
 
-			LobbyMembershipStatus status = await m_lobbyManager.KickAsync(new KickLobbyMemberCommand(lobbyID, UserID, request.UserId));
+			LobbyMembershipStatus status = await m_lobbyManager.KickAsync(new KickLobbyMemberCommand(lobbyID, UserID, request.UserId, ban));
 			return status switch
 			{
 				LobbyMembershipStatus.Success => Result.Success(),
@@ -516,6 +525,65 @@ namespace GenOnlineService.Realtime
 				LobbyMembershipStatus.ActorNotHost => Result.Fail(ErrorCodes.LobbyNotHost),
 				_ => Result.NotFound("user"),
 			};
+		}
+
+		public async Task<Result<Empty>> InviteToLobby(UserRequest request)
+		{
+			if (RefuseOnMovingLobby() is Failure moving)
+			{
+				return moving;
+			}
+			if (RequireAccess(ESessionAccessType.Gameplay) is Failure denied)
+			{
+				return denied;
+			}
+			if (request.UserId == UserID)
+			{
+				return Result.Invalid("user_id");
+			}
+
+			Lobby? lobby = CurrentLobby();
+			if (lobby == null)
+			{
+				return Result.Fail(ErrorCodes.LobbyNotMember);
+			}
+
+			Dictionary<long, (string Name, int Tag)> names;
+			await using (AppDbContext db = await m_dbFactory.CreateDbContextAsync())
+			{
+				if (await GroupActions.CheckInviteesAsync(db, UserID, [request.UserId]) is Failure refused)
+				{
+					return refused;
+				}
+				names = await NamesAsync(db, [UserID]);
+			}
+			// an invisible friend gets no invite and looks offline, as to every friend
+			if (GameSessions.Get(request.UserId, EUserSessionType.GameClient) == null || RealtimePresence.StatusOf(request.UserId) == PresenceStatus.Invisible)
+			{
+				return Result.Fail(ErrorCodes.LobbyInviteOffline);
+			}
+
+			string? error = await lobby.InviteAsync(UserID, request.UserId);
+			if (error != null)
+			{
+				return Result.Fail(error);
+			}
+
+			LobbyInviteEntry invite = lobby.Invites[request.UserId];
+			await RealtimeOut.UserGame(request.UserId).LobbyInvite(new LobbyInviteEvent
+			{
+				InviteId = invite.Id,
+				FromUserId = UserID,
+				FromName = names.TryGetValue(UserID, out var from) ? from.Name : "",
+				LobbyId = lobby.LobbyID,
+				LobbyName = lobby.Name,
+				MapName = lobby.MapName,
+				Players = lobby.NumCurrentPlayers,
+				MaxPlayers = lobby.MaxPlayers,
+				Anticheat = RealtimeLobbies.AnticheatOf(lobby.AnticheatID),
+				ExpiresAt = invite.Expires
+			});
+			return Result.Success();
 		}
 
 		public Task<Result<Empty>> ForceReady(Empty request)
@@ -861,6 +929,10 @@ namespace GenOnlineService.Realtime
 		}
 
 		private static Task<Result<Empty>> Invalid(string field) => Task.FromResult<Result<Empty>>(Result.Invalid(field));
+
+		// the one check of a lobby name, on create and rename: length and text rules, then a blocked word is refused as in a display name
+		internal static Failure? LobbyNameFailure(string? name) =>
+			!IsValidText(name, LobbyNameMaxLength) ? Result.Invalid("name") : TextRules.TextChecks.LobbyNameRefusal(name!);
 
 		private static bool IsValidText(string? text, int maxLength) => text != null && text.Length <= maxLength && !text.Contains('\0');
 

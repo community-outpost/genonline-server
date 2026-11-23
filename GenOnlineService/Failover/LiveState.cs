@@ -213,6 +213,9 @@ namespace GenOnlineService.Failover
 		public List<long> EverMembers { get; init; } = new();
 		public Dictionary<string, DateTime> MemberLeftAt { get; init; } = new();
 		public List<long> MatchedUserIds { get; init; } = new();
+		public List<long> BannedUserIds { get; init; } = new();
+
+		public List<LobbyInviteLive> Invites { get; init; } = new();
 
 		public string StartPhase { get; init; } = "none";
 		public long? CountdownEndsAtMs { get; init; }
@@ -259,6 +262,13 @@ namespace GenOnlineService.Failover
 		public bool? LastOutcome { get; init; }
 		public string? LastFailureReason { get; init; }
 		public bool Pending { get; init; }
+	}
+
+	public sealed record LobbyInviteLive
+	{
+		public long UserId { get; init; }
+		public string Id { get; init; } = String.Empty;
+		public DateTime ExpiresAt { get; init; }
 	}
 
 	public sealed record PeerPairLive

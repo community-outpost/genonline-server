@@ -45,6 +45,7 @@ namespace GenOnlineService.Realtime
 		Task LobbyListRemove(LobbyIdEvent e);
 		Task LobbyState(LobbyStateEvent e);
 		Task LobbyLeft(LobbyLeftEvent e);
+		Task LobbyInvite(LobbyInviteEvent e);
 		Task CountdownStarted(CountdownStartedEvent e);
 		Task CountdownCancelled(CountdownCancelledEvent e);
 		Task GameStart(GameStartEvent e);

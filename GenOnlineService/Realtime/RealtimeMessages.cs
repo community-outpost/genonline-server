@@ -345,6 +345,8 @@ namespace GenOnlineService.Realtime
 		public UpdateLobbySettings? Settings { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public LobbyVisibility? Visibility { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Name { get; init; }
 	}
 
 	public sealed record SetLobbyPasswordRequest
@@ -629,6 +631,20 @@ namespace GenOnlineService.Realtime
 	{
 		public long LobbyId { get; init; }
 		public LobbyLeftReason Reason { get; init; }
+	}
+
+	public sealed record LobbyInviteEvent
+	{
+		public string InviteId { get; init; } = "";
+		public long FromUserId { get; init; }
+		public string FromName { get; init; } = "";
+		public long LobbyId { get; init; }
+		public string LobbyName { get; init; } = "";
+		public string MapName { get; init; } = "";
+		public int Players { get; init; }
+		public int MaxPlayers { get; init; }
+		public AnticheatKind Anticheat { get; init; }
+		public DateTime ExpiresAt { get; init; }
 	}
 
 	public sealed record CountdownStartedEvent

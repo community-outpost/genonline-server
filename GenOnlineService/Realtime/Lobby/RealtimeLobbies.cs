@@ -44,7 +44,7 @@ namespace GenOnlineService.Realtime
 		// The playlist sets the map, the starting cash and the superweapon limit of a quick match lobby, so no member changes them
 		public static Failure? RefuseQuickMatchSettings(Lobby lobby, UpdateLobbyRequest request)
 		{
-			if (lobby.LobbyType == ELobbyType.QuickMatch && (request.Map != null || request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null))
+			if (lobby.LobbyType == ELobbyType.QuickMatch && (request.Map != null || request.Name != null || request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null))
 			{
 				return Result.Fail(ErrorCodes.LobbyNotHost);
 			}

@@ -237,15 +237,19 @@ namespace GenOnlineService.Realtime
 		}
 
 		// a block is reported before a missing friendship
-		private static async Task<Failure?> CheckInviteesAsync(AppDbContext db, Int64 me, IReadOnlyCollection<Int64> invitees)
+		internal static async Task<Failure?> CheckInviteesAsync(AppDbContext db, Int64 me, IReadOnlyCollection<Int64> invitees)
 		{
 			HashSet<long> blocked = await RealtimeHub.BlockedEitherWayAsync(db, me);
+			HashSet<long> friends = await Database.Social.GetFriends(db, me);
+			return CheckInvitees(blocked, friends, invitees);
+		}
+
+		internal static Failure? CheckInvitees(HashSet<long> blocked, HashSet<long> friends, IReadOnlyCollection<long> invitees)
+		{
 			if (invitees.Any(blocked.Contains))
 			{
 				return Result.Fail(ErrorCodes.SocialBlocked);
 			}
-
-			HashSet<long> friends = await Database.Social.GetFriends(db, me);
 			return invitees.All(friends.Contains) ? null : Result.Fail(ErrorCodes.ChatNotFriends);
 		}
 

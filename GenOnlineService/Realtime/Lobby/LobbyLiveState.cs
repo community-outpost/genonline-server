@@ -170,6 +170,9 @@ namespace GenOnlineService
 				EverMembers = m_EverMemberUserIDs.Keys.OrderBy(id => id).ToList(),
 				MemberLeftAt = TimeMemberLeft.OrderBy(entry => entry.Key).ToDictionary(entry => Id(entry.Key), entry => entry.Value),
 				MatchedUserIds = MatchedUserIDs.OrderBy(id => id).ToList(),
+				BannedUserIds = BannedUserIDs.OrderBy(id => id).ToList(),
+				Invites = Invites.Where(invite => invite.Value.Expires > DateTime.UtcNow).OrderBy(invite => invite.Key)
+					.Select(invite => new LobbyInviteLive { UserId = invite.Key, Id = invite.Value.Id, ExpiresAt = invite.Value.Expires }).ToList(),
 				StartPhase = phase switch { EStartPhase.Countdown => "countdown", EStartPhase.MeshCheck => "mesh_check", _ => "none" },
 				CountdownEndsAtMs = phase == EStartPhase.Countdown && m_TimeCountdownEnds > 0 ? nowMs + Math.Max(0, m_TimeCountdownEnds - Environment.TickCount64) : null,
 				Start = start == null ? null : new LobbyStartLive
@@ -274,6 +277,14 @@ namespace GenOnlineService
 			foreach (long userID in live.MatchedUserIds ?? new())
 			{
 				lobby.MatchedUserIDs.Add(userID);
+			}
+			foreach (long userID in live.BannedUserIds ?? new())
+			{
+				lobby.BannedUserIDs.Add(userID);
+			}
+			foreach (LobbyInviteLive invite in live.Invites ?? new())
+			{
+				lobby.Invites[invite.UserId] = new LobbyInviteEntry(invite.Id, DateTime.SpecifyKind(invite.ExpiresAt, DateTimeKind.Utc));
 			}
 			foreach ((string userID, DateTime at) in live.AbandonedInGame ?? new())
 			{

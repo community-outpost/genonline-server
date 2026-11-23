@@ -30,7 +30,7 @@ namespace GenOnlineService.Realtime
 	{
 		public const string Path = "/realtime";
 		public const int ProtocolVersion = 1;
-		public const int ChatMaxLength = 512;
+		public const int ChatMaxLength = 140;
 		public const int ChatRateMessages = 3;
 		public const long ChatRateWindowMs = 9000;
 		public const int NameMinLength = 3;

@@ -1196,6 +1196,27 @@ namespace GenOnlineService
 		// quick match lobbies only admit the players the matchmaker paired
 		public HashSet<Int64> MatchedUserIDs { get; } = new();
 
+		internal HashSet<Int64> BannedUserIDs { get; } = new();
+
+		internal Dictionary<Int64, LobbyInviteEntry> Invites { get; } = new();
+		internal const int InviteLifetimeMinutes = 10;
+		internal const int InviteResendSeconds = 15;
+
+		internal Task<string?> InviteAsync(Int64 actor, Int64 target) => RunExclusiveAsync(() =>
+		{
+			if (GetMemberFromUserID(actor) == null) return Task.FromResult<string?>(ErrorCodes.LobbyNotMember);
+			if (State != ELobbyState.GAME_SETUP || LobbyType != ELobbyType.CustomGame) return Task.FromResult<string?>(ErrorCodes.LobbyNotInSetup);
+			if (GetMemberFromUserID(target) != null) return Task.FromResult<string?>(ErrorCodes.LobbyAlreadyMember);
+
+			DateTime now = DateTime.UtcNow;
+			foreach (var expired in Invites.Where(pair => pair.Value.Expires <= now).Select(pair => pair.Key).ToArray()) Invites.Remove(expired);
+			if (Invites.TryGetValue(target, out var pending) && pending.Expires > now.AddMinutes(InviteLifetimeMinutes).AddSeconds(-InviteResendSeconds))
+				return Task.FromResult<string?>(ErrorCodes.LobbyInvitePending);
+			Invites[target] = new LobbyInviteEntry(Guid.NewGuid().ToString("N"), now.AddMinutes(InviteLifetimeMinutes));
+			return Task.FromResult<string?>(null);
+		});
+
+		private bool HasInvite(Int64 userID) => Invites.TryGetValue(userID, out var invite) && invite.Expires > DateTime.UtcNow;
 
 		public string Region { get; private set; } = "";
 		public int EstimatedLatency { get; private set; } = 999999;
@@ -1550,6 +1571,7 @@ public async Task FinalizeACChecks()
 				if (admission != LobbyMembershipStatus.Success) return admission;
 				var added = destination.AddMemberLocked(session, displayName, nameTag, command.PreferredPort, command.HasMap, preferences, blockers, friends);
 				if (added.Member == null) return added.Status;
+				destination.Invites.Remove(command.UserID);
 				foreach (var source in sources)
 				{
 					if (ReferenceEquals(source, destination)) continue;
@@ -1763,7 +1785,15 @@ public async Task FinalizeACChecks()
 				if (command.TargetUserID == Owner)
 					return Task.FromResult(LobbyMembershipStatus.NoChange);
 				var member = command.TargetUserID.HasValue ? GetMemberFromUserID(command.TargetUserID.Value) : null;
-				if (member != null && RemoveMemberLocked(member)) removed = member;
+				if (member != null && RemoveMemberLocked(member))
+				{
+					removed = member;
+					if (command.Ban)
+					{
+						BannedUserIDs.Add(member.UserID);
+						Invites.Remove(member.UserID);
+					}
+				}
 				return Task.FromResult(removed != null ? LobbyMembershipStatus.Success : LobbyMembershipStatus.NoChange);
 			});
 			if (removed != null) PublishMemberRemoval(removed, LobbyLeftReason.Kicked);
@@ -1881,7 +1911,9 @@ public async Task FinalizeACChecks()
 		{
 			if (LobbyType == ELobbyType.QuickMatch && !MatchedUserIDs.Contains(command.UserID))
 				return LobbyMembershipStatus.NotMatched;
-			if (IsPassworded && command.Password != Password)
+			if (BannedUserIDs.Contains(command.UserID))
+				return LobbyMembershipStatus.Banned;
+			if (IsPassworded && command.Password != Password && !HasInvite(command.UserID))
 				return LobbyMembershipStatus.PasswordMismatch;
 			if (!LobbyAnticheat.Admits(AnticheatID, command.Build.AnticheatID))
 				return LobbyMembershipStatus.AnticheatMismatch;
@@ -2155,6 +2187,15 @@ public async Task FinalizeACChecks()
 			if (LobbyType == ELobbyType.CustomGame && LobbyJoinability != newJoinability)
 			{
 				LobbyJoinability = newJoinability;
+				DirtyRetransmitLobbyList();
+			}
+		}
+
+		public void UpdateName(string name)
+		{
+			if (Name != name)
+			{
+				Name = name;
 				DirtyRetransmitLobbyList();
 			}
 		}

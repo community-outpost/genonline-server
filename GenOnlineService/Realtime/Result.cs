@@ -86,6 +86,9 @@ namespace GenOnlineService.Realtime
 		public const string LobbyNotInSetup = "lobby.not_in_setup";
 		public const string LobbyAlreadyMember = "lobby.already_member";
 		public const string LobbyBlocked = "lobby.blocked";
+		public const string LobbyBanned = "lobby.banned";
+		public const string LobbyInvitePending = "lobby.invite_pending";
+		public const string LobbyInviteOffline = "lobby.invite_offline";
 		public const string LobbyFriendsOnly = "lobby.friends_only";
 		public const string LobbyNotMatched = "lobby.not_matched";
 		public const string LobbyAnticheatMismatch = "lobby.anticheat_mismatch";
