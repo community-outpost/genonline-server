@@ -38,6 +38,8 @@ namespace GenOnlineService.Failover
 		public int SwitchRetryMinMs { get; init; } = 250;
 		public int SwitchRetryMaxMs { get; init; } = 1000;
 
+		public bool PodDeletionCost { get; init; }
+
 		// The longest a handover runs: the drain limit, the bounded statements, the wait for the target and a cancel, the switch delay, the queue move
 		// and the forced lobby moves at the limit (each waits up to two lease periods for the target, ForcedMoveRounds rounds of them), and the last batch
 		public int HandoverBudgetMs => HandoverLimitS * 1000 + LeaseMs * 3 + SwitchDelayMs + LeaseMs * 2 * (1 + ForcedMoveRounds) + 5000;
@@ -60,6 +62,7 @@ namespace GenOnlineService.Failover
 				BatchPercent = section.GetValue("batch_percent", 5),
 				BatchIntervalMs = section.GetValue("batch_interval_ms", 200),
 				SwitchDelayMs = section.GetValue("switch_delay_ms", 1000),
+				PodDeletionCost = section.GetValue("pod_deletion_cost", false),
 			};
 
 			if (!settings.Enabled)

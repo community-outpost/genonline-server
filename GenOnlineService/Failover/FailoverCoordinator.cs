@@ -43,7 +43,8 @@ namespace GenOnlineService.Failover
 		Task<RealtimeLease?> ReadAsync(CancellationToken cancellationToken);
 		Task<long?> TryTakeAsync(string copyID, int leaseMs, CancellationToken cancellationToken);
 		Task<bool> RenewAsync(string copyID, long epoch, int leaseMs, CancellationToken cancellationToken);
-		Task AnnounceStandbyAsync(string copyID, int leaseMs, CancellationToken cancellationToken);
+		Task AnnounceStandbyAsync(string copyID, DateTime startedAt, int leaseMs, CancellationToken cancellationToken);
+		Task<DateTime> DatabaseNowAsync(CancellationToken cancellationToken);
 		Task<string?> BeginHandoverAsync(string copyID, long epoch, CancellationToken cancellationToken);
 		Task<bool> ConfirmHandoverAsync(string copyID, CancellationToken cancellationToken);
 		Task<bool> TargetAliveAsync(string copyID, long epoch, string target, CancellationToken cancellationToken);
@@ -114,6 +115,18 @@ namespace GenOnlineService.Failover
 		public Action? Fencing { get; set; }
 
 		public IHandoverMover? Mover { get; set; }
+
+		public IPodDeletionCost? DeletionCost { get; set; }
+
+		public const int HolderDeletionCost = 1000;
+		public const int OtherDeletionCost = 0;
+
+		internal const int DeletionCostRetryMs = 30_000;
+
+		private long m_cancelledHandovers;
+		private DateTime? m_startedAt;
+		private int m_appliedCost = -1;
+		private long m_nextCostAttempt;
 
 		// The connections closed after a lost lease, tests wait on it
 		internal Task Closing => Volatile.Read(ref m_closing);
@@ -256,6 +269,18 @@ namespace GenOnlineService.Failover
 			}
 		}
 
+		// When this copy started, on the database clock, read once: the order of the copies, never their versions, picks the standby
+		private async Task<DateTime> StartedAtAsync(CancellationToken cancellationToken)
+		{
+			if (m_startedAt is DateTime known)
+			{
+				return known;
+			}
+			DateTime now = await m_store.DatabaseNowAsync(cancellationToken);
+			m_startedAt = now;
+			return now;
+		}
+
 		private async Task StandbyStepAsync(CancellationToken cancellationToken)
 		{
 			try
@@ -295,7 +320,7 @@ namespace GenOnlineService.Failover
 				if (StandbyReady())
 				{
 					using CancellationTokenSource timeout = Bounded(m_settings.LeaseMs, cancellationToken);
-					await m_store.AnnounceStandbyAsync(CopyID, m_settings.LeaseMs, timeout.Token);
+					await m_store.AnnounceStandbyAsync(CopyID, await StartedAtAsync(timeout.Token), m_settings.LeaseMs, timeout.Token);
 				}
 
 				await TryTakeAsync(cancellationToken);
@@ -336,7 +361,7 @@ namespace GenOnlineService.Failover
 				Interlocked.Exchange(ref m_targetDeadline, start + m_settings.LeaseMs);
 				using (CancellationTokenSource timeout = Bounded(m_settings.LeaseMs, cancellationToken))
 				{
-					await m_store.AnnounceStandbyAsync(CopyID, m_settings.LeaseMs, timeout.Token);
+					await m_store.AnnounceStandbyAsync(CopyID, await StartedAtAsync(timeout.Token), m_settings.LeaseMs, timeout.Token);
 				}
 
 				// a holder that dies during the handover lets its lease expire, the target then owns everything
@@ -470,6 +495,7 @@ namespace GenOnlineService.Failover
 				try
 				{
 					await TickAsync(stopping);
+					await ApplyDeletionCostAsync(stopping);
 					if (operatorHandover == null && TakeHandoverRequest())
 					{
 						operatorHandover = HandOverAsync(closeWithoutStandby: false);
@@ -498,6 +524,32 @@ namespace GenOnlineService.Failover
 			}
 		}
 
+		internal async Task ApplyDeletionCostAsync(CancellationToken cancellationToken = default)
+		{
+			IPodDeletionCost? deletionCost = DeletionCost;
+			if (deletionCost == null)
+			{
+				return;
+			}
+			int wanted = IsHolderRole(Role) ? HolderDeletionCost : OtherDeletionCost;
+			if (wanted == m_appliedCost || m_clock() < m_nextCostAttempt)
+			{
+				return;
+			}
+			try
+			{
+				using CancellationTokenSource timeout = Bounded(5000, cancellationToken);
+				await deletionCost.SetAsync(wanted, timeout.Token);
+				m_appliedCost = wanted;
+				m_nextCostAttempt = 0;
+			}
+			catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+			{
+				m_nextCostAttempt = m_clock() + DeletionCostRetryMs;
+				s_log.LogWarning(ex, "Setting the pod deletion cost {Cost} failed on copy {CopyId}, a rolling restart may stop this copy before its standby", wanted, CopyID);
+			}
+		}
+
 		public async Task ShutdownAsync()
 		{
 			Task<bool>? running = Volatile.Read(ref m_handover);
@@ -506,12 +558,32 @@ namespace GenOnlineService.Failover
 				s_log.LogInformation("Copy {CopyId} waits for its running handover before it stops", CopyID);
 				await Task.WhenAny(running, Task.Delay(m_settings.HandoverBudgetMs));
 			}
-			if (await HandOverAsync(closeWithoutStandby: true))
+			if (Role != FailoverRole.Active)
 			{
+				await HandOverAsync(closeWithoutStandby: true);
 				return;
 			}
 
-			// a cancelled handover leaves this copy the holder, so the stopping copy still closes and releases the lease
+			// Without a standby the copy waits two lease periods: a new copy that just started announces itself once it is in sync.
+			// A cancelled handover leaves this copy the holder. In a rolling restart the target is often replaced as well, and the
+			// new copy can only announce itself once the target is cleared, so after a cancel it waits for the next standby
+			// within the whole handover budget.
+			long started = m_clock();
+			long cancelledBefore = Interlocked.Read(ref m_cancelledHandovers);
+			while (Role == FailoverRole.Active)
+			{
+				if (await HandOverAsync(closeWithoutStandby: false, warnWithoutStandby: false))
+				{
+					return;
+				}
+				bool cancelled = Interlocked.Read(ref m_cancelledHandovers) > cancelledBefore;
+				if (m_clock() >= started + (cancelled ? m_settings.HandoverBudgetMs : m_settings.LeaseMs * 2L))
+				{
+					break;
+				}
+				await Task.Delay(m_settings.RenewIntervalMs);
+			}
+
 			long epoch;
 			await m_lock.WaitAsync();
 			try
@@ -530,7 +602,7 @@ namespace GenOnlineService.Failover
 			await CloseWithoutStandbyAsync(epoch, m_drain.OpenConnections);
 		}
 
-		public async Task<bool> HandOverAsync(bool closeWithoutStandby)
+		public async Task<bool> HandOverAsync(bool closeWithoutStandby, bool warnWithoutStandby = true)
 		{
 			string? target;
 			long epoch;
@@ -564,7 +636,10 @@ namespace GenOnlineService.Failover
 
 				if (target == null && !closeWithoutStandby)
 				{
-					s_log.LogWarning("Handover requested on copy {CopyId} but no live standby waits, the copy keeps serving", CopyID);
+					if (warnWithoutStandby)
+					{
+						s_log.LogWarning("Handover requested on copy {CopyId} but no live standby waits, the copy keeps serving", CopyID);
+					}
 					await IgnoreStoreErrors(token => m_store.ClearHandoverRequestAsync(CopyID, epoch, token));
 					return false;
 				}
@@ -801,6 +876,7 @@ namespace GenOnlineService.Failover
 					return false;
 				}
 
+				Interlocked.Increment(ref m_cancelledHandovers);
 				s_log.LogWarning("Handover from copy {CopyId} to {Target} cancelled: {Why}. The copy takes back what the target owned and serves again.", CopyID, target, why);
 				AppMetrics.RecordFailoverLease("handover_cancelled");
 				BecomeActive(epoch.Value, start, "taken back from " + target, FailoverActivation.TakenBack);

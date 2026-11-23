@@ -28,6 +28,10 @@ public class RealtimeLease
 	public DateTime ExpiresAt { get; set; }
 	public string? Standby { get; set; }
 	public DateTime? StandbyExpiresAt { get; set; }
+
+	// When the standby copy started, on the database clock: a later copy takes the slot from an earlier one, so a rollout
+	// (forward or back) hands over to the copy that runs longest
+	public DateTime? StandbyStartedAt { get; set; }
 	public DateTime? HandoverRequestedAt { get; set; }
 
 	public string? HandoverTarget { get; set; }
@@ -48,6 +52,7 @@ public class RealtimeLeaseConfiguration : IEntityTypeConfiguration<RealtimeLease
 		builder.Property(e => e.ExpiresAt).HasColumnName("expires_at");
 		builder.Property(e => e.Standby).HasColumnName("standby").HasMaxLength(128);
 		builder.Property(e => e.StandbyExpiresAt).HasColumnName("standby_expires_at");
+		builder.Property(e => e.StandbyStartedAt).HasColumnName("standby_started_at");
 		builder.Property(e => e.HandoverRequestedAt).HasColumnName("handover_requested_at");
 		builder.Property(e => e.HandoverTarget).HasColumnName("handover_target").HasMaxLength(128);
 		builder.Property(e => e.HandoverConfirmedAt).HasColumnName("handover_confirmed_at");
@@ -107,12 +112,16 @@ namespace Database
 			return updated == 1;
 		}
 
-		// A standby names itself so the holder can hand over to it
-		public static async Task<bool> AnnounceStandby(AppDbContext db, string copyID, int leaseMs, CancellationToken cancellationToken = default)
+		// A standby names itself so the holder can hand over to it. The slot goes to the copy that started last (startedAt, the
+		// database clock at its start): an earlier copy takes it only when it is free, its own or lapsed, and the handover target keeps it.
+		public static async Task<bool> AnnounceStandby(AppDbContext db, string copyID, DateTime startedAt, int leaseMs, CancellationToken cancellationToken = default)
 		{
 			int updated = await db.Database.ExecuteSqlRawAsync(
-				$"UPDATE realtime_lease SET standby = {{0}}, standby_expires_at = {NowPlus(db, 1)} WHERE id = {RowID} AND holder <> {{0}} AND (handover_target IS NULL OR handover_target = {{0}})",
-				new object[] { copyID, leaseMs }, cancellationToken);
+				$"UPDATE realtime_lease SET standby = {{0}}, standby_expires_at = {NowPlus(db, 1)}, standby_started_at = {{2}} "
+				+ $"WHERE id = {RowID} AND holder <> {{0}} AND (handover_target IS NULL OR handover_target = {{0}}) "
+				+ $"AND (handover_target = {{0}} OR standby IS NULL OR standby = {{0}} OR standby_expires_at IS NULL OR standby_expires_at <= {Now(db)} "
+				+ $"OR standby_started_at IS NULL OR standby_started_at <= {{2}})",
+				new object[] { copyID, leaseMs, startedAt }, cancellationToken);
 			return updated == 1;
 		}
 

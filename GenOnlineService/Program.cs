@@ -1429,6 +1429,14 @@ namespace GenOnlineService
 				failover = new GenOnlineService.Failover.FailoverCoordinator(failoverSettings, GenOnlineService.Failover.CopyIdentity.ID,
 					new GenOnlineService.Failover.DatabaseLeaseStore(app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>()), drain);
 				GenOnlineService.Failover.RealtimeFailover.Install(failover);
+				if (failoverSettings.PodDeletionCost)
+				{
+					failover.DeletionCost = GenOnlineService.Failover.KubernetesPodDeletionCost.FromEnvironment();
+					if (failover.DeletionCost == null)
+					{
+						app.Logger.LogWarning("Realtime:failover:pod_deletion_cost is on, but the copy runs outside a Kubernetes pod (no API address, POD_NAME or service account), so no deletion cost is set");
+					}
+				}
 				if (!realtimeBackplane.UsesRedis)
 				{
 					app.Logger.LogWarning("Realtime:failover is on without the Redis backplane: during a handover chat between the two copies does not cross, and lobbies and the queue do not survive a failover.");

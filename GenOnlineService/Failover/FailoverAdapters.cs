@@ -45,8 +45,11 @@ namespace GenOnlineService.Failover
 		public Task<bool> RenewAsync(string copyID, long epoch, int leaseMs, CancellationToken cancellationToken) =>
 			With(db => Database.Lease.Renew(db, copyID, epoch, leaseMs, cancellationToken), cancellationToken);
 
-		public Task AnnounceStandbyAsync(string copyID, int leaseMs, CancellationToken cancellationToken) =>
-			With(db => Database.Lease.AnnounceStandby(db, copyID, leaseMs, cancellationToken), cancellationToken);
+		public Task AnnounceStandbyAsync(string copyID, DateTime startedAt, int leaseMs, CancellationToken cancellationToken) =>
+			With(db => Database.Lease.AnnounceStandby(db, copyID, startedAt, leaseMs, cancellationToken), cancellationToken);
+
+		public Task<DateTime> DatabaseNowAsync(CancellationToken cancellationToken) =>
+			With(db => Database.Lease.DatabaseNow(db, cancellationToken), cancellationToken);
 
 		public Task<string?> BeginHandoverAsync(string copyID, long epoch, CancellationToken cancellationToken) =>
 			With(db => Database.Lease.BeginHandover(db, copyID, epoch, cancellationToken), cancellationToken);
