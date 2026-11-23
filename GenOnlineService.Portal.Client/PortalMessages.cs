@@ -32,7 +32,7 @@ namespace GenOnlineService.Portal.Client
 
 	public static class PortalRoutes
 	{
-		public const string Overview = "api/v1/staff/overview";
+		public const string Overview = "api/v1/admin/overview";
 		public const string Reports = "api/v1/reports";
 		public const string Appeals = "api/v1/appeals";
 		public const string ReportSearch = "api/v1/reports/search";
@@ -47,15 +47,15 @@ namespace GenOnlineService.Portal.Client
 		public const string Settings = "api/v1/application/settings";
 		public const string Announcements = "api/v1/announcements";
 		public const string Messages = "api/v1/messages";
-		public const string StaffRealtime = "api/v1/staff/realtime";
-		public const string StaffLobbies = "api/v1/staff/lobbies";
+		public const string StaffRealtime = "api/v1/admin/realtime";
+		public const string StaffLobbies = "api/v1/admin/lobbies";
 		public const string Lobbies = "api/v1/lobbies";
-		public const string TextRules = "api/v1/staff/text_rules";
-		public const string StaffInvestigate = "api/v1/staff/investigate";
+		public const string TextRules = "api/v1/text_rules";
+		public const string StaffInvestigate = "api/v1/admin/investigate";
 		public const string Flags = "api/v1/flags";
 		public const string FlagRevisions = "api/v1/flags/revisions";
-		public const string Rules = "api/v1/staff/rules";
-		public const string RuleMatches = "api/v1/staff/rules/matches";
+		public const string Rules = "api/v1/rules";
+		public const string RuleMatches = "api/v1/rules/matches";
 		public const string Roles = "api/v1/roles";
 		public const string Permissions = "api/v1/permissions";
 		public const string SignIn = "users/sign_in";
@@ -668,7 +668,6 @@ namespace GenOnlineService.Portal.Client
 		public string FullName => Tag == null ? Name : Name + "#" + Tag;
 	}
 
-	// GET /api/v1/staff/investigate: every account that used one identifier, with players.inspect and audited
 	public sealed record PortalInvestigation
 	{
 		public static readonly IReadOnlyList<(string Kind, string Label, string Hint)> Kinds =
@@ -1137,8 +1136,6 @@ namespace GenOnlineService.Portal.Client
 			String.Join('&', arguments.Where(a => a.Value != null).Select(a => a.Key + "=" + Uri.EscapeDataString(a.Value!.ToString()!)));
 	}
 
-	// GET /api/v1/staff/realtime: the failover lease as "realtime status" prints it (null without PostgreSQL), and the
-	// players, lobbies and queues of the service copy that answered
 	public sealed record PortalRealtime
 	{
 		public PortalRealtimeCopy Copy { get; init; } = new PortalRealtimeCopy();
@@ -1172,7 +1169,6 @@ namespace GenOnlineService.Portal.Client
 		public int Queued { get; init; }
 	}
 
-	// GET /api/v1/staff/lobbies: every live lobby in the fields of the hub's LobbyState
 	public sealed record PortalLobbyList
 	{
 		public IReadOnlyList<PortalLobby> Lobbies { get; init; } = [];
@@ -1238,7 +1234,6 @@ namespace GenOnlineService.Portal.Client
 		public IReadOnlyList<PortalConnectionReport> Reports { get; init; } = [];
 	}
 
-	// The text rules page (/admin/text-rules) of GET /api/v1/staff/text_rules/*: words, exceptions, rule workflows, the test
 	public sealed record PortalTextTerm
 	{
 		public long Id { get; init; }

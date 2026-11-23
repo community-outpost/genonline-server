@@ -250,7 +250,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Lists the automated rules, or the archived ones.")]
 		[ProducesResponseType<RuleListResponse>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/rules")]
+		[HttpGet("~/api/v1/rules")]
 		public async Task<IActionResult> List([FromQuery] bool archived = false)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -263,7 +263,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Reads a rule with the document of its current version and every version.")]
 		[ProducesResponseType<RuleDetailResponse>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/rules/{id:long}")]
+		[HttpGet("~/api/v1/rules/{id:long}")]
 		public async Task<IActionResult> Get(long id)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -272,7 +272,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Reads one version of a rule with its document.")]
 		[ProducesResponseType<RuleVersionView>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/rules/{id:long}/versions/{number:int}")]
+		[HttpGet("~/api/v1/rules/{id:long}/versions/{number:int}")]
 		public async Task<IActionResult> GetVersion(long id, int number)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -287,7 +287,7 @@ namespace GenOnlineService.Rules
 		[EndpointSummary("Creates a rule with its first version after the document validates.")]
 		[ProducesResponseType<RuleDetailResponse>(StatusCodes.Status201Created)]
 		[ApiRequestBody(typeof(RuleCreateRequest))]
-		[HttpPost("~/api/v1/staff/rules")]
+		[HttpPost("~/api/v1/rules")]
 		public async Task<IActionResult> Create([FromBody] JsonElement body)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -302,7 +302,7 @@ namespace GenOnlineService.Rules
 		[EndpointSummary("Saves a new version of a rule after the document validates.")]
 		[ProducesResponseType<RuleDetailResponse>(StatusCodes.Status201Created)]
 		[ApiRequestBody(typeof(RuleVersionRequest))]
-		[HttpPost("~/api/v1/staff/rules/{id:long}/versions")]
+		[HttpPost("~/api/v1/rules/{id:long}/versions")]
 		public async Task<IActionResult> SaveVersion(long id, [FromBody] JsonElement body)
 		{
 			int? baseVersion = body.ValueKind == JsonValueKind.Object && body.TryGetProperty("base_version", out JsonElement value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number) ? number : null;
@@ -317,7 +317,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Changes the name, description, mode or enabled state of a rule.")]
 		[ProducesResponseType<RuleView>(StatusCodes.Status200OK)]
-		[HttpPatch("~/api/v1/staff/rules/{id:long}")]
+		[HttpPatch("~/api/v1/rules/{id:long}")]
 		public async Task<IActionResult> Update(long id, [FromBody] RuleUpdateRequest? body)
 		{
 			body ??= new RuleUpdateRequest();
@@ -327,7 +327,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Archives a rule, so it never runs and leaves the list.")]
 		[ProducesResponseType<RuleView>(StatusCodes.Status200OK)]
-		[HttpPost("~/api/v1/staff/rules/{id:long}/archive")]
+		[HttpPost("~/api/v1/rules/{id:long}/archive")]
 		public async Task<IActionResult> Archive(long id)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -336,7 +336,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Restores an archived rule as it was.")]
 		[ProducesResponseType<RuleView>(StatusCodes.Status200OK)]
-		[HttpPost("~/api/v1/staff/rules/{id:long}/restore")]
+		[HttpPost("~/api/v1/rules/{id:long}/restore")]
 		public async Task<IActionResult> Restore(long id)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -346,7 +346,7 @@ namespace GenOnlineService.Rules
 		[EndpointSummary("Checks a rule document without saving it and lists every problem.")]
 		[ProducesResponseType<RuleValidateResponse>(StatusCodes.Status200OK)]
 		[ApiRequestBody(typeof(RuleValidateRequest))]
-		[HttpPost("~/api/v1/staff/rules/validate")]
+		[HttpPost("~/api/v1/rules/validate")]
 		public IActionResult Validate([FromBody] JsonElement body)
 		{
 			string? json = DocumentOf(body);
@@ -356,7 +356,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Lists the fields a rule can read with their operators and triggers, the actions and the modes.")]
 		[ProducesResponseType<RuleCatalogResponse>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/rules/fields")]
+		[HttpGet("~/api/v1/rules/fields")]
 		public IActionResult Fields()
 		{
 			return RestResults.Ok(new RuleCatalogResponse
@@ -375,7 +375,7 @@ namespace GenOnlineService.Rules
 		[EndpointSummary("Lists who a saved rule or an unsaved document would match now, within a row and a time limit, without acting.")]
 		[ProducesResponseType<RulePreviewResponse>(StatusCodes.Status200OK)]
 		[ApiRequestBody(typeof(RulePreviewRequest))]
-		[HttpPost("~/api/v1/staff/rules/preview")]
+		[HttpPost("~/api/v1/rules/preview")]
 		public async Task<IActionResult> Preview([FromBody] JsonElement body, CancellationToken cancellationToken)
 		{
 			if (RuleRunner.Environment is not RuleEnvironment environment)
@@ -415,7 +415,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Starts a sweep of a rule's current version over every player, on the copy that holds the realtime lease.")]
 		[ProducesResponseType<RuleSweepView>(StatusCodes.Status201Created)]
-		[HttpPost("~/api/v1/staff/rules/{id:long}/sweep")]
+		[HttpPost("~/api/v1/rules/{id:long}/sweep")]
 		public async Task<IActionResult> StartSweep(long id)
 		{
 			if (RuleRunner.Environment is not RuleEnvironment environment)
@@ -429,7 +429,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Reads the progress of the last sweep of a rule on this copy.")]
 		[ProducesResponseType<RuleSweepView>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/rules/{id:long}/sweep")]
+		[HttpGet("~/api/v1/rules/{id:long}/sweep")]
 		public IActionResult GetSweep(long id)
 		{
 			return RuleSweeps.Get(id) is RuleSweepProgress progress ? RestResults.Ok(RuleSweepView.Of(progress)) : RestResults.NotFound("sweep");
@@ -437,7 +437,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Cancels the running sweep of a rule.")]
 		[ProducesResponseType<RuleSweepView>(StatusCodes.Status200OK)]
-		[HttpDelete("~/api/v1/staff/rules/{id:long}/sweep")]
+		[HttpDelete("~/api/v1/rules/{id:long}/sweep")]
 		public async Task<IActionResult> CancelSweep(long id)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();

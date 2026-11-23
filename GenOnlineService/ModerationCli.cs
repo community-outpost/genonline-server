@@ -635,7 +635,6 @@ namespace GenOnlineService
 
 		internal static string DescribeLease(RealtimeLease lease, DateTime now)
 		{
-			// the staff pages read the same state (GET /api/v1/staff/realtime)
 			Rest.StaffRealtimeLease state = Rest.StaffRealtimeLease.Of(lease, now);
 			string expiry = state.ExpiresInMs is long ms ? $"expires in {ms} ms" : "expired";
 			string requested = state.HandoverRequested ? "  handover requested" : String.Empty;

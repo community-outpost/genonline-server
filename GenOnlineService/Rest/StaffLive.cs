@@ -60,7 +60,7 @@ namespace GenOnlineService.Rest
 		public int Queued { get; init; }
 	}
 
-	// GET /api/v1/staff/realtime: the lease is null where the CLI refuses it (no PostgreSQL), the counts are this copy's
+	// GET /api/v1/admin/realtime: the lease is null where the CLI refuses it (no PostgreSQL), the counts are this copy's
 	public sealed record StaffRealtimeResponse
 	{
 		public StaffRealtimeCopy Copy { get; init; } = new StaffRealtimeCopy();
@@ -70,7 +70,6 @@ namespace GenOnlineService.Rest
 		public IReadOnlyList<StaffRealtimeQueue> Queues { get; init; } = [];
 	}
 
-	// GET /api/v1/staff/lobbies: every lobby of this copy in the fields of the hub's LobbyState, never the password
 	public sealed record StaffLobbyListResponse
 	{
 		public IReadOnlyList<LobbyInfo> Lobbies { get; init; } = [];
@@ -209,7 +208,7 @@ namespace GenOnlineService.Rest
 		[Authorize(Policy = PermissionPolicies.Prefix + Permissions.ServerStats)]
 		[EndpointSummary("Reads the realtime status: the failover lease, this copy, its players, lobbies and queues.")]
 		[ProducesResponseType<StaffRealtimeResponse>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/realtime")]
+		[HttpGet("~/api/v1/admin/realtime")]
 		public async Task<IActionResult> Realtime()
 		{
 			return RestResults.Ok(await StaffLive.StatusAsync(m_dbFactory, WebSocketManager.GetNumberOfUsersOnline(), LiveLobbies?.GetNumLobbies() ?? 0, HttpContext.RequestAborted));
@@ -219,7 +218,7 @@ namespace GenOnlineService.Rest
 		[EndpointSummary("Lists every live lobby with its members for the staff pages.")]
 		[ProducesResponseType<StaffLobbyListResponse>(StatusCodes.Status200OK)]
 		[ApiPermission(Permissions.ModerationKick, Permissions.ModerationMute, Permissions.ModerationBan)]
-		[HttpGet("~/api/v1/staff/lobbies")]
+		[HttpGet("~/api/v1/admin/lobbies")]
 		public async Task<IActionResult> Lobbies()
 		{
 			if (!await StaffAccess.IsStaffAsync(m_authorization, User))

@@ -282,7 +282,7 @@ internal static class AdminArea
 [Collection(AdminAreaCollection.Name)]
 public class AdminAreaTests
 {
-	private static readonly string[] s_staffReads = ["/api/v1/staff/overview", "/api/v1/reports/search", "/api/v1/players/search?query=ab", "/api/v1/anticheat_reports/modules"];
+	private static readonly string[] s_staffReads = ["/api/v1/admin/overview", "/api/v1/reports/search", "/api/v1/players/search?query=ab", "/api/v1/anticheat_reports/modules"];
 
 	[ProbeTheory]
 	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
@@ -338,11 +338,4 @@ public class AdminAreaTests
 	}
 
 	// evidence for a sanction the caller may not give answers as if it did not exist, so its id leaks nothing
-	// IPs and devices need players.inspect: a player and a moderator get 403 and no audit row is written; an admin reads it
-	// every cookie change (POST, PATCH, DELETE) without the header, or with another account's token, is a 400 csrf
-	// the antiforgery middleware of the staff area leaves the MVC forms and the OAuth endpoints as they were
-	// The staff start page, GET /api/v1/staff/overview with the sign-in cookie: the numbers and newest rows match the seeded database; the anti-cheat numbers need
-	// anticheat.review like the lists, so a moderator gets null where an admin gets the counts
-	// The rules pages open for every staff member and show their own refusal, the routes behind them need rules.manage for
-	// the rules and anticheat.review for their matches, which only admin holds
 }

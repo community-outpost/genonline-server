@@ -154,7 +154,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Lists the words of the text rules, filtered by text, language, category and severity.")]
 		[ProducesResponseType<TextTermListResponse>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/text_rules/terms")]
+		[HttpGet("~/api/v1/text_rules/terms")]
 		public async Task<IActionResult> Terms([FromQuery] string? query, [FromQuery] string? language, [FromQuery] string? category, [FromQuery] string? severity)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -164,7 +164,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Adds a word to the text rules.")]
 		[ProducesResponseType<TextTermView>(StatusCodes.Status201Created)]
-		[HttpPost("~/api/v1/staff/text_rules/terms")]
+		[HttpPost("~/api/v1/text_rules/terms")]
 		public async Task<IActionResult> AddTerm([FromBody] TextTermRequest? body)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -174,7 +174,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Changes the text, language, category, severity or match of a word.")]
 		[ProducesResponseType<TextTermView>(StatusCodes.Status200OK)]
-		[HttpPatch("~/api/v1/staff/text_rules/terms/{id:long}")]
+		[HttpPatch("~/api/v1/text_rules/terms/{id:long}")]
 		public async Task<IActionResult> UpdateTerm(long id, [FromBody] TextTermRequest? body)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -184,7 +184,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Removes a word from the text rules.")]
 		[ProducesResponseType(StatusCodes.Status204NoContent)]
-		[HttpDelete("~/api/v1/staff/text_rules/terms/{id:long}")]
+		[HttpDelete("~/api/v1/text_rules/terms/{id:long}")]
 		public async Task<IActionResult> RemoveTerm(long id)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -194,7 +194,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Lists the exception words that stay allowed although they contain a listed word.")]
 		[ProducesResponseType<TextExceptionListResponse>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/text_rules/exceptions")]
+		[HttpGet("~/api/v1/text_rules/exceptions")]
 		public async Task<IActionResult> Exceptions()
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -203,7 +203,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Adds an exception word.")]
 		[ProducesResponseType<TextExceptionView>(StatusCodes.Status201Created)]
-		[HttpPost("~/api/v1/staff/text_rules/exceptions")]
+		[HttpPost("~/api/v1/text_rules/exceptions")]
 		public async Task<IActionResult> AddException([FromBody] TextExceptionRequest? body)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -213,7 +213,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Removes an exception word.")]
 		[ProducesResponseType(StatusCodes.Status204NoContent)]
-		[HttpDelete("~/api/v1/staff/text_rules/exceptions/{id:long}")]
+		[HttpDelete("~/api/v1/text_rules/exceptions/{id:long}")]
 		public async Task<IActionResult> RemoveException(long id)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -223,7 +223,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Lists the rule workflows of display names, lobby names and chat.")]
 		[ProducesResponseType<TextWorkflowListResponse>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/text_rules/workflows")]
+		[HttpGet("~/api/v1/text_rules/workflows")]
 		public async Task<IActionResult> Workflows()
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -233,7 +233,7 @@ namespace GenOnlineService.Rest
 		[EndpointSummary("Replaces the rule workflow of one input kind after it compiles and runs.")]
 		[ProducesResponseType<TextWorkflowView>(StatusCodes.Status200OK)]
 		[ApiRequestBody(typeof(TextWorkflowDefinition))]
-		[HttpPut("~/api/v1/staff/text_rules/workflows/{kind}")]
+		[HttpPut("~/api/v1/text_rules/workflows/{kind}")]
 		public async Task<IActionResult> SaveWorkflow(string kind, [FromBody] JsonElement body)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -243,7 +243,7 @@ namespace GenOnlineService.Rest
 
 		[EndpointSummary("Checks a text against the current rules: how it reads, what it matches and the outcome.")]
 		[ProducesResponseType<TextTestResponse>(StatusCodes.Status200OK)]
-		[HttpPost("~/api/v1/staff/text_rules/test")]
+		[HttpPost("~/api/v1/text_rules/test")]
 		public IActionResult Test([FromBody] TextTestRequest? body)
 		{
 			if (!TextKinds.IsKnown(body?.Kind))

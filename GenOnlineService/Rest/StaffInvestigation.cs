@@ -101,7 +101,7 @@ namespace GenOnlineService.Rest
 		[Authorize(Policy = PermissionPolicies.Prefix + Permissions.PlayersInspect)]
 		[EndpointSummary("Finds every account that used a MAC address, machine id, volume serial, IP address, IP range or country.")]
 		[ProducesResponseType<PortalInvestigation>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/investigate")]
+		[HttpGet("~/api/v1/admin/investigate")]
 		public async Task<IActionResult> Search()
 		{
 			(IdentifierQuery? query, Failure? failure) = IdentifierSearch.Read(StaffPlayerActions.First(Request.Query, "kind"), StaffPlayerActions.First(Request.Query, "value"), StaffPlayerActions.First(Request.Query, "key"));

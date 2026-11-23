@@ -71,7 +71,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Lists the matches of the automated rules, newest first, filtered by review state, rule, player, trigger and outcome.")]
 		[ProducesResponseType<RuleMatchListResponse>(StatusCodes.Status200OK)]
-		[HttpGet("~/api/v1/staff/rules/matches")]
+		[HttpGet("~/api/v1/rules/matches")]
 		public async Task<IActionResult> List([FromQuery] string? review, [FromQuery(Name = "rule_id")] long? ruleID, [FromQuery(Name = "user_id")] long? userID, [FromQuery] string? trigger, [FromQuery] string? outcome)
 		{
 			(OffsetPage page, Failure? invalid) = Paging.ReadOffset(Request);
@@ -119,7 +119,7 @@ namespace GenOnlineService.Rules
 
 		[EndpointSummary("Marks a flagged match reviewed or dismissed.")]
 		[ProducesResponseType<RuleMatchView>(StatusCodes.Status200OK)]
-		[HttpPatch("~/api/v1/staff/rules/matches/{id:long}")]
+		[HttpPatch("~/api/v1/rules/matches/{id:long}")]
 		public async Task<IActionResult> Review(long id, [FromBody] RuleMatchReviewRequest? body)
 		{
 			string? review = body?.Review;

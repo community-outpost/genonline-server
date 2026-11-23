@@ -59,7 +59,6 @@ namespace GenOnlineService.Rest
 		public IReadOnlyList<StaffOverviewSanction> RecentSanctions { get; init; } = [];
 	}
 
-	// The read behind the staff dashboard, GET /api/v1/staff/overview
 	public static class StaffOverview
 	{
 		public const int RecentCount = 5;
@@ -168,7 +167,7 @@ namespace GenOnlineService.Rest
 		[EndpointSummary("Reads the counts of the staff overview page.")]
 		[ProducesResponseType<StaffOverviewResponse>(StatusCodes.Status200OK)]
 		[ApiPermission(Permissions.ModerationKick, Permissions.ModerationMute, Permissions.ModerationBan)]
-		[HttpGet("~/api/v1/staff/overview")]
+		[HttpGet("~/api/v1/admin/overview")]
 		public async Task<IActionResult> Get()
 		{
 			if (!await StaffAccess.IsStaffAsync(m_authorization, User))
