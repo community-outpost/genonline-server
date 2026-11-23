@@ -17,6 +17,7 @@
 */
 
 using GenOnlineService.Identity;
+using GenOnlineService.Realtime;
 
 namespace GenOnlineService
 {
@@ -26,5 +27,24 @@ namespace GenOnlineService
 		// The game comes from the client registry row of the registered session, never from the client id
 		public static GameBuild Of(GameSessionRegistration registration) =>
 			new GameBuild(registration.Game, registration.ExeCrc ?? 0, registration.IniCrc ?? 0, (EKnownAnticheatID)registration.AnticheatID);
+	}
+
+	// A lobby requires Easy Anti-Cheat or the integrated anti-cheat, every client build runs one of them
+	public static class LobbyAnticheat
+	{
+		public static EKnownAnticheatID RequirementOf(bool requireEasyAnticheat) =>
+			requireEasyAnticheat ? EKnownAnticheatID.EASY_ANTICHEAT : EKnownAnticheatID.GO_INTEGRATED_AC;
+
+		public static string? CreateRefusal(EKnownAnticheatID hostAnticheat, bool requireEasyAnticheat)
+		{
+			if (hostAnticheat != EKnownAnticheatID.GO_INTEGRATED_AC && hostAnticheat != EKnownAnticheatID.EASY_ANTICHEAT)
+				return ErrorCodes.LobbyAnticheatRequired;
+			return requireEasyAnticheat && hostAnticheat != EKnownAnticheatID.EASY_ANTICHEAT ? ErrorCodes.LobbyEasyAnticheatUnavailable : null;
+		}
+
+		public static bool Admits(EKnownAnticheatID lobbyRequirement, EKnownAnticheatID build) =>
+			lobbyRequirement == EKnownAnticheatID.EASY_ANTICHEAT
+				? build == EKnownAnticheatID.EASY_ANTICHEAT
+				: build == EKnownAnticheatID.GO_INTEGRATED_AC || build == EKnownAnticheatID.EASY_ANTICHEAT;
 	}
 }

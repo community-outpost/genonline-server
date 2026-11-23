@@ -149,6 +149,10 @@ namespace GenOnlineService.Realtime
 			{
 				return Result.Fail(ErrorCodes.SessionNotRegistered);
 			}
+			if (LobbyAnticheat.CreateRefusal((EKnownAnticheatID)build.AnticheatID, request.RequireAnticheat) is string anticheatRefusal)
+			{
+				return Result.Fail(anticheatRefusal);
+			}
 
 			UserSession session = Session;
 			Int64 lobbyID;
@@ -160,7 +164,7 @@ namespace GenOnlineService.Realtime
 					(UInt16)request.PreferredPort, settings.VanillaTeams, settings.TrackStats, (UInt32)settings.StartingCash, settings.LimitSuperweapons,
 					request.Password != null, request.Password ?? String.Empty, session.networkRoomID, settings.AllowObservers, (UInt16)settings.MaxCameraHeight,
 					GameBuild.Of(build), ELobbyType.CustomGame,
-					request.Visibility == LobbyVisibility.Friends ? ELobbyJoinability.FriendsOnly : ELobbyJoinability.Public, owner.Tag);
+					request.Visibility == LobbyVisibility.Friends ? ELobbyJoinability.FriendsOnly : ELobbyJoinability.Public, owner.Tag, request.RequireAnticheat);
 			}
 
 			if (lobbyID < 0)
@@ -583,6 +587,11 @@ namespace GenOnlineService.Realtime
 			if (build == null)
 			{
 				return Result.Fail(ErrorCodes.SessionNotRegistered);
+			}
+			// The match lobby requires GenOnline anti-cheat, so a build without one is refused before it is matched.
+			if (LobbyAnticheat.CreateRefusal((EKnownAnticheatID)build.AnticheatID, false) is string anticheatRefusal)
+			{
+				return Result.Fail(anticheatRefusal);
 			}
 
 			UInt16 playlistID = (UInt16)request.PlaylistId;

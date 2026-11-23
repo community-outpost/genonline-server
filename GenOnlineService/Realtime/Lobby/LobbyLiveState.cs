@@ -246,7 +246,7 @@ namespace GenOnlineService
 			lobby.Game = build.Game;
 			lobby.ExeCRC = build.ExeCRC;
 			lobby.IniCRC = build.IniCRC;
-			lobby.AnticheatID = build.AnticheatID;
+			lobby.AnticheatID = LobbyAnticheat.RequirementOf(build.AnticheatID == EKnownAnticheatID.EASY_ANTICHEAT);
 			lobby.NetworkRoomID = live.NetworkRoomId;
 			lobby.RNGSeed = live.RngSeed;
 			lobby.Region = live.Region ?? String.Empty;

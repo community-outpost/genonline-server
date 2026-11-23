@@ -308,6 +308,7 @@ namespace GenOnlineService.Realtime
 		public string? Password { get; init; }
 		public int PreferredPort { get; init; }
 		public LobbySettings Settings { get; init; } = new LobbySettings();
+		public bool RequireAnticheat { get; init; }
 	}
 
 	public sealed record JoinLobbyRequest
