@@ -40,6 +40,19 @@ namespace GenOnlineService.Realtime
 
 		private partial Task OnConnectionClosedAsync(UserSession session) => LeaveChannelOnCloseAsync(session);
 
+		public Task<Result<Empty>> SetPresenceStatus(SetPresenceStatusRequest request)
+		{
+			SharedUserData? user = WebSocketManager.GetSharedDataForUser(Session.m_UserID);
+			if (user == null || !RealtimePresence.TryParseStatus(request.Status, out PresenceStatus status))
+			{
+				return Task.FromResult<Result<Empty>>(Result.Invalid("status"));
+			}
+
+			user.PresenceStatus = status;
+			PublishPresence(user.m_UserID);
+			return Task.FromResult(Result.Success());
+		}
+
 		internal static void PublishPresence(Int64 userID)
 		{
 			FriendPresenceEvent presence = RealtimePresence.Of(userID);

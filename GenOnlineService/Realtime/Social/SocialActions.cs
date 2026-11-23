@@ -68,7 +68,7 @@ namespace GenOnlineService.Realtime
 				}
 
 				FriendPresenceEvent presence = RealtimePresence.Of(friendID);
-				friendList.Add(new FriendMember { Id = member.Id, Name = member.Name, Badges = member.Badges, Online = presence.Online, Activity = presence.Activity, ChannelId = presence.ChannelId });
+				friendList.Add(new FriendMember { Id = member.Id, Name = member.Name, Badges = member.Badges, Online = presence.Online, Activity = presence.Activity, ChannelId = presence.ChannelId, Status = presence.Status });
 			}
 
 			return new SocialLists(

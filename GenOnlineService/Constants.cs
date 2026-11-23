@@ -843,6 +843,9 @@ namespace GenOnlineService
 		public Int64 m_UserID = -1;
 		public string m_strDisplayName = String.Empty;
 
+		// Shared by the user's sessions and dropped with the last one; the client resends its choice on every connect
+		public GenOnlineService.Realtime.PresenceStatus PresenceStatus { get; set; }
+
 		public int m_NameTag;
 
 		// contains ELO too

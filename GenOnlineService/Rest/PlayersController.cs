@@ -133,7 +133,7 @@ namespace GenOnlineService.Rest
 				foreach (long userID in byUser.Keys)
 				{
 					SharedUserData? shared = WebSocketManager.GetSharedDataForUser(userID);
-					if (shared != null && seen.Add(userID))
+					if (shared != null && shared.PresenceStatus != PresenceStatus.Invisible && seen.Add(userID))
 					{
 						yield return RealtimeMembers.Of(userID, shared.m_strDisplayName, RealtimeMembers.ClientOf(sessionType), shared.m_NameTag);
 					}

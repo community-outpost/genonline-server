@@ -17,6 +17,7 @@
 */
 
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace GenOnlineService.Realtime
 {
@@ -91,7 +92,29 @@ namespace GenOnlineService.Realtime
 	// Presence of a user from their sessions, an abandoned session in its reconnect grace still counts
 	internal static class RealtimePresence
 	{
-		public static FriendPresenceEvent Of(Int64 userID)
+		// What friends see, an invisible user looks exactly like an offline one
+		public static FriendPresenceEvent Of(Int64 userID) => ForFriends(Real(userID), StatusOf(userID));
+
+		public static PresenceStatus StatusOf(Int64 userID) => WebSocketManager.GetSharedDataForUser(userID)?.PresenceStatus ?? PresenceStatus.Online;
+
+		public static bool TryParseStatus(string? value, out PresenceStatus status)
+		{
+			foreach (PresenceStatus candidate in Enum.GetValues<PresenceStatus>())
+			{
+				if (value == JsonNamingPolicy.SnakeCaseLower.ConvertName(candidate.ToString()))
+				{
+					status = candidate;
+					return true;
+				}
+			}
+			status = default;
+			return false;
+		}
+
+		public static FriendPresenceEvent ForFriends(FriendPresenceEvent real, PresenceStatus status) =>
+			status == PresenceStatus.Invisible ? new FriendPresenceEvent { UserId = real.UserId } : real with { Status = status };
+
+		private static FriendPresenceEvent Real(Int64 userID)
 		{
 			List<UserSession> sessions = WebSocketManager.GetAllDataFromUser(userID);
 			PresenceActivity activity = PresenceActivity.Offline;

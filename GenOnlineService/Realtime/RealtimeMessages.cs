@@ -25,6 +25,7 @@ namespace GenOnlineService.Realtime
 	public enum ClientType { Game, Launcher, Chat }
 	public enum MessageType { Chat, Action, Announcement }
 	public enum PresenceActivity { Offline, Menu, Channel, Lobby, Matchmaking, InGame }
+	public enum PresenceStatus { Online, Idle, DoNotDisturb, Invisible }
 	public enum ModerationAction { Kick, Ban, Mute }
 	public enum SlotState { Open, Closed, Player, AiEasy, AiMedium, AiBrutal }
 	public enum LobbyType { Custom, QuickMatch }
@@ -82,6 +83,7 @@ namespace GenOnlineService.Realtime
 		public bool Online { get; init; }
 		public PresenceActivity Activity { get; init; }
 		public long? ChannelId { get; init; }
+		public PresenceStatus Status { get; init; }
 	}
 
 	public sealed record BadgeDefinition
@@ -359,6 +361,11 @@ namespace GenOnlineService.Realtime
 		public Optional<int?> Team { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public int? StartPosition { get; init; }
+	}
+
+	public sealed record SetPresenceStatusRequest
+	{
+		public string? Status { get; init; }
 	}
 
 	public sealed record SetHasMapRequest
@@ -707,6 +714,7 @@ namespace GenOnlineService.Realtime
 		public IReadOnlyList<ClientType> Clients { get; init; } = [];
 		public PresenceActivity Activity { get; init; }
 		public long? ChannelId { get; init; }
+		public PresenceStatus Status { get; init; }
 	}
 
 	public sealed record StartSignallingEvent
