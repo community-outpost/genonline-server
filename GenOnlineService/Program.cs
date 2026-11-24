@@ -665,7 +665,17 @@ namespace GenOnlineService
 
 				await using var db = CreateDbContext(provider, connectionString, DetectMySqlServerVersion(provider, connectionString));
 
-				var applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
+				switch (await MigrationBaseline.AdoptAsync(db))
+				{
+					case MigrationBaseline.Outcome.Adopted:
+						Console.WriteLine("The database ran every collapsed migration: its history now records the Baseline migration in their place.");
+						break;
+					case MigrationBaseline.Outcome.Behind:
+						Console.Error.WriteLine($"The database stopped part way through the collapsed migrations. Run \"migrate\" of GOServices 067dca21 (the last release with them) first, then this one.");
+						return 1;
+				}
+
+				var applied =(await db.Database.GetAppliedMigrationsAsync()).ToList();
 				var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
 
 				Console.WriteLine($"Applied migrations: {applied.Count} (latest: {(applied.Count > 0 ? applied[applied.Count - 1] : "none")})");
@@ -680,27 +690,6 @@ namespace GenOnlineService
 				foreach (string name in pending)
 				{
 					Console.WriteLine($"  {name}");
-				}
-
-				// the unique (user_id, provider) index would fail on existing duplicates; list them instead of a half-applied migration
-				if (applied.Count > 0 && pending.Any(m => m.EndsWith("_UniqueIdentityPerProvider", StringComparison.Ordinal)))
-				{
-					var duplicates = await db.Identities.AsNoTracking()
-						.GroupBy(i => new { i.UserID, i.Provider })
-						.Where(g => g.Count() > 1)
-						.Select(g => new { g.Key.UserID, g.Key.Provider, Count = g.Count() })
-						.ToListAsync();
-
-					if (duplicates.Count > 0)
-					{
-						Console.Error.WriteLine($"Cannot add the one-identity-per-provider index: {duplicates.Count} user(s) have several identities of one provider. Remove the extra rows from identities first:");
-						foreach (var duplicate in duplicates)
-						{
-							Console.Error.WriteLine($"  user {duplicate.UserID}: {duplicate.Count} {duplicate.Provider} identities");
-						}
-
-						return 2;
-					}
 				}
 
 				if (!Confirm(assumeYes, $"Apply {pending.Count} pending migration(s)?", "Input is not interactive. Pass --yes to apply pending migrations in an unattended run."))

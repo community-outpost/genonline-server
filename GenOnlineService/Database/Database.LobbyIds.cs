@@ -35,6 +35,9 @@ public class LobbyIdCounterConfiguration : IEntityTypeConfiguration<LobbyIdCount
 
 		builder.Property(e => e.ID).HasColumnName("id").ValueGeneratedNever();
 		builder.Property(e => e.NextID).HasColumnName("next_id");
+
+		// the counter row exists from the migration on and hands out ids from 1
+		builder.HasData(new LobbyIdCounter { ID = Database.LobbyIds.CounterRowID, NextID = 1 });
 	}
 }
 
