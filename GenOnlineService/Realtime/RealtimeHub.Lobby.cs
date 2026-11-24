@@ -353,10 +353,7 @@ namespace GenOnlineService.Realtime
 			{
 				return Task.FromResult<Result<Empty>>(moving);
 			}
-			if (IsInvalidSide(request.Side)) return Invalid("side");
-			if (IsInvalidGameID(request.Color)) return Invalid("color");
-			if (IsInvalidGameID(request.StartPosition)) return Invalid("start_position");
-			if (request.Team.HasValue && request.Team.Value < 0) return Invalid("team");
+			if (SlotFieldFailure(request.Side, request.Color, request.Team, request.StartPosition, "") is Failure badSlot) return Task.FromResult<Result<Empty>>(badSlot);
 
 			bool changes = request.Side != null || request.Color != null || request.StartPosition != null || request.Team.HasValue;
 			return ChangeLobbyAsync(hostOnly: false, resetsReady: changes, async (lobby, member) =>
@@ -453,10 +450,7 @@ namespace GenOnlineService.Realtime
 			foreach (SlotPatch patch in request.Slots)
 			{
 				if (patch == null || patch.Index < 0 || patch.Index >= Lobby.MaxLobbySize) return Invalid("slots.index");
-				if (IsInvalidSide(patch.Side)) return Invalid("slots.side");
-				if (IsInvalidGameID(patch.Color)) return Invalid("slots.color");
-				if (IsInvalidGameID(patch.StartPosition)) return Invalid("slots.start_position");
-				if (patch.Team.HasValue && patch.Team.Value < 0) return Invalid("slots.team");
+				if (SlotFieldFailure(patch.Side, patch.Color, patch.Team, patch.StartPosition, "slots.") is Failure badSlot) return Task.FromResult<Result<Empty>>(badSlot);
 			}
 
 			return ChangeLobbyAsync(hostOnly: true, resetsReady: request.Slots.Count > 0, async (lobby, member) =>
@@ -937,9 +931,14 @@ namespace GenOnlineService.Realtime
 		private static bool IsValidText(string? text, int maxLength) => text != null && text.Length <= maxLength && !text.Contains('\0');
 
 		// side, color and start position are game ids, -1 means random
-		private static bool IsInvalidGameID(int? value) => value is int id && id < -1;
-
-		// a side may also be the observer seat, which needs a lobby that allows observers
-		private static bool IsInvalidSide(int? value) => value != ClientFeatures.ObserverSide && IsInvalidGameID(value);
+		// Slot fields outside the game's own ranges are refused, the client indexes arrays with them; a null team clears it
+		internal static Failure? SlotFieldFailure(int? side, int? color, Optional<int?> team, int? startPosition, string fieldPrefix)
+		{
+			if (side is int s && !Lobby.IsValidSide(s)) return Result.Invalid(fieldPrefix + "side");
+			if (color is int c && !Lobby.IsValidColor(c)) return Result.Invalid(fieldPrefix + "color");
+			if (team.HasValue && team.Value is int t && (t < 0 || !Lobby.IsValidTeam(t))) return Result.Invalid(fieldPrefix + "team");
+			if (startPosition is int p && !Lobby.IsValidStartPosition(p)) return Result.Invalid(fieldPrefix + "start_position");
+			return null;
+		}
 	}
 }

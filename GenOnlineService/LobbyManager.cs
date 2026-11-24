@@ -1228,6 +1228,16 @@ namespace GenOnlineService
 
 
         public const int MaxLobbySize = 8;
+
+		// The slot ranges the game itself accepts (GameInfo.cpp ParseAsciiStringToGameInfo), the client indexes arrays with these
+		public const int MultiplayerColorCount = 8; // Zero Hour multiplayer.ini
+		public static bool IsValidColor(int color) => color >= -1 && color < MultiplayerColorCount;
+		public static bool IsValidStartPosition(int startPosition) => startPosition >= -1 && startPosition < MaxLobbySize;
+		public static bool IsValidTeam(int team) => team >= -1 && team < MaxLobbySize / 2;
+		// random, the observer seat or one of the twelve playable factions (the Boss General is not offered)
+		public static bool IsValidSide(int side) => side == -1 || side == ClientFeatures.ObserverSide
+			|| (side >= Database.FactionStats.FirstSide && side < Database.FactionStats.FirstSide + FactionStatsStructure.numSides);
+
 		public LobbyMember[] Members { get; private set; } = new LobbyMember[MaxLobbySize];
 
 		public EKnownAnticheatID AnticheatID { get; private set; } = EKnownAnticheatID.GO_INTEGRATED_AC;
@@ -1642,7 +1652,7 @@ public async Task FinalizeACChecks()
 
 				// if vanilla teams, dont apply favorite
 				int sideToUse = lobbyPrefs.favorite_side;
-				if (IsVanillaTeamsOnly)
+				if (IsVanillaTeamsOnly || !IsValidSide(sideToUse))
 				{
 					sideToUse = -1;
 				}
@@ -1653,7 +1663,7 @@ public async Task FinalizeACChecks()
 				}
 
 				// if our preferred color is already in use, revert to random
-				int colorToUse = lobbyPrefs.favorite_color;
+				int colorToUse = IsValidColor(lobbyPrefs.favorite_color) ? lobbyPrefs.favorite_color : -1;
 				foreach (var memberEntry in Members)
 				{
 					// NOTE: only occupied slots matter - empty/closed placeholder slots have Color 0, which would
