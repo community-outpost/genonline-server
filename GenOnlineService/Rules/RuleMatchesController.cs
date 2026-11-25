@@ -51,12 +51,6 @@ namespace GenOnlineService.Rules
 		public IReadOnlyList<RuleMatchView> Matches { get; init; } = [];
 	}
 
-	public sealed record RuleMatchReviewRequest
-	{
-		// reviewed or dismissed
-		public string? Review { get; init; }
-	}
-
 	[ApiController]
 	[AllowSignInCookie]
 	[Authorize(Policy = PermissionPolicies.Prefix + Permissions.AnticheatReview)]
@@ -115,31 +109,6 @@ namespace GenOnlineService.Rules
 			List<AutomatedRuleMatch> rows = await query.OrderByDescending(m => m.ID).Skip(page.Skip).Take(page.PerPage).ToListAsync();
 			Paging.WriteOffsetHeaders(HttpContext, page, total);
 			return RestResults.Ok(new RuleMatchListResponse { Matches = await ViewsOf(db, rows) });
-		}
-
-		[EndpointSummary("Marks a flagged match reviewed or dismissed.")]
-		[ProducesResponseType<RuleMatchView>(StatusCodes.Status200OK)]
-		[HttpPatch("~/api/v1/rules/matches/{id:long}")]
-		public async Task<IActionResult> Review(long id, [FromBody] RuleMatchReviewRequest? body)
-		{
-			string? review = body?.Review;
-			if (review is not (RuleReviewStates.Reviewed or RuleReviewStates.Dismissed))
-			{
-				return RestResults.Invalid("review");
-			}
-			Database.ModerationActor actor = CallerActors.Of(User);
-			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
-			DateTime now = DateTime.UtcNow;
-
-			// only a pending match changes, one reviewed before answers as it is
-			int changed = await db.AutomatedRuleMatches.Where(m => m.ID == id && m.ReviewState == RuleReviewStates.Pending)
-				.ExecuteUpdateAsync(set => set.SetProperty(m => m.ReviewState, review).SetProperty(m => m.ReviewedBy, actor.UserID).SetProperty(m => m.ReviewedAt, now));
-			if (changed > 0)
-			{
-				await Database.Moderation.AddAuditEntry(db, actor, RuleAudit.MatchReview, RuleAudit.MatchTargetKind, id, null, new { review });
-			}
-			AutomatedRuleMatch? match = await db.AutomatedRuleMatches.AsNoTracking().FirstOrDefaultAsync(m => m.ID == id);
-			return match == null ? RestResults.NotFound("match") : RestResults.Ok((await ViewsOf(db, [match]))[0]);
 		}
 
 		private static async Task<List<RuleMatchView>> ViewsOf(AppDbContext db, List<AutomatedRuleMatch> rows)

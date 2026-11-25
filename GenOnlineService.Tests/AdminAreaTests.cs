@@ -200,7 +200,7 @@ internal sealed class AdminBrowser
 
 	public async Task<Dictionary<string, string>> Csrf()
 	{
-		PageResponse page = await Get("/admin/reports");
+		PageResponse page = await Get("/admin/cases");
 		Assert.Equal(200, page.Status);
 		return new Dictionary<string, string> { [AdminArea.Meta(page, "csrf-header")] = AdminArea.Meta(page, "csrf-token") };
 	}
@@ -282,7 +282,7 @@ internal static class AdminArea
 [Collection(AdminAreaCollection.Name)]
 public class AdminAreaTests
 {
-	private static readonly string[] s_staffReads = ["/api/v1/admin/overview", "/api/v1/reports/search", "/api/v1/players/search?query=ab", "/api/v1/anticheat_reports/modules"];
+	private static readonly string[] s_staffReads = ["/api/v1/admin/overview", "/api/v1/admin/cases", "/api/v1/players/search?query=ab", "/api/v1/admin/cases?kind=modules"];
 
 	[ProbeTheory]
 	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
@@ -294,11 +294,11 @@ public class AdminAreaTests
 		await moderator.SignUp("Warden", "warden@example.org");
 		await AdminArea.Grant(probe, "warden@example.org", StaffRoles.Moderator, twoFactor: false);
 
-		PageResponse page = await moderator.Get("/admin/reports");
+		PageResponse page = await moderator.Get("/admin/cases");
 		Assert.Equal(302, page.Status);
-		Assert.Equal("/profile/two_factor_auth?ReturnUrl=%2Fadmin%2Freports", page.Location);
+		Assert.Equal("/profile/two_factor_auth?ReturnUrl=%2Fadmin%2Fcases", page.Location);
 
-		PageResponse reports = await moderator.Get("/api/v1/reports/search");
+		PageResponse reports = await moderator.Get("/api/v1/admin/cases");
 		Assert.Equal(403, reports.Status);
 		Assert.Equal(ApiAuthentication.TwoFactorRequired, AdminArea.ErrorOf(reports));
 	}

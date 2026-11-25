@@ -64,6 +64,7 @@ public static class AuditTargetKinds
 	public const string Flag = "flag";
 	public const string FlagRevision = "flag_revision";
 	public const string AnticheatReport = "anticheat_report";
+	public const string Case = "case";
 	// a staff search by an identifier, which names no single target
 	public const string Investigation = "investigation";
 }
@@ -87,6 +88,8 @@ public static class ModerationActions
 	public const string StaffMessage = "staff_message";
 	public const string ReportView = "report_view";
 	public const string ReportClose = "report_close";
+	public const string CaseView = "case_view";
+	public const string CaseClose = "case_close";
 	public const string SettingUpdate = "setting_update";
 	public const string Announcement = "announcement";
 	public const string ConnectionLookup = "connection_lookup";

@@ -37,12 +37,13 @@ public class AnticheatModuleReport
 	// null for rows stored before the column existed; the lists then show the match start
 	public DateTime? CreatedAt { get; set; }
 
-	// Null until a staff member marks the row reviewed, a review never deletes the row
 	public DateTime? ReviewedAt { get; set; }
 	public Int64? ReviewedBy { get; set; }
+
+	// null while waiting and for rows reviewed before cases existed
+	public Int64? CaseID { get; set; }
 }
 
-// One module reported by an anticheat Type2 probe response
 public readonly record struct AcModuleReport(string ModuleName, string ModulePath, int ModuleSize);
 
 internal static class AntiCheatModuleAllowList
@@ -131,10 +132,13 @@ public class AnticheatNewAccountGame
 	public Int64 ReportId { get; set; }
 	public Int64 UserId { get; set; }
 	public Int64 MatchId { get; set; }
-	// When the row was raised; null for a row stored before the column existed, the lists then show the match start
+	// null for rows stored before the column existed; the lists then show the match start
 	public DateTime? CreatedAt { get; set; }
 	public DateTime? ReviewedAt { get; set; }
 	public Int64? ReviewedBy { get; set; }
+
+	// null while waiting and for rows reviewed before cases existed
+	public Int64? CaseID { get; set; }
 }
 
 public class AnticheatProbeReport
@@ -143,13 +147,15 @@ public class AnticheatProbeReport
 	public Int64 UserId { get; set; }
 	public Int64 MatchId { get; set; }
 	public string Reason { get; set; } = null!;
-	// When the row was raised; null for a row stored before the column existed, the lists then show the match start
+	// null for rows stored before the column existed; the lists then show the match start
 	public DateTime? CreatedAt { get; set; }
 	public DateTime? ReviewedAt { get; set; }
 	public Int64? ReviewedBy { get; set; }
+
+	// null while waiting and for rows reviewed before cases existed
+	public Int64? CaseID { get; set; }
 }
 
-// A quick match request a genuine client never sends, refused and kept for staff review: one row per player and lobby
 public class AnticheatQuickMatchReport
 {
 	public Int64 ReportId { get; set; }
@@ -164,9 +170,11 @@ public class AnticheatQuickMatchReport
 	public DateTime CreatedAt { get; set; }
 	public DateTime? ReviewedAt { get; set; }
 	public Int64? ReviewedBy { get; set; }
+
+	// null while waiting and for rows reviewed before cases existed
+	public Int64? CaseID { get; set; }
 }
 
-// The review lists of the staff tools, one per signal
 public static class AntiCheatReviewKinds
 {
 	public const string NewAccounts = "new_accounts";
@@ -219,6 +227,8 @@ public class AnticheatModuleReportConfiguration : IEntityTypeConfiguration<Antic
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_module_reports_reviewed_at");
+		entity.Property(e => e.CaseID).HasColumnName("case_id");
+		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_module_reports_case");
 
 		entity.HasIndex(e => new { e.UserId, e.MatchId, e.ModuleName })
 			.IsUnique()
@@ -248,6 +258,8 @@ public class AnticheatNewAccountGameConfiguration : IEntityTypeConfiguration<Ant
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_new_account_games_reviewed_at");
+		entity.Property(e => e.CaseID).HasColumnName("case_id");
+		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_new_account_games_case");
 	}
 }
 
@@ -278,6 +290,8 @@ public class AnticheatProbeReportConfiguration : IEntityTypeConfiguration<Antich
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_probe_reports_reviewed_at");
+		entity.Property(e => e.CaseID).HasColumnName("case_id");
+		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_probe_reports_case");
 	}
 }
 
@@ -315,6 +329,8 @@ public class AnticheatQuickMatchReportConfiguration : IEntityTypeConfiguration<A
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_quickmatch_reports_reviewed_at");
+		entity.Property(e => e.CaseID).HasColumnName("case_id");
+		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_quickmatch_reports_case");
 
 		// one row per player and lobby, so a client that repeats the request does not flood the list
 		entity.HasIndex(e => new { e.UserId, e.LobbyId })
@@ -347,32 +363,31 @@ namespace Database
 
 		public DateTime? ReviewedAt { get; init; }
 		public Int64? ReviewedBy { get; init; }
+		public Int64? CaseID { get; init; }
 	}
-
-	public enum AntiCheatMarkResult { NotFound, AlreadyReviewed, Marked }
 
 	public static class AntiCheatReviews
 	{
-		private static IQueryable<AntiCheatReviewRow> Rows(AppDbContext db, string kind)
+		internal static IQueryable<AntiCheatReviewRow> Rows(AppDbContext db, string kind)
 		{
 			return kind switch
 			{
 				AntiCheatReviewKinds.NewAccounts => db.AnticheatNewAccountGames.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
-					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				}),
 				AntiCheatReviewKinds.Modules => db.AnticheatModuleReports.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
-					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				}),
 				AntiCheatReviewKinds.QuickMatchRules => db.AnticheatQuickMatchReports.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
 					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, LobbyID = r.LobbyId, PlaylistID = r.PlaylistId, Method = r.Method, Sides = r.Sides,
-					ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
+					ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				}),
 				_ => Probes(db, kind).AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
-					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, Reason = r.Reason, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, Reason = r.Reason, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				})
 			};
 		}
@@ -385,56 +400,24 @@ namespace Database
 				: db.AnticheatProbeReports.Where(r => r.MatchId != 0);
 		}
 
-		// Newest first, reviewed null lists both states, userID null lists every player
-		public static async Task<(int Total, List<AntiCheatReviewRow> Page)> List(AppDbContext db, string kind, bool? reviewed, Int64? userID, int skip, int take, CancellationToken cancellationToken = default)
+		public static async Task<int> Decide(AppDbContext db, string kind, long[] ids, long userID, long reviewerID, long caseID, DateTime now, CancellationToken cancellationToken = default)
 		{
-			IQueryable<AntiCheatReviewRow> query = Rows(db, kind);
-			if (reviewed == true)
-			{
-				query = query.Where(r => r.ReviewedAt != null);
-			}
-			else if (reviewed == false)
-			{
-				query = query.Where(r => r.ReviewedAt == null);
-			}
-			if (userID != null)
-			{
-				query = query.Where(r => r.UserID == userID);
-			}
-
-			int total = await query.CountAsync(cancellationToken);
-			List<AntiCheatReviewRow> page = await query.OrderByDescending(r => r.ReportID).Skip(skip).Take(take).ToListAsync(cancellationToken);
-			return (total, page);
-		}
-
-		public static Task<AntiCheatReviewRow?> Get(AppDbContext db, string kind, Int64 reportID, CancellationToken cancellationToken = default)
-		{
-			return Rows(db, kind).FirstOrDefaultAsync(r => r.ReportID == reportID, cancellationToken);
-		}
-
-		// Sets the reviewed state once, a row reviewed before keeps its first reviewer
-		public static async Task<AntiCheatMarkResult> MarkReviewed(AppDbContext db, string kind, Int64 reportID, Int64? reviewerID, DateTime now, CancellationToken cancellationToken = default)
-		{
-			int updated = kind switch
+			return kind switch
 			{
 				AntiCheatReviewKinds.NewAccounts => await db.AnticheatNewAccountGames
-					.Where(r => r.ReportId == reportID && r.ReviewedAt == null)
-					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID), cancellationToken),
+					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
+					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
 				AntiCheatReviewKinds.Modules => await db.AnticheatModuleReports
-					.Where(r => r.ReportId == reportID && r.ReviewedAt == null)
-					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID), cancellationToken),
+					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
+					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
 				AntiCheatReviewKinds.QuickMatchRules => await db.AnticheatQuickMatchReports
-					.Where(r => r.ReportId == reportID && r.ReviewedAt == null)
-					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID), cancellationToken),
-				_ => await Probes(db, kind)
-					.Where(r => r.ReportId == reportID && r.ReviewedAt == null)
-					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID), cancellationToken)
+					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
+					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
+				AntiCheatReviewKinds.Probes or AntiCheatReviewKinds.Devices => await Probes(db, kind)
+					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
+					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
+				_ => 0
 			};
-			if (updated > 0)
-			{
-				return AntiCheatMarkResult.Marked;
-			}
-			return await Get(db, kind, reportID, cancellationToken) == null ? AntiCheatMarkResult.NotFound : AntiCheatMarkResult.AlreadyReviewed;
 		}
 	}
 

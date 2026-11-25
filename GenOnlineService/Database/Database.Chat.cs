@@ -115,6 +115,11 @@ public class PlayerReport
 	// player report: {messages}, up to 10 of the player's latest messages the reporter could see
 	public string Evidence { get; set; } = "{}";
 
+	public string Category { get; set; } = PlayerReportCategories.Chat;
+
+	public Int64? MatchID { get; set; }
+	public Int64? LobbyID { get; set; }
+
 	public string Status { get; set; } = PlayerReportStatuses.Open;
 	public DateTime CreatedAt { get; set; } = DateTime.UnixEpoch;
 
@@ -123,6 +128,22 @@ public class PlayerReport
 	public string? ResolvedByKind { get; set; }
 	public Int64? ResolvedByID { get; set; }
 	public string? ResolutionNote { get; set; }
+
+	// The moderation case that decided it, null while open and for reports resolved before cases existed
+	public Int64? CaseID { get; set; }
+}
+
+// a message report is always chat
+public static class PlayerReportCategories
+{
+	public const string Chat = "chat";
+	public const string Cheating = "cheating";
+	public const string Griefing = "griefing";
+	public const string Name = "name";
+	public const string Harassment = "harassment";
+	public const string Other = "other";
+
+	public static readonly IReadOnlyList<string> All = [Chat, Cheating, Griefing, Name, Harassment, Other];
 }
 
 public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
@@ -233,6 +254,12 @@ public class PlayerReportConfiguration : IEntityTypeConfiguration<PlayerReport>
 		builder.Property(e => e.ResolvedByKind).HasColumnName("resolved_by_kind").HasMaxLength(16);
 		builder.Property(e => e.ResolvedByID).HasColumnName("resolved_by_id");
 		builder.Property(e => e.ResolutionNote).HasColumnName("resolution_note").HasMaxLength(Database.Chat.MaximumReasonLength);
+		builder.Property(e => e.Category).HasColumnName("category").HasMaxLength(16);
+		builder.Property(e => e.MatchID).HasColumnName("match_id");
+		builder.Property(e => e.LobbyID).HasColumnName("lobby_id");
+		builder.Property(e => e.CaseID).HasColumnName("case_id");
+		builder.HasIndex(e => e.CaseID).HasDatabaseName("ix_player_reports_case");
+		builder.HasIndex(e => e.MatchID).HasDatabaseName("ix_player_reports_match");
 	}
 }
 
@@ -646,6 +673,9 @@ namespace Database
 				ReporterID = reporterId,
 				ReportedUserID = message.SenderID,
 				MessageID = message.ID,
+				Category = PlayerReportCategories.Chat,
+				LobbyID = message.LobbyID,
+				MatchID = message.MatchID,
 				Reason = reason,
 				Evidence = JsonSerializer.Serialize(snapshot, s_snapshotJson),
 				Status = PlayerReportStatuses.Open,
@@ -655,12 +685,15 @@ namespace Database
 		}
 
 		// The one-open-report-per-reporter-and-player rule stays with the caller.
-		public static async Task<long> CreatePlayerReport(AppDbContext db, long reporterId, long reportedUserId, string? reason, IReadOnlyList<ChatMessage> evidence, CancellationToken cancellationToken = default)
+		public static async Task<long> CreatePlayerReport(AppDbContext db, long reporterId, long reportedUserId, string? reason, IReadOnlyList<ChatMessage> evidence, string category = PlayerReportCategories.Other, long? matchId = null, long? lobbyId = null, CancellationToken cancellationToken = default)
 		{
 			PlayerReport report = new PlayerReport
 			{
 				ReporterID = reporterId,
 				ReportedUserID = reportedUserId,
+				Category = category,
+				MatchID = matchId,
+				LobbyID = lobbyId,
 				Reason = reason,
 				Evidence = JsonSerializer.Serialize(new PlayerEvidence(evidence.Select(ToSnapshot).ToList()), s_snapshotJson),
 				Status = PlayerReportStatuses.Open,
@@ -722,54 +755,6 @@ namespace Database
 				query = query.Where(r => r.Status == status);
 			}
 			return await query.OrderBy(r => r.CreatedAt).ThenBy(r => r.ID).Take(limit).ToListAsync(cancellationToken);
-		}
-
-		// One page of the staff queue without the evidence: statuses null lists every report, search matches the reason or the name of either player,
-		// reportedID and reporterID keep the reports against and by one player
-		public static async Task<(int Total, List<PlayerReport> Page)> GetReportsPage(AppDbContext db, IReadOnlyCollection<string>? statuses, string? search, bool newestFirst, int skip, int take, CancellationToken cancellationToken = default, long? reportedID = null, long? reporterID = null)
-		{
-			IQueryable<PlayerReport> query = db.PlayerReports.AsNoTracking();
-			if (statuses != null)
-			{
-				query = query.Where(r => statuses.Contains(r.Status));
-			}
-			if (reportedID is long reported)
-			{
-				query = query.Where(r => r.ReportedUserID == reported);
-			}
-			if (reporterID is long reporter)
-			{
-				query = query.Where(r => r.ReporterID == reporter);
-			}
-			if (!String.IsNullOrWhiteSpace(search))
-			{
-				string term = search.Trim().ToLowerInvariant();
-				string name = NameNormalizer.Normalize(search.Trim());
-				query = query.Where(r => (r.Reason != null && r.Reason.ToLower().Contains(term))
-					|| db.Users.Any(u => (u.ID == r.ReporterID || u.ID == r.ReportedUserID) && u.UsernameNormalized.Contains(name)));
-			}
-
-			int total = await query.CountAsync(cancellationToken);
-			query = newestFirst
-				? query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.ID)
-				: query.OrderBy(r => r.CreatedAt).ThenBy(r => r.ID);
-			List<PlayerReport> page = await query.Skip(skip).Take(take)
-				.Select(r => new PlayerReport
-				{
-					ID = r.ID,
-					ReporterID = r.ReporterID,
-					ReportedUserID = r.ReportedUserID,
-					MessageID = r.MessageID,
-					Reason = r.Reason,
-					Status = r.Status,
-					CreatedAt = r.CreatedAt,
-					ResolvedAt = r.ResolvedAt,
-					ResolvedByKind = r.ResolvedByKind,
-					ResolvedByID = r.ResolvedByID,
-					ResolutionNote = r.ResolutionNote
-				})
-				.ToListAsync(cancellationToken);
-			return (total, page);
 		}
 
 		public static async Task<PlayerReport?> GetReport(AppDbContext db, long reportId, CancellationToken cancellationToken = default)
@@ -1095,6 +1080,43 @@ namespace Database
 			[property: JsonPropertyName("after_filled_at"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? AfterFilledAt);
 
 		private sealed record PlayerEvidence([property: JsonPropertyName("messages")] List<ChatSnapshotMessage> Messages);
+
+		// The stored evidence of a report as staff read it: a message report has the message, the ones before it and, once the purge
+		// filled them in (AfterPending false), the ones after it; a player report has Messages.
+		public sealed record ReportEvidenceMessage(long ID, long SenderID, string Content, DateTime CreatedAt, DateTime? DeletedAt);
+
+		public sealed record ReportEvidence(ReportEvidenceMessage? Message, IReadOnlyList<ReportEvidenceMessage> Before, IReadOnlyList<ReportEvidenceMessage> After,
+			bool AfterPending, IReadOnlyList<ReportEvidenceMessage> Messages)
+		{
+			public static readonly ReportEvidence Empty = new(null, [], [], false, []);
+
+			public IEnumerable<long> SenderIDs => (Message == null ? Messages : Before.Append(Message).Concat(After)).Select(m => m.SenderID);
+		}
+
+		// Evidence that does not parse reads as empty, so one damaged row never hides the rest of a case
+		public static ReportEvidence ReadEvidence(PlayerReport report)
+		{
+			static List<ReportEvidenceMessage> Of(List<ChatSnapshotMessage>? messages) =>
+				(messages ?? []).Select(m => new ReportEvidenceMessage(m.ID, m.SenderID, m.Content, m.CreatedAt, m.DeletedAt)).ToList();
+			try
+			{
+				if (report.MessageID != null)
+				{
+					ChatReportSnapshot? snapshot = JsonSerializer.Deserialize<ChatReportSnapshot>(report.Evidence, s_snapshotJson);
+					if (snapshot?.Message == null)
+					{
+						return ReportEvidence.Empty;
+					}
+					return new ReportEvidence(Of([snapshot.Message])[0], Of(snapshot.Before), Of(snapshot.After), snapshot.AfterFilledAt == null, []);
+				}
+				PlayerEvidence? evidence = JsonSerializer.Deserialize<PlayerEvidence>(report.Evidence, s_snapshotJson);
+				return new ReportEvidence(null, [], [], false, Of(evidence?.Messages));
+			}
+			catch (JsonException)
+			{
+				return ReportEvidence.Empty;
+			}
+		}
 
 		private sealed record ChatSnapshotMessage(
 			[property: JsonPropertyName("id")] long ID,

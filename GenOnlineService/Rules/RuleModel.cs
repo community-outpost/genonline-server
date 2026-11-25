@@ -241,6 +241,9 @@ namespace GenOnlineService.Rules
 		public string ReviewState { get; set; } = RuleReviewStates.None;
 		public Int64? ReviewedBy { get; set; }
 		public DateTime? ReviewedAt { get; set; }
+
+		// The moderation case that decided a flagged match, null while it waits
+		public Int64? CaseID { get; set; }
 	}
 
 	public class AutomatedRuleConfiguration : IEntityTypeConfiguration<AutomatedRule>
@@ -301,6 +304,8 @@ namespace GenOnlineService.Rules
 			builder.Property(e => e.ReviewState).HasColumnName("review_state").HasMaxLength(16);
 			builder.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 			builder.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
+			builder.Property(e => e.CaseID).HasColumnName("case_id");
+			builder.HasIndex(e => e.CaseID).HasDatabaseName("ix_automated_rule_matches_case");
 		}
 	}
 }

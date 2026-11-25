@@ -130,7 +130,22 @@ namespace GenOnlineService.Realtime
 
 			if (request.UserId is long player)
 			{
-				return await ReportPlayerAsync(dbFactory, me, player, request.Reason);
+				string category = request.Category ?? PlayerReportCategories.Other;
+				if (!PlayerReportCategories.All.Contains(category))
+				{
+					return Result.Invalid("category");
+				}
+				return await ReportPlayerAsync(dbFactory, me, player, request.Reason, category, request.MatchId, request.LobbyId);
+			}
+
+			// a message report is about the message: it is chat, and the message names its own lobby and match
+			if (request.Category != null && request.Category != PlayerReportCategories.Chat)
+			{
+				return Result.Invalid("category");
+			}
+			if (request.MatchId != null || request.LobbyId != null)
+			{
+				return Result.Invalid(request.MatchId != null ? "match_id" : "lobby_id");
 			}
 
 			if (!RealtimeHub.TryParseMessageID(request.MessageId, out Int64 messageID))
@@ -160,11 +175,16 @@ namespace GenOnlineService.Realtime
 			return result == Database.ReportResult.Duplicate ? Result.Fail(ErrorCodes.ReportDuplicate) : Result.Success(new CreateReportResponse { ReportId = reportID });
 		}
 
-		private static async Task<Result<CreateReportResponse>> ReportPlayerAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 player, string? reason)
+		private static async Task<Result<CreateReportResponse>> ReportPlayerAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 player, string? reason, string category, long? matchID, long? lobbyID)
 		{
 			if (player <= 0 || player == me)
 			{
 				return Result.Invalid("user_id");
+			}
+			// a lobby counts while the service still knows who was in it (lobby chat's audience), so a report cannot name any lobby
+			if (lobbyID != null && (lobbyID <= 0 || !LobbyChatAudience.WasMember(lobbyID.Value, me) || !LobbyChatAudience.WasMember(lobbyID.Value, player)))
+			{
+				return Result.Invalid("lobby_id");
 			}
 
 			if (!ReportRateLimiter.TryConsume(me, out long retryAfterMs))
@@ -177,6 +197,10 @@ namespace GenOnlineService.Realtime
 			{
 				return Result.NotFound("user");
 			}
+			if (matchID != null && !await BothPlayedAsync(db, matchID.Value, me, player))
+			{
+				return Result.Invalid("match_id");
+			}
 
 			SemaphoreSlim gate = s_reportLocks[(int)((UInt64)HashCode.Combine(me, player) % (UInt64)s_reportLocks.Length)];
 			await gate.WaitAsync();
@@ -188,13 +212,28 @@ namespace GenOnlineService.Realtime
 				}
 
 				List<ChatMessage> evidence = await EvidenceAsync(db, me, player);
-				long reportID = await Database.Chat.CreatePlayerReport(db, me, player, String.IsNullOrEmpty(reason) ? null : reason, evidence);
+				long reportID = await Database.Chat.CreatePlayerReport(db, me, player, String.IsNullOrEmpty(reason) ? null : reason, evidence, category, matchID, lobbyID);
 				return Result.Success(new CreateReportResponse { ReportId = reportID });
 			}
 			finally
 			{
 				gate.Release();
 			}
+		}
+
+		private static async Task<bool> BothPlayedAsync(AppDbContext db, long matchID, long me, long player)
+		{
+			if (matchID <= 0)
+			{
+				return false;
+			}
+			MatchHistory_Entry? entry = await Database.MatchHistory.LoadMatchHistoryEntryAsync(db, matchID);
+			if (entry == null)
+			{
+				return false;
+			}
+			HashSet<long> players = Rest.MatchResponse.UserIdsOf(entry).ToHashSet();
+			return players.Contains(me) && players.Contains(player);
 		}
 
 		// Up to 10 of the player's latest messages the reporter could see, oldest first. Channel and lobby messages follow ReceivedBy, group messages
@@ -213,41 +252,6 @@ namespace GenOnlineService.Realtime
 			}).Take(EvidenceMessages).ToList();
 			seen.Reverse();
 			return seen;
-		}
-
-		// The staff queue, oldest first, a null status lists every report
-		public static async Task<ReportsResponse> ListReportsAsync(IDbContextFactory<AppDbContext> dbFactory, string? status)
-		{
-			await using AppDbContext db = await dbFactory.CreateDbContextAsync();
-			List<PlayerReport> rows = await Database.Chat.GetReports(db, status, ReportListLimit);
-			Dictionary<long, (string Name, int Tag)> names = await RealtimeHub.NamesAsync(db, rows.SelectMany(Rest.StaffOverview.ReportUserIDs));
-			return new ReportsResponse { Reports = rows.Select(r => Rest.StaffOverview.ReportOf(r, names)).ToArray() };
-		}
-
-		// Resolves an open report as actioned or dismissed with an audit row, a report resolved before stays as it is
-		public static async Task<Result<Empty>> ResolveReportAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 reportID, ResolveReportRequest request)
-		{
-			if (request.Status != PlayerReportStatuses.Actioned && request.Status != PlayerReportStatuses.Dismissed)
-			{
-				return Result.Invalid("status");
-			}
-			if (request.ResolutionNote != null && request.ResolutionNote.Length > Database.Chat.MaximumReasonLength)
-			{
-				return Result.Fail(ErrorCodes.ModerationReasonTooLong, new { Max = Database.Chat.MaximumReasonLength });
-			}
-
-			await using AppDbContext db = await dbFactory.CreateDbContextAsync();
-			if (reportID <= 0 || await Database.Chat.GetReport(db, reportID) == null)
-			{
-				return Result.NotFound("report");
-			}
-
-			Database.ModerationActor actor = SanctionActions.ApiActorOf(me);
-			if (await Database.Chat.ResolveReport(db, reportID, request.Status, request.ResolutionNote, actor.Kind, actor.UserID))
-			{
-				await Database.Moderation.LogAction(db, actor, ModerationActions.ReportClose, AuditTargetKinds.Report, reportID, request.ResolutionNote, new { status = request.Status });
-			}
-			return Result.Success();
 		}
 
 		// Members who left since still count. Direct: the recipient. Channel: any user (history is public). Group: any other current member, checked by the caller.

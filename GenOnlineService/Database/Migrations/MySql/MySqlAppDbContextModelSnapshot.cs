@@ -31,6 +31,10 @@ namespace GenOnlineService.Migrations.MySql
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("ReportId"));
 
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
+
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("created_at");
@@ -69,6 +73,9 @@ namespace GenOnlineService.Migrations.MySql
 
                     b.HasKey("ReportId");
 
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_anticheat_module_reports_case");
+
                     b.HasIndex("ReviewedAt")
                         .HasDatabaseName("ix_anticheat_module_reports_reviewed_at");
 
@@ -87,6 +94,10 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnName("report_id");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("ReportId"));
+
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
 
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime(6)")
@@ -110,6 +121,9 @@ namespace GenOnlineService.Migrations.MySql
 
                     b.HasKey("ReportId");
 
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_anticheat_new_account_games_case");
+
                     b.HasIndex("ReviewedAt")
                         .HasDatabaseName("ix_anticheat_new_account_games_reviewed_at");
 
@@ -124,6 +138,10 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnName("report_id");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("ReportId"));
+
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
 
                     b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("datetime(6)")
@@ -153,6 +171,9 @@ namespace GenOnlineService.Migrations.MySql
 
                     b.HasKey("ReportId");
 
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_anticheat_probe_reports_case");
+
                     b.HasIndex("ReviewedAt")
                         .HasDatabaseName("ix_anticheat_probe_reports_reviewed_at");
 
@@ -167,6 +188,10 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnName("report_id");
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("ReportId"));
+
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
@@ -209,6 +234,9 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnName("user_id");
 
                     b.HasKey("ReportId");
+
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_anticheat_quickmatch_reports_case");
 
                     b.HasIndex("ReviewedAt")
                         .HasDatabaseName("ix_anticheat_quickmatch_reports_reviewed_at");
@@ -1187,6 +1215,10 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("varchar(64)")
                         .HasColumnName("actions");
 
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
+
                     b.Property<string>("Facts")
                         .IsRequired()
                         .HasColumnType("json")
@@ -1241,6 +1273,9 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnName("user_id");
 
                     b.HasKey("ID");
+
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_automated_rule_matches_case");
 
                     b.HasIndex("UserID")
                         .HasDatabaseName("ix_automated_rule_matches_user");
@@ -1906,6 +1941,70 @@ namespace GenOnlineService.Migrations.MySql
                     b.ToTable("match_publications", (string)null);
                 });
 
+            modelBuilder.Entity("ModerationCase", b =>
+                {
+                    b.Property<long>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("ID"));
+
+                    b.Property<DateTime?>("ClaimedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<long?>("ClaimedByID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("claimed_by_id");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("closed_at");
+
+                    b.Property<long?>("ClosedByID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("closed_by_id");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(512)
+                        .HasColumnType("varchar(512)")
+                        .HasColumnName("note");
+
+                    b.Property<DateTime>("OpenedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("opened_at");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("outcome");
+
+                    b.Property<long?>("SanctionID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sanction_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("status");
+
+                    b.Property<long>("UserID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("Status", "ClosedAt")
+                        .HasDatabaseName("ix_moderation_cases_status_closed_at");
+
+                    b.HasIndex("UserID", "Status")
+                        .HasDatabaseName("ix_moderation_cases_user_status");
+
+                    b.ToTable("moderation_cases", (string)null);
+                });
+
             modelBuilder.Entity("NameReservation", b =>
                 {
                     b.Property<long>("ID")
@@ -2325,6 +2424,16 @@ namespace GenOnlineService.Migrations.MySql
 
                     MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("ID"));
 
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("category");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("created_at");
@@ -2333,6 +2442,14 @@ namespace GenOnlineService.Migrations.MySql
                         .IsRequired()
                         .HasColumnType("json")
                         .HasColumnName("evidence");
+
+                    b.Property<long?>("LobbyID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("lobby_id");
+
+                    b.Property<long?>("MatchID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("match_id");
 
                     b.Property<long?>("MessageID")
                         .HasColumnType("bigint")
@@ -2376,6 +2493,12 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnName("status");
 
                     b.HasKey("ID");
+
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_player_reports_case");
+
+                    b.HasIndex("MatchID")
+                        .HasDatabaseName("ix_player_reports_match");
 
                     b.HasIndex("ReportedUserID", "CreatedAt")
                         .HasDatabaseName("ix_player_reports_reported_user_created_at");

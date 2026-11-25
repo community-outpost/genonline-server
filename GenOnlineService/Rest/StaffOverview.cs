@@ -26,11 +26,10 @@ using System.Globalization;
 
 namespace GenOnlineService.Rest
 {
-	// The unreviewed rows of one anti-cheat review list
 	public sealed record StaffOverviewQueue
 	{
 		public string Kind { get; init; } = "";
-		public int Unreviewed { get; init; }
+		public int Waiting { get; init; }
 	}
 
 	public sealed record StaffOverviewSanction
@@ -46,16 +45,16 @@ namespace GenOnlineService.Rest
 		public bool Active { get; init; }
 	}
 
-	// The numbers and latest rows of the staff start page; the anti-cheat parts are null without anticheat.review
 	public sealed record StaffOverviewResponse
 	{
 		public int PlayersOnline { get; init; }
 		public int LobbiesOpen { get; init; }
 		public int MatchesToday { get; init; }
-		public int OpenReports { get; init; }
-		public int? UnreviewedAnticheat { get; init; }
-		public IReadOnlyList<StaffOverviewQueue>? Anticheat { get; init; }
-		public IReadOnlyList<ReportInfo> RecentReports { get; init; } = [];
+
+		public int PlayersToReview { get; init; }
+		public IReadOnlyList<StaffOverviewQueue> Waiting { get; init; } = [];
+
+		public IReadOnlyList<CaseQueueRow> NextCases { get; init; } = [];
 		public IReadOnlyList<StaffOverviewSanction> RecentSanctions { get; init; } = [];
 	}
 
@@ -66,31 +65,20 @@ namespace GenOnlineService.Rest
 		// playersOnline and lobbiesOpen are this process's live counts, the rest comes from the database.
 		// Matches today are the ones finished since 00:00 UTC, the day of the faction numbers of /api/v1/stats/global,
 		// counted on the finished_at index rather than a scan of every match ever started.
-		public static async Task<StaffOverviewResponse> GetAsync(IDbContextFactory<AppDbContext> dbFactory, int playersOnline, int lobbiesOpen, bool canReviewAntiCheat, DateTime utcNow, CancellationToken cancellationToken = default)
+		public static async Task<StaffOverviewResponse> GetAsync(IDbContextFactory<AppDbContext> dbFactory, int playersOnline, int lobbiesOpen, IReadOnlyCollection<string> kinds, long me, DateTime utcNow, CancellationToken cancellationToken = default)
 		{
 			await using AppDbContext db = await dbFactory.CreateDbContextAsync(cancellationToken);
 			DateTime dayStart = DateTime.SpecifyKind(utcNow.Date, DateTimeKind.Utc);
 			int matchesToday = await db.Matches.AsNoTracking().CountAsync(m => m.FinishedAt != null && m.FinishedAt >= dayStart, cancellationToken);
 
-			(int openReports, _) = await Database.Chat.GetReportsPage(db, [PlayerReportStatuses.Open], null, true, 0, 0, cancellationToken);
-			(_, List<PlayerReport> reports) = await Database.Chat.GetReportsPage(db, null, null, true, 0, RecentCount, cancellationToken);
+			Dictionary<long, Database.CaseQueueEntry> queue = await Database.Cases.Queue(db, kinds, cancellationToken);
+			List<StaffOverviewQueue> waiting = kinds.Select(kind => new StaffOverviewQueue { Kind = kind, Waiting = queue.Values.Sum(e => e.Waiting.GetValueOrDefault(kind)) }).ToList();
+			(_, CasesResponse next) = await CaseActions.QueueAsync(db, kinds, me, "all", 0, RecentCount, cancellationToken);
 
 			// the primary key orders by creation without an index on created_at
 			List<Sanction> sanctions = await db.Sanctions.AsNoTracking().OrderByDescending(s => s.ID).Take(RecentCount).ToListAsync(cancellationToken);
 
-			List<StaffOverviewQueue>? queues = null;
-			if (canReviewAntiCheat)
-			{
-				queues = new List<StaffOverviewQueue>();
-				foreach (string kind in AntiCheatReviewKinds.All)
-				{
-					(int unreviewed, _) = await Database.AntiCheatReviews.List(db, kind, false, null, 0, 0, cancellationToken);
-					queues.Add(new StaffOverviewQueue { Kind = kind, Unreviewed = unreviewed });
-				}
-			}
-
-			HashSet<long> userIDs = reports.SelectMany(ReportUserIDs)
-				.Concat(sanctions.Select(s => s.UserID))
+			HashSet<long> userIDs = sanctions.Select(s => s.UserID)
 				.Concat(sanctions.Where(s => s.CreatedByID != null).Select(s => s.CreatedByID!.Value))
 				.ToHashSet();
 			Dictionary<long, (string Name, int Tag)> names = await Database.DisplayNames.GetBulk(db, userIDs);
@@ -100,10 +88,9 @@ namespace GenOnlineService.Rest
 				PlayersOnline = playersOnline,
 				LobbiesOpen = lobbiesOpen,
 				MatchesToday = matchesToday,
-				OpenReports = openReports,
-				UnreviewedAnticheat = queues?.Sum(q => q.Unreviewed),
-				Anticheat = queues,
-				RecentReports = reports.Select(r => ReportOf(r, names)).ToList(),
+				PlayersToReview = queue.Count,
+				Waiting = waiting,
+				NextCases = next.Cases,
 				RecentSanctions = sanctions.Select(s => new StaffOverviewSanction
 				{
 					Id = s.ID,
@@ -119,37 +106,9 @@ namespace GenOnlineService.Rest
 				}).ToList()
 			};
 		}
-
-		// A report row in the fields of GET /api/v1/reports
-		public static ReportInfo ReportOf(PlayerReport report, IReadOnlyDictionary<long, (string Name, int Tag)> names) => new ReportInfo
-		{
-			Id = report.ID,
-			Reporter = RealtimeMembers.Of(report.ReporterID, names),
-			Reported = RealtimeMembers.Of(report.ReportedUserID, names),
-			MessageId = report.MessageID?.ToString(CultureInfo.InvariantCulture),
-			Reason = report.Reason,
-			Status = report.Status,
-			CreatedAt = report.CreatedAt,
-			ResolvedAt = report.ResolvedAt,
-			ResolvedByKind = report.ResolvedByKind,
-			ResolvedBy = report.ResolvedByKind == AuditActorKinds.User && report.ResolvedByID is long resolver ? RealtimeMembers.Of(resolver, names) : null,
-			ResolutionNote = report.ResolutionNote
-		};
-
-		// The players a report row names: both sides and the staff member who closed it
-		public static IEnumerable<long> ReportUserIDs(PlayerReport report)
-		{
-			yield return report.ReporterID;
-			yield return report.ReportedUserID;
-			if (report.ResolvedByKind == AuditActorKinds.User && report.ResolvedByID is long resolver)
-			{
-				yield return resolver;
-			}
-		}
 	}
 
-	// The staff dashboard of the /admin pages: any staff permission, with the sign-in cookie or a token; the
-	// anti-cheat numbers need anticheat.review, as the review lists do. A cookie answer is never cached (ApiAuthentication)
+	// Any staff permission; the anti-cheat and rule match numbers need anticheat.review, as in the review queue. A cookie answer is never cached (ApiAuthentication)
 	[ApiController]
 	[Authorize]
 	public sealed class StaffOverviewController : ControllerBase
@@ -175,9 +134,14 @@ namespace GenOnlineService.Rest
 				return RestResults.Fail(Result.Forbidden(Permissions.ModerationKick));
 			}
 
-			bool antiCheat = (await m_authorization.AuthorizeAsync(User, PermissionPolicies.For(Permissions.AnticheatReview))).Succeeded;
+			List<string> kinds = [CaseSignalKinds.Report];
+			if ((await m_authorization.AuthorizeAsync(User, PermissionPolicies.For(Permissions.AnticheatReview))).Succeeded)
+			{
+				kinds.AddRange(CaseSignalKinds.AntiCheat);
+				kinds.Add(CaseSignalKinds.RuleMatch);
+			}
 			int lobbies = HttpContext.RequestServices.GetService<LobbyManager>()?.GetNumLobbies() ?? 0;
-			return RestResults.Ok(await StaffOverview.GetAsync(m_dbFactory, WebSocketManager.GetNumberOfUsersOnline(), lobbies, antiCheat, DateTime.UtcNow, HttpContext.RequestAborted));
+			return RestResults.Ok(await StaffOverview.GetAsync(m_dbFactory, WebSocketManager.GetNumberOfUsersOnline(), lobbies, kinds, RealtimeClaims.UserID(User), DateTime.UtcNow, HttpContext.RequestAborted));
 		}
 	}
 }
