@@ -462,7 +462,7 @@ static partial class MatchmakingManager
 		internal void RestoreWidening(int iteration)
 		{
 			eloExpansionIteration = Math.Max(1, iteration);
-			m_LastELOExpansionTime = DateTime.Now;
+			m_LastELOExpansionTime = DateTime.UtcNow;
 		}
 	}
 }

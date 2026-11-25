@@ -299,7 +299,7 @@ namespace GenOnlineService.Identity
 			body.Append(rows.Count == 0
 				? PortalLook.Empty("inbox", T("Social.Blocked.EmptyTitle"), T("Social.Blocked.EmptyBody"))
 				: PortalLook.People(rows));
-			body.Append($"<p class=\"gp-hint gp-note\">{WebUtility.HtmlEncode(T("Social.Blocked.ReportNote"))}</p>");
+			body.Append(CultureInfo.InvariantCulture, $"<p class=\"gp-hint gp-note\">{WebUtility.HtmlEncode(T("Social.Blocked.ReportNote"))}</p>");
 
 			return await AccountDocument(status, user, T("Social.Blocked.Title"), BlockedPath, body.ToString());
 		}

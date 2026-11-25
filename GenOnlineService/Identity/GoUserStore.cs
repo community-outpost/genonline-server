@@ -41,7 +41,7 @@ namespace GenOnlineService.Identity
 		{
 		}
 
-		public Task<string> GetUserIdAsync(User user, CancellationToken cancellationToken) => Task.FromResult(user.ID.ToString());
+		public Task<string> GetUserIdAsync(User user, CancellationToken cancellationToken) => Task.FromResult(user.ID.ToString(CultureInfo.InvariantCulture));
 
 		public Task<string?> GetUserNameAsync(User user, CancellationToken cancellationToken) => Task.FromResult<string?>(user.Username);
 

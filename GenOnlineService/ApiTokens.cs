@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using System.Globalization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -325,7 +326,7 @@ namespace GenOnlineService
 					Last4 = token.TokenLast4,
 					OwnerKind = bService ? ApiTokenOwnerKinds.ServiceAccount : ApiTokenOwnerKinds.User,
 					OwnerID = ownerID,
-					OwnerLabel = bService ? "service:" + accountNames.GetValueOrDefault(ownerID, ownerID.ToString()) : "user:" + ownerID,
+					OwnerLabel = bService ? "service:" + accountNames.GetValueOrDefault(ownerID, ownerID.ToString(CultureInfo.InvariantCulture)) : "user:" + ownerID,
 					Scopes = ApiTokenFormat.ParseScopes(token.Scopes),
 					AllowedIPs = allowed,
 					ExpiresAt = token.ExpiresAt,
@@ -507,9 +508,9 @@ namespace GenOnlineService
 			{
 				new Claim(ClaimTypes.Name, "token:" + entry.ID),
 				new Claim(AuthKindClaim, "token"),
-				new Claim(TokenIDClaim, entry.ID.ToString()),
+				new Claim(TokenIDClaim, entry.ID.ToString(CultureInfo.InvariantCulture)),
 				new Claim(OwnerKindClaim, entry.OwnerKind),
-				new Claim(OwnerIDClaim, entry.OwnerID.ToString())
+				new Claim(OwnerIDClaim, entry.OwnerID.ToString(CultureInfo.InvariantCulture))
 			};
 
 			foreach (string permission in ApiTokenCache.EffectivePermissions(entry))

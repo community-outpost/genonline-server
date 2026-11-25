@@ -62,6 +62,8 @@ public class RealtimeLeaseConfiguration : IEntityTypeConfiguration<RealtimeLease
 	}
 }
 
+// EF1002/EF1003: the interpolated parts are fixed SQL (now(), the row id, parameter placeholders); every value is a parameter
+#pragma warning disable EF1002, EF1003
 namespace Database
 {
 	// Lease statements that compare with the database clock, never a copy's clock, each change is one conditional UPDATE.

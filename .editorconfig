@@ -1,0 +1,22 @@
+root = true
+
+[*]
+insert_final_newline = true
+
+[*.cs]
+indent_style = tab
+indent_size = 4
+
+# Editor hints only: EF query lines (translated to SQL) and older code still format by culture
+dotnet_diagnostic.CA1304.severity = suggestion
+dotnet_diagnostic.CA1305.severity = suggestion
+dotnet_diagnostic.CA1310.severity = suggestion
+dotnet_diagnostic.CA1311.severity = suggestion
+
+[*.{razor,css,js,json,yml,yaml,md}]
+indent_style = space
+indent_size = 4
+
+[*.{csproj,props,targets}]
+indent_style = space
+indent_size = 2

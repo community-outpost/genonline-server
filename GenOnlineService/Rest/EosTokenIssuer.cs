@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using System.Globalization;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
@@ -61,7 +62,11 @@ namespace GenOnlineService.Rest
 
 		private static Settings? Load()
 		{
-			IConfigurationSection section = Program.g_Config.GetSection("EosToken");
+			IConfigurationSection? section = Program.g_Config?.GetSection("EosToken");
+			if (section == null)
+			{
+				return null;
+			}
 			string? issuer = section["issuer"];
 			string? audience = section["audience"];
 			string? keyID = section["key_id"];
@@ -153,7 +158,7 @@ namespace GenOnlineService.Rest
 				settings.Audience,
 				new List<Claim>
 				{
-					new Claim(JwtRegisteredClaimNames.Sub, userID.ToString()),
+					new Claim(JwtRegisteredClaimNames.Sub, userID.ToString(CultureInfo.InvariantCulture)),
 					new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
 					new Claim("typ", "eos"),
 					new Claim("display_name", displayName)

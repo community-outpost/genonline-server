@@ -1979,7 +1979,7 @@ namespace GenOnlineService
 	{
 		private static readonly ILogger s_log = AppLog.For(typeof(S3CredentialManager));
 
-		private static AmazonS3Client m_s3client = null;
+		private static AmazonS3Client? m_s3client = null;
 		private static bool s_uploadsEnabled = false;
 
 		public static void Initialize()
@@ -2127,7 +2127,7 @@ namespace GenOnlineService
 				{
 					screenshotTypePrefix = "gameplay";
 
-					string? strGameplayKey = Program.g_Config.GetSection("AC")?.GetValue<string>("sskey");
+					string? strGameplayKey = Program.g_Config?.GetSection("AC").GetValue<string>("sskey");
 					if (strGameplayKey != null)
 					{
 						screenshotTypePrefix = strGameplayKey;
@@ -2296,7 +2296,7 @@ namespace GenOnlineService
 			TURNCredentialContainer fakeCreds = new("fake", "fake");
 			await Task.Delay(1);
 			return fakeCreds;
-#endif
+#else
 			GetTURNConfig(out int TurnTTL, out string TurnToken, out string TurnKey, out bool bShouldInvalidateTokensAutomatically);
 
 			// we should only have 1 turn credential at a time... clean it up
@@ -2397,6 +2397,7 @@ namespace GenOnlineService
 			}
 
 			return null;
+#endif
 		}
 
 		public static async Task DeleteCredentialsForUser(Int64 userID)
@@ -2404,7 +2405,7 @@ namespace GenOnlineService
 #if DEBUG
             await Task.Delay(1);
             return;
-#endif
+#else
 
             GetTURNConfig(out int TurnTTL, out string TurnToken, out string TurnKey, out bool bShouldInvalidateTokensAutomatically);
 
@@ -2476,6 +2477,7 @@ namespace GenOnlineService
 					}
 				}
 			}
+#endif
 		}
 	}
 
@@ -2513,8 +2515,7 @@ namespace GenOnlineService
 
 				if (userData == null)
 				{
-					thisPriority = EPresencePriority.Lowest;
-					strThisPresence = "Offline";
+					continue;
 				}
 
 				IsOnline = true;

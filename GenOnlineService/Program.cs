@@ -1305,13 +1305,6 @@ namespace GenOnlineService
 			string? cert_pem_path = coreSettings.GetValue<string>("cert_pem_path");
 			string? cert_key_path = coreSettings.GetValue<string>("cert_key_path");
 
-			if (use_os_cert_store == null)
-			{
-				Console.WriteLine("FATAL ERROR: use_os_cert_store is not set in the config");
-				Console.ReadKey(true);
-				return;
-			}
-
 			if (!use_os_cert_store) // if not using the cert store, we need a pem and key
 			{
 				if (cert_pem_path == null)
@@ -1890,7 +1883,7 @@ namespace GenOnlineService
 			Console.ForegroundColor = origCol;
 		}
 
-		public static DateTime g_LastStartTime = DateTime.Now;
+		public static DateTime g_LastStartTime = DateTime.UtcNow;
 
 		public static void GlobalExceptionHandler(object sender, UnhandledExceptionEventArgs e)
 		{

@@ -1091,7 +1091,7 @@ namespace GenOnlineService
 					if (member != null)
 					{
 						var shared = GenOnlineService.WebSocketManager.GetSharedDataForUser(member.UserID);
-						if (shared != null)
+						if (shared?.GameStats != null)
 						{
 							if (shared.GameStats.EloMatches < 10)
 							{
@@ -2089,13 +2089,14 @@ public async Task FinalizeACChecks()
 			// debug
 #if DEBUG
 			return true;
-#endif
+#else
 
 			// use cached data, we can call this after people left etc
 
 			// We are a PVP lobby if we have > 1 human, and 0 AI
 			bool bWasPVP = m_cachedAtStart_numHumans > 1 && m_cachedAtStart_numAI == 0;
 			return bWasPVP;
+#endif
 		}
 
 		public bool HadAIAtStart()
@@ -2103,10 +2104,11 @@ public async Task FinalizeACChecks()
 			// debug
 #if DEBUG
 			return false;
-#endif
+#else
 
 			// use cached data, we can call this after people left etc
 			return m_cachedAtStart_numAI > 0;
+#endif
 		}
 
 		public async Task UpdateState(ELobbyState state)

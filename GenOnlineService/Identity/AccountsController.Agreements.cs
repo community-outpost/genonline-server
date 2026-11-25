@@ -171,12 +171,12 @@ namespace GenOnlineService.Identity
 			body.Append(await ChangedNotice(userID, rules, "Agreements.RulesChanged", "Agreements.RulesChangedNoDate"));
 			foreach ((string id, int items) in Agreements.RuleCards)
 			{
-				body.Append($"<section class=\"gp-rule-group\"><h2 class=\"gp-rule-title\">{PortalLook.Icon(RuleIcon(id))}<span>{WebUtility.HtmlEncode(T($"Rules.{id}.Title"))}</span></h2>");
-				body.Append($"<p class=\"gp-plain\">{WebUtility.HtmlEncode(T($"Rules.{id}.Intro"))}</p>");
+				body.Append(CultureInfo.InvariantCulture, $"<section class=\"gp-rule-group\"><h2 class=\"gp-rule-title\">{PortalLook.Icon(RuleIcon(id))}<span>{WebUtility.HtmlEncode(T($"Rules.{id}.Title"))}</span></h2>");
+				body.Append(CultureInfo.InvariantCulture, $"<p class=\"gp-plain\">{WebUtility.HtmlEncode(T($"Rules.{id}.Intro"))}</p>");
 				body.Append("<ul class=\"gp-rules\">");
 				for (int item = 1; item <= items; item++)
 				{
-					body.Append($"<li>{PortalLook.Icon("check")}<span>{WebUtility.HtmlEncode(T($"Rules.{id}.{item.ToString(CultureInfo.InvariantCulture)}"))}</span></li>");
+					body.Append(CultureInfo.InvariantCulture, $"<li>{PortalLook.Icon("check")}<span>{WebUtility.HtmlEncode(T($"Rules.{id}.{item.ToString(CultureInfo.InvariantCulture)}"))}</span></li>");
 				}
 				body.Append("</ul></section>");
 			}
@@ -205,7 +205,7 @@ namespace GenOnlineService.Identity
 				body.Append(Hidden(AgreementRulesField, rulesVersion));
 			}
 			string invalid = message == null ? String.Empty : " aria-invalid=\"true\"";
-			body.Append($"<label class=\"gp-check\"><input type=\"checkbox\" name=\"{AgreementTermsField}\" value=\"1\" required{invalid}><span class=\"gp-check-text\"><strong>{WebUtility.HtmlEncode(T("Agreements.Terms.Tick"))}</strong></span></label>");
+			body.Append(CultureInfo.InvariantCulture, $"<label class=\"gp-check\"><input type=\"checkbox\" name=\"{AgreementTermsField}\" value=\"1\" required{invalid}><span class=\"gp-check-text\"><strong>{WebUtility.HtmlEncode(T("Agreements.Terms.Tick"))}</strong></span></label>");
 			string? back = rulesVersion == null ? null : PortalLook.GhostLink(AgreementsUrl(target), T("Back"));
 			body.Append(PortalLook.Actions(back, PortalLook.Submit(T("Agreements.Start"), narrow: true, large: true, fill: true))).Append("</form>");
 			return Page(status, T("Agreements.Terms.Title"), body.ToString(), T("Agreements.Terms.Description"), step: 3);

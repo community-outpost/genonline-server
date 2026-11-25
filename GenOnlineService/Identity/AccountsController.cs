@@ -213,7 +213,7 @@ namespace GenOnlineService.Identity
 				if (collapsed)
 				{
 					body.Append(PortalLook.Separator(T("SignIn.Or")));
-					body.Append($"<details class=\"gp-email\"{(email != null || message != null ? " open" : String.Empty)}><summary class=\"gp-email-toggle\">")
+					body.Append(CultureInfo.InvariantCulture, $"<details class=\"gp-email\"{(email != null || message != null ? " open" : String.Empty)}><summary class=\"gp-email-toggle\">")
 						.Append($"<span class=\"gp-email-show\">{PortalLook.Icon("mail")}{WebUtility.HtmlEncode(T("SignIn.WithEmail"))}</span>")
 						.Append($"<span class=\"gp-email-hide\">{WebUtility.HtmlEncode(T("SignIn.OtherWay"))}</span></summary>");
 				}
@@ -261,7 +261,7 @@ namespace GenOnlineService.Identity
 			{
 				// the right password only earns the code page: the same short-lived cookie as Identity's own two-factor sign-in (Name claim is the user id)
 				var pending = new ClaimsIdentity(IdentityConstants.TwoFactorUserIdScheme);
-				pending.AddClaim(new Claim(ClaimTypes.Name, result.User!.ID.ToString()));
+				pending.AddClaim(new Claim(ClaimTypes.Name, result.User!.ID.ToString(CultureInfo.InvariantCulture)));
 				await HttpContext.SignInAsync(IdentityConstants.TwoFactorUserIdScheme, new ClaimsPrincipal(pending));
 				return LocalRedirect($"/users/two_factor?{ReturnUrlField}={Uri.EscapeDataString(target)}");
 			}
@@ -425,9 +425,9 @@ namespace GenOnlineService.Identity
 			var body = new System.Text.StringBuilder(Message(message));
 			body.Append(PortalLook.Text(WebUtility.HtmlEncode(T("TwoFactor.Setup.Intro"))));
 			// white on black even in the dark theme
-			body.Append($"<div class=\"gp-qr-card\" dir=\"ltr\">{QrCode.Svg(uri, T("TwoFactor.Setup.QrLabel"))}</div>");
+			body.Append(CultureInfo.InvariantCulture, $"<div class=\"gp-qr-card\" dir=\"ltr\">{QrCode.Svg(uri, T("TwoFactor.Setup.QrLabel"))}</div>");
 			body.Append(PortalLook.Text(WebUtility.HtmlEncode(T("TwoFactor.Setup.Scan"))));
-			body.Append($"<p class=\"gp-copy gp-break\" dir=\"ltr\"><a href=\"{WebUtility.HtmlEncode(uri)}\">{WebUtility.HtmlEncode(uri)}</a></p>");
+			body.Append(CultureInfo.InvariantCulture, $"<p class=\"gp-copy gp-break\" dir=\"ltr\"><a href=\"{WebUtility.HtmlEncode(uri)}\">{WebUtility.HtmlEncode(uri)}</a></p>");
 			// the key stays left to right inside any language's sentence
 			string keyCode = $"<code dir=\"ltr\" class=\"gp-key\">{WebUtility.HtmlEncode(grouped)}</code>";
 			body.Append(PortalLook.Text(String.Format(Culture, WebUtility.HtmlEncode(T("TwoFactor.Setup.Key")), keyCode)));
@@ -568,7 +568,7 @@ namespace GenOnlineService.Identity
 			body.Append(PortalLook.Text(sentence));
 			body.Append(PortalLook.Muted(ExternalLink(AgreementSettings.PrivacyUrl!, T("Agreements.PrivacyLink"))));
 			string state = (ticked ? " checked" : String.Empty) + (invalid ? " aria-invalid=\"true\"" : String.Empty);
-			body.Append($"<label class=\"gp-check\"><input type=\"checkbox\" name=\"{AgreementTermsField}\" value=\"1\" required{state}><span class=\"gp-check-text\"><strong>{WebUtility.HtmlEncode(T("SignUp.Agree.Tick"))}</strong></span></label>");
+			body.Append(CultureInfo.InvariantCulture, $"<label class=\"gp-check\"><input type=\"checkbox\" name=\"{AgreementTermsField}\" value=\"1\" required{state}><span class=\"gp-check-text\"><strong>{WebUtility.HtmlEncode(T("SignUp.Agree.Tick"))}</strong></span></label>");
 			return body.ToString();
 		}
 
@@ -647,7 +647,7 @@ namespace GenOnlineService.Identity
 			string? tag = nameTag > 0 ? "#" + Database.DisplayNames.FormatTag(nameTag) : null;
 			var body = new System.Text.StringBuilder(Message(message));
 			body.Append(FormStart(NameSuggestion.PagePath, target));
-			body.Append($"<div class=\"gp-pane\">{PortalLook.Field("display_name", T("Field.PlayerName"), $"type=\"text\" name=\"display_name\" autocomplete=\"nickname\" minlength=\"{Realtime.RealtimeHub.NameMinLength}\" maxlength=\"{Realtime.RealtimeHub.NameMaxLength}\" required", displayName, suffix: tag, suffixLabel: tag == null ? null : T("Name.TagLabel", tag), hint: WebUtility.HtmlEncode((String.IsNullOrEmpty(displayName) || tag == null ? String.Empty : T("Name.Seen", displayName + tag) + " ") + T("Name.Range", Realtime.RealtimeHub.NameMinLength, Realtime.RealtimeHub.NameMaxLength)), large: true)}</div>");
+			body.Append(CultureInfo.InvariantCulture, $"<div class=\"gp-pane\">{PortalLook.Field("display_name", T("Field.PlayerName"), $"type=\"text\" name=\"display_name\" autocomplete=\"nickname\" minlength=\"{Realtime.RealtimeHub.NameMinLength}\" maxlength=\"{Realtime.RealtimeHub.NameMaxLength}\" required", displayName, suffix: tag, suffixLabel: tag == null ? null : T("Name.TagLabel", tag), hint: WebUtility.HtmlEncode((String.IsNullOrEmpty(displayName) || tag == null ? String.Empty : T("Name.Seen", displayName + tag) + " ") + T("Name.Range", Realtime.RealtimeHub.NameMinLength, Realtime.RealtimeHub.NameMaxLength)), large: true)}</div>");
 			body.Append(PortalLook.Actions(null, PortalLook.Submit(T("Continue"), large: true))).Append("</form>");
 			return Page(status, T("Welcome.Title"), body.ToString(), T("Welcome.Description"), step: 1);
 		}
@@ -678,7 +678,7 @@ namespace GenOnlineService.Identity
 			}
 
 			NameSuggestion.Clear(HttpContext);
-			User? renamed = await m_users.FindByIdAsync(user.ID.ToString());
+			User? renamed = await m_users.FindByIdAsync(user.ID.ToString(CultureInfo.InvariantCulture));
 			if (renamed != null)
 			{
 				await m_signIn.RefreshSignInAsync(renamed);
@@ -892,7 +892,7 @@ namespace GenOnlineService.Identity
 			// one authorization per sign-in, so revoking it ends exactly that device's refresh chain
 			object authorization = await m_authorizations.CreateAsync(
 				principal: new ClaimsPrincipal(identity),
-				subject: user.ID.ToString(),
+				subject: user.ID.ToString(CultureInfo.InvariantCulture),
 				client: applicationID!,
 				type: AuthorizationTypes.Permanent,
 				scopes: identity.GetScopes());
@@ -963,7 +963,7 @@ namespace GenOnlineService.Identity
 
 			return Ok(new Dictionary<string, object>
 			{
-				[Claims.Subject] = user.ID.ToString(),
+				[Claims.Subject] = user.ID.ToString(CultureInfo.InvariantCulture),
 				[Claims.Name] = user.Username,
 				[Claims.PreferredUsername] = user.Username
 			});
@@ -1007,15 +1007,15 @@ namespace GenOnlineService.Identity
 			IEnumerable<KeyValuePair<string, Microsoft.Extensions.Primitives.StringValues>> parameters = Request.HasFormContentType ? Request.Form : Request.Query;
 
 			var form = new System.Text.StringBuilder();
-			form.Append($"<form method=\"post\" action=\"{WebUtility.HtmlEncode(Request.PathBase + Request.Path)}\" class=\"gp-form\">");
+			form.Append(CultureInfo.InvariantCulture, $"<form method=\"post\" action=\"{WebUtility.HtmlEncode(Request.PathBase + Request.Path)}\" class=\"gp-form\">");
 			foreach ((string key, Microsoft.Extensions.Primitives.StringValues values) in parameters.Where(p => p.Key != ConsentField && p.Key != Parameters.Prompt && p.Key != tokens.FormFieldName))
 			{
 				foreach (string? value in values)
 				{
-					form.Append($"<input type=\"hidden\" name=\"{WebUtility.HtmlEncode(key)}\" value=\"{WebUtility.HtmlEncode(value)}\">");
+					form.Append(CultureInfo.InvariantCulture, $"<input type=\"hidden\" name=\"{WebUtility.HtmlEncode(key)}\" value=\"{WebUtility.HtmlEncode(value)}\">");
 				}
 			}
-			form.Append($"<input type=\"hidden\" name=\"{WebUtility.HtmlEncode(tokens.FormFieldName)}\" value=\"{WebUtility.HtmlEncode(tokens.RequestToken)}\">");
+			form.Append(CultureInfo.InvariantCulture, $"<input type=\"hidden\" name=\"{WebUtility.HtmlEncode(tokens.FormFieldName)}\" value=\"{WebUtility.HtmlEncode(tokens.RequestToken)}\">");
 
 			string scopes = String.Concat(request.GetScopes().Where(s_scopeDescriptions.ContainsKey).Select(s => $"<li>{WebUtility.HtmlEncode(T(s_scopeDescriptions[s]))}</li>"));
 			form.Append(PortalLook.Text(String.Format(Culture, WebUtility.HtmlEncode(T("Consent.Asks")), $"<strong><bdi>{WebUtility.HtmlEncode(displayName)}</bdi></strong>")) + $"<ul class=\"gp-list\">{scopes}</ul>");
@@ -1042,7 +1042,7 @@ namespace GenOnlineService.Identity
 		private ClaimsIdentity BuildIdentity(User user, ImmutableArray<string> requestedScopes)
 		{
 			var identity = new ClaimsIdentity(TokenValidationParametersDefaults.AuthenticationType, Claims.Name, Claims.Role);
-			identity.SetClaim(Claims.Subject, user.ID.ToString())
+			identity.SetClaim(Claims.Subject, user.ID.ToString(CultureInfo.InvariantCulture))
 				.SetClaim(Claims.Name, user.Username)
 				.SetClaim(Claims.PreferredUsername, user.Username);
 

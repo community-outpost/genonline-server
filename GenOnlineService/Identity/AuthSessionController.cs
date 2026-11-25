@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using System.Globalization;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -73,7 +74,7 @@ namespace GenOnlineService.Identity
 			// a signed-out or revoked sign-in cannot register again while its access token is still unexpired
 			object? authorization = await m_authorizations.FindByIdAsync(authorizationID);
 			if (authorization == null || !await m_authorizations.HasStatusAsync(authorization, OpenIddictConstants.Statuses.Valid)
-				|| await m_authorizations.GetSubjectAsync(authorization) != userID.ToString())
+				|| await m_authorizations.GetSubjectAsync(authorization) != userID.ToString(CultureInfo.InvariantCulture))
 			{
 				return StatusCode(StatusCodes.Status401Unauthorized, UniformAuthResponses.UnauthorizedBody);
 			}
@@ -150,7 +151,7 @@ namespace GenOnlineService.Identity
 			try
 			{
 				object? authorization = await m_authorizations.FindByIdAsync(authorizationID);
-				if (authorization != null && await m_authorizations.GetSubjectAsync(authorization) == userID.ToString())
+				if (authorization != null && await m_authorizations.GetSubjectAsync(authorization) == userID.ToString(CultureInfo.InvariantCulture))
 				{
 					await m_authorizations.TryRevokeAsync(authorization);
 					await m_tokens.RevokeByAuthorizationIdAsync(authorizationID);

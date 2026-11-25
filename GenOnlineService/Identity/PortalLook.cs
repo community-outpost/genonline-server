@@ -83,14 +83,14 @@ namespace GenOnlineService.Identity
 		{
 			CultureInfo culture = AccountsText.Resolve(language?.Culture);
 			var page = new StringBuilder(Head(title, culture));
-			page.Append($"<a href=\"#content\" class=\"gp-skip\">{E(AccountsText.Get("Skip", culture))}</a><div class=\"gp-page\">");
+			page.Append(CultureInfo.InvariantCulture, $"<a href=\"#content\" class=\"gp-skip\">{E(AccountsText.Get("Skip", culture))}</a><div class=\"gp-page\">");
 			if (site != null && site.CoverImages.Count > 0)
 			{
 				string cover = site.CoverImages[site.CoverImages.Count == 1 ? 0 : Random.Shared.Next(site.CoverImages.Count)];
-				page.Append($"<img class=\"gp-cover\" src=\"{E(PortalAssets.Url(cover))}\" alt=\"\" aria-hidden=\"true\" decoding=\"async\">");
+				page.Append(CultureInfo.InvariantCulture, $"<img class=\"gp-cover\" src=\"{E(PortalAssets.Url(cover))}\" alt=\"\" aria-hidden=\"true\" decoding=\"async\">");
 			}
 			page.Append("<div class=\"gp-vignette\" aria-hidden=\"true\"></div>");
-			page.Append($"<main id=\"content\" class=\"gp-main\" tabindex=\"-1\">{Logo(culture)}");
+			page.Append(CultureInfo.InvariantCulture, $"<main id=\"content\" class=\"gp-main\" tabindex=\"-1\">{Logo(culture)}");
 
 			string h1 = $"<h1 class=\"gp-title{(icon == null && step == null ? " gp-title-centre" : String.Empty)}\">{E(heading ?? title)}</h1>";
 			string lead = description == null ? String.Empty : $"<p class=\"gp-lead\">{E(description)}</p>";
@@ -98,15 +98,15 @@ namespace GenOnlineService.Identity
 			{
 				string head = icon == null ? $"<div class=\"gp-head\">{h1}{lead}</div>"
 					: $"<div class=\"gp-banner\"><span class=\"gp-tile\">{Icon(icon, "gp-icon gp-icon-lg")}</span><div class=\"gp-head\">{h1}{lead}</div></div>";
-				page.Append($"<div class=\"gp-card gp-card-wizard\">{Steps(current, culture)}{head}{body}</div>");
+				page.Append(CultureInfo.InvariantCulture, $"<div class=\"gp-card gp-card-wizard\">{Steps(current, culture)}{head}{body}</div>");
 			}
 			else if (icon != null)
 			{
-				page.Append($"<div class=\"gp-card gp-card-icon\"><div class=\"gp-tile\">{Icon(icon, "gp-icon gp-icon-lg")}</div><div class=\"gp-head\">{h1}{lead}</div>{body}</div>");
+				page.Append(CultureInfo.InvariantCulture, $"<div class=\"gp-card gp-card-icon\"><div class=\"gp-tile\">{Icon(icon, "gp-icon gp-icon-lg")}</div><div class=\"gp-head\">{h1}{lead}</div>{body}</div>");
 			}
 			else
 			{
-				page.Append($"<div class=\"gp-stack{(wide ? " gp-stack-doc" : String.Empty)}\">{h1}{(description == null ? String.Empty : $"<p class=\"gp-lead gp-title-centre\">{E(description)}</p>")}<div class=\"gp-card\">{body}</div>{below}</div>");
+				page.Append(CultureInfo.InvariantCulture, $"<div class=\"gp-stack{(wide ? " gp-stack-doc" : String.Empty)}\">{h1}{(description == null ? String.Empty : $"<p class=\"gp-lead gp-title-centre\">{E(description)}</p>")}<div class=\"gp-card\">{body}</div>{below}</div>");
 			}
 			page.Append(Footer(language, site, culture)).Append("</main></div></body></html>");
 			return page.ToString();
@@ -119,7 +119,7 @@ namespace GenOnlineService.Identity
 			for (int index = 0; index < names.Length; index++)
 			{
 				string mark = index + 1 == current ? " aria-current=\"step\"" : String.Empty;
-				list.Append($"<li class=\"gp-step\"{mark}><span class=\"gp-dot\">{index + 1}</span>{E(AccountsText.Get(names[index], culture))}</li>");
+				list.Append(CultureInfo.InvariantCulture, $"<li class=\"gp-step\"{mark}><span class=\"gp-dot\">{index + 1}</span>{E(AccountsText.Get(names[index], culture))}</li>");
 				if (index < names.Length - 1)
 				{
 					list.Append("<li class=\"gp-step-line\" aria-hidden=\"true\"></li>");
@@ -142,7 +142,7 @@ namespace GenOnlineService.Identity
 			{
 				if (!String.IsNullOrWhiteSpace(url))
 				{
-					links.Append($"<a href=\"{E(url)}\" target=\"_blank\" rel=\"noopener noreferrer\">{E(AccountsText.Get(key, culture))}</a>");
+					links.Append(CultureInfo.InvariantCulture, $"<a href=\"{E(url)}\" target=\"_blank\" rel=\"noopener noreferrer\">{E(AccountsText.Get(key, culture))}</a>");
 				}
 			}
 			Add(site?.TermsUrl, "Agreements.TermsLink");
@@ -183,24 +183,24 @@ namespace GenOnlineService.Identity
 				: $"<span class=\"gp-hint\">{(shell.PlayerId == null ? String.Empty : E(AccountsText.Format("Account.PlayerId", culture, shell.PlayerId)))}{(shell.PlayerId != null && shell.Role != null ? " · " : String.Empty)}{E(shell.Role)}</span>";
 
 			var menu = new StringBuilder($"<div class=\"gp-menu-head\">{avatar}<div class=\"gp-head\" style=\"gap:2px;min-width:0\"><bdi class=\"gp-name\">{full}</bdi>{who}</div></div><hr>");
-			menu.Append($"<a href=\"/profile\">{Icon("user")}{E(AccountsText.Get("Account.EditProfile", culture))}</a>");
+			menu.Append(CultureInfo.InvariantCulture, $"<a href=\"/profile\">{Icon("user")}{E(AccountsText.Get("Account.EditProfile", culture))}</a>");
 			if (language != null)
 			{
 				CultureInfo current = AccountsText.Resolve(language.Culture);
-				menu.Append($"<span class=\"gp-hint\" style=\"display:flex;align-items:center;gap:10px;padding:4px 10px 0\">{Icon("globe")}{E(AccountsText.Get("Language", culture))}</span><div class=\"gp-menu-langs\">{LanguageLinks(language, current, String.Empty)}</div>");
+				menu.Append(CultureInfo.InvariantCulture, $"<span class=\"gp-hint\" style=\"display:flex;align-items:center;gap:10px;padding:4px 10px 0\">{Icon("globe")}{E(AccountsText.Get("Language", culture))}</span><div class=\"gp-menu-langs\">{LanguageLinks(language, current, String.Empty)}</div>");
 			}
 			if (shell.Staff)
 			{
-				menu.Append($"<hr><a href=\"/admin\">{Icon("layout-dashboard")}{E(AccountsText.Get("Account.StaffTools", culture))}</a>");
+				menu.Append(CultureInfo.InvariantCulture, $"<hr><a href=\"/admin\">{Icon("layout-dashboard")}{E(AccountsText.Get("Account.StaffTools", culture))}</a>");
 			}
-			menu.Append($"<hr>{shell.SignOutForm}");
+			menu.Append(CultureInfo.InvariantCulture, $"<hr>{shell.SignOutForm}");
 
 			var side = new StringBuilder($"<nav class=\"gp-side\" aria-label=\"{E(AccountsText.Get("Account.Area", culture))}\"><span class=\"gp-area\">{E(AccountsText.Get("Account.Area", culture))}</span>");
 			foreach ((string href, string label, string icon) in sections)
 			{
 				string count = badges != null && badges.TryGetValue(href, out (int Count, string Label) badge) && badge.Count > 0
 					? $"<span class=\"gp-count\" aria-label=\"{E(badge.Label)}\">{badge.Count.ToString(CultureInfo.InvariantCulture)}</span>" : String.Empty;
-				side.Append($"<a href=\"{E(href)}\"{(href == currentHref ? " aria-current=\"page\"" : String.Empty)}>{Icon(icon)}{E(label)}{count}</a>");
+				side.Append(CultureInfo.InvariantCulture, $"<a href=\"{E(href)}\"{(href == currentHref ? " aria-current=\"page\"" : String.Empty)}>{Icon(icon)}{E(label)}{count}</a>");
 			}
 			side.Append("</nav>");
 

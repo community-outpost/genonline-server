@@ -229,7 +229,7 @@ namespace GenOnlineService.Rest
 				body.Description == null ? existing.Description : Clean(body.Description),
 				position.Value,
 				permissions);
-			if (body.Name != null && body.Name.Trim().ToLowerInvariant() != existing.Name)
+			if (body.Name != null && !String.Equals(body.Name.Trim(), existing.Name, StringComparison.OrdinalIgnoreCase))
 			{
 				return RestResults.Invalid("name");
 			}

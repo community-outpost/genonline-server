@@ -147,7 +147,7 @@ namespace GenOnlineService.Identity
 				return UpstreamSignInResult.Refused(ErrorDeactivated);
 			}
 
-			identity.LastUsedAt = now;
+			identity!.LastUsedAt = now;
 			user.LastSignInAt = now;
 			await db.SaveChangesAsync();
 

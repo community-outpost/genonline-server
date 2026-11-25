@@ -232,17 +232,17 @@ namespace Database
 			try
 			{
 				// Genuine clients end these values with a marker suffix
-				if (!hwid_0.ToUpper().EndsWith("YY"))
+				if (!hwid_0.EndsWith("YY", StringComparison.OrdinalIgnoreCase))
 				{
 					await Database.AntiCheat.FlagAccountForReview_SuspectProbes(db, userId, 0, "Logged in with potentially spoofed HWID 0");
 				}
 
-				if (!hwid_1.ToUpper().EndsWith("ZZ"))
+				if (!hwid_1.EndsWith("ZZ", StringComparison.OrdinalIgnoreCase))
 				{
 					await Database.AntiCheat.FlagAccountForReview_SuspectProbes(db, userId, 0, "Logged in with potentially spoofed HWID 1");
 				}
 
-				if (!hwid_2.ToUpper().EndsWith("ZZ"))
+				if (!hwid_2.EndsWith("ZZ", StringComparison.OrdinalIgnoreCase))
 				{
 					await Database.AntiCheat.FlagAccountForReview_SuspectProbes(db, userId, 0, "Logged in with potentially spoofed HWID 2");
 				}

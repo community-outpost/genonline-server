@@ -383,15 +383,15 @@ static partial class MatchmakingManager
         public void ExpandElo()
 		{
 			++eloExpansionIteration;
-			m_LastELOExpansionTime = DateTime.Now;
+			m_LastELOExpansionTime = DateTime.UtcNow;
         }
 
 		DateTime m_CreationTime = DateTime.Now;
-        DateTime m_LastELOExpansionTime = DateTime.Now;
+        DateTime m_LastELOExpansionTime = DateTime.UtcNow;
 
 		private TimeSpan TimeSinceLastEloExpansion()
 		{
-            TimeSpan timeDifference = DateTime.Now - m_LastELOExpansionTime;
+            TimeSpan timeDifference = DateTime.UtcNow - m_LastELOExpansionTime;
 			return timeDifference;
         }
 
@@ -1697,7 +1697,7 @@ static partial class MatchmakingManager
 									}
 
 									// must be within initial elo threshold for a join, otherwise we'll make a bucket and try to merge buckets using the elo iteration expansion algorithm
-									int matchmakingElo = MatchmakingManager.GetMatchmakingElo(thisSessionUserData.GameStats);
+									int matchmakingElo = thisSessionUserData.GameStats != null ? MatchmakingManager.GetMatchmakingElo(thisSessionUserData.GameStats) : EloConfig.BaseRating;
 									int eloExpansionToUse = (mmBucket.GetAvgElo() >= EloConfig.HighEloThreshold || matchmakingElo >= EloConfig.HighEloThreshold) ? EloConfig.EloExpansionValue_HighELO : EloConfig.EloExpansionValue_Standard;
 									if (mmBucket.IsAvgEloWithinThreshold(matchmakingElo, eloExpansionToUse))
 									{

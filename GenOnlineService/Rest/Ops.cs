@@ -82,8 +82,8 @@ namespace GenOnlineService.Rest
 			return RestResults.Ok(new HealthResponse
 			{
 				Version = Compatibility.ServiceVersion,
-				StartedAt = started.ToUniversalTime(),
-				UptimeS = (long)Math.Max(0, (DateTime.Now - started).TotalSeconds)
+				StartedAt = started,
+				UptimeS = (long)Math.Max(0, (DateTime.UtcNow - started).TotalSeconds)
 			});
 		}
 

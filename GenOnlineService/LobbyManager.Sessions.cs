@@ -87,7 +87,7 @@ public partial class LobbyManager
 		bool live = session != null && !session.IsRetired;
 		bool inLobby = live && session!.currentLobbyID != -1;
 		var result = WebSocketManager.ApplyMiddlewareIDForUser(userID, middlewareID, inLobby);
-		if (result == WebSocketManager.EMiddlewareIDApplyResult.Changed && inLobby)
+		if (result == WebSocketManager.EMiddlewareIDApplyResult.Changed && inLobby && session != null)
 		{
 			var lobby = GetLobby(session.currentLobbyID);
 			if (lobby != null) await lobby.NotifyMemberMiddlewareIDResolved(userID);

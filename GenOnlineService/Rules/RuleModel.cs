@@ -83,7 +83,7 @@ namespace GenOnlineService.Rules
 
 	public static class RuleOperators
 	{
-		public const string Equals = "equals";
+		public new const string Equals = "equals";
 		public const string NotEquals = "not_equals";
 		public const string InList = "in_list";
 		public const string Contains = "contains";

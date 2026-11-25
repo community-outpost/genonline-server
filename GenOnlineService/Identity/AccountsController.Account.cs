@@ -211,7 +211,7 @@ namespace GenOnlineService.Identity
 				var content = new StringBuilder();
 				if (latest.TryGetValue(document.Name, out UserAgreement? agreed))
 				{
-					content.Append($"<bdi>{WebUtility.HtmlEncode(T("Account.Agreements.Agreed", agreed.Version, Day(agreed.AgreedAt)))}</bdi>");
+					content.Append(CultureInfo.InvariantCulture, $"<bdi>{WebUtility.HtmlEncode(T("Account.Agreements.Agreed", agreed.Version, Day(agreed.AgreedAt)))}</bdi>");
 					if (owed.Contains(document))
 					{
 						content.Append(PortalLook.Badge(T("Account.Agreements.NewVersion", document.Version!), muted: true));

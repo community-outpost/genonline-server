@@ -24,6 +24,9 @@ using MySqlConnector;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+
+// EF1002: the interpolated parts are table and column names from the EF model, never input
+#pragma warning disable EF1002
 using System.Text.Json;
 using System.Text.Json.Nodes;
 

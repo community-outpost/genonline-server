@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using System.Globalization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System.Net;
@@ -39,7 +40,7 @@ namespace GenOnlineService.Identity
 				return NotFound();
 			}
 
-			User? user = AccountMail.TryUnpack(token, out Int64 userID, out string raw) ? await m_users.FindByIdAsync(userID.ToString()) : null;
+			User? user = AccountMail.TryUnpack(token, out Int64 userID, out string raw) ? await m_users.FindByIdAsync(userID.ToString(CultureInfo.InvariantCulture)) : null;
 			IdentityResult? confirmed = user == null || user.Email == null ? null : await m_users.ConfirmEmailAsync(user, raw);
 			if (confirmed?.Succeeded != true)
 			{
@@ -178,7 +179,7 @@ namespace GenOnlineService.Identity
 			{
 				return (null, String.Empty);
 			}
-			User? user = await m_users.FindByIdAsync(userID.ToString());
+			User? user = await m_users.FindByIdAsync(userID.ToString(CultureInfo.InvariantCulture));
 			if (user == null || user.PasswordHash == null
 				|| !await m_users.VerifyUserTokenAsync(user, m_users.Options.Tokens.PasswordResetTokenProvider, UserManager<User>.ResetPasswordTokenPurpose, raw))
 			{

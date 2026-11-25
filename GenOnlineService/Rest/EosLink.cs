@@ -110,7 +110,11 @@ namespace GenOnlineService.Rest
 
 		public static MiddlewareSettings? LoadMiddlewareSettings()
 		{
-			IConfigurationSection middlewareSettings = Program.g_Config.GetSection("Middleware");
+			IConfigurationSection? middlewareSettings = Program.g_Config?.GetSection("Middleware");
+			if (middlewareSettings == null)
+			{
+				return null;
+			}
 
 			string? jwksEndpoint = middlewareSettings.GetValue<string>("jwks_endpoint");
 			string? audience = middlewareSettings.GetValue<string>("audience");

@@ -562,7 +562,7 @@ namespace Database
 				await db.SaveChangesAsync();
 
 				ulong id = (ulong)match.Id;
-				lobby.SetMatchID(id);
+				await lobby.SetMatchID(id);
 
 				return id;
 			}
@@ -1178,8 +1178,8 @@ namespace Database
 					if (a.user_id >= b.user_id)
 						continue;
 
-					ref EloData A = ref CollectionsMarshal.GetValueRefOrAddDefault(dictElo, a.user_id, out _);
-					ref EloData B = ref CollectionsMarshal.GetValueRefOrAddDefault(dictElo, b.user_id, out _);
+					EloData A = dictElo[a.user_id];
+					EloData B = dictElo[b.user_id];
 					Elo.ApplyResult(ref A, ref B, a.won ? MatchResult.PlayerAWins : MatchResult.PlayerBWins);
 				}
 			}
@@ -1187,8 +1187,7 @@ namespace Database
 			// --- Increment matches (still ref-safe) ---
 			foreach (var m in members)
 			{
-				ref EloData data = ref CollectionsMarshal.GetValueRefOrAddDefault(dictElo, m.user_id, out _);
-				data.NumMatches++;
+				dictElo[m.user_id].NumMatches++;
 			}
 
 			// --- Persist (copy out of ref before EF) ---
@@ -1199,7 +1198,7 @@ namespace Database
 
 				// Update live user if online
 				var shared = GenOnlineService.WebSocketManager.GetSharedDataForUser(userId);
-				if (shared != null)
+				if (shared?.GameStats != null)
 				{
 					shared.GameStats.EloRating = data.Rating;
 					shared.GameStats.EloMatches = data.NumMatches;
@@ -1246,8 +1245,8 @@ namespace Database
 
 					foreach (var period in new[] { daily, monthly, yearly })
 					{
-						ref EloData A = ref CollectionsMarshal.GetValueRefOrAddDefault(period, a.user_id, out _);
-						ref EloData B = ref CollectionsMarshal.GetValueRefOrAddDefault(period, b.user_id, out _);
+						EloData A = period[a.user_id];
+						EloData B = period[b.user_id];
 						Elo.ApplyResult(ref A, ref B, result);
 					}
 				}

@@ -141,10 +141,6 @@ public class DiscordBot
 
             bool discord_send_room_chat_to_discord = discordSettings.GetValue<bool>("send_room_chat_to_discord");
 
-            if (discord_send_room_chat_to_discord == null)
-            {
-                return;
-            }
 
 			if (discord_send_room_chat_to_discord)
 			{
@@ -493,8 +489,8 @@ public class DiscordBot
 		{
 			case "uptime":
 			{
-				string startTime = Program.g_LastStartTime.ToString("yyyy-MM-dd HH:mm:ss");
-				TimeSpan difference = DateTime.Now.Subtract(Program.g_LastStartTime);
+				string startTime = Program.g_LastStartTime.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + " UTC";
+				TimeSpan difference = DateTime.UtcNow.Subtract(Program.g_LastStartTime);
 				return $"The server was last started at {startTime} and the current uptime is Days: {difference.Days}, Hours: {difference.Hours}, Minutes: {difference.Minutes}";
 			}
 			case "peak":
@@ -579,7 +575,7 @@ public class DiscordBot
 
 		//1354979004507226294
 
-		IConfigurationSection? discordSettings = Program.g_Config.GetSection("Discord");
+		IConfigurationSection? discordSettings = Program.g_Config?.GetSection("Discord");
 
 		if (discordSettings == null)
 		{

@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using System.Globalization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -409,7 +410,7 @@ namespace GenOnlineService.Identity
 				var tokens = scope.ServiceProvider.GetRequiredService<IOpenIddictTokenManager>();
 
 				var targets = new List<object>();
-				await foreach (object authorization in authorizations.FindBySubjectAsync(userID.ToString()))
+				await foreach (object authorization in authorizations.FindBySubjectAsync(userID.ToString(CultureInfo.InvariantCulture)))
 				{
 					if (!await authorizations.HasStatusAsync(authorization, OpenIddictConstants.Statuses.Valid))
 					{
@@ -532,7 +533,7 @@ namespace GenOnlineService.Identity
 
 			var claims = new List<Claim>
 			{
-				new Claim(ClaimTypes.NameIdentifier, userID.ToString()),
+				new Claim(ClaimTypes.NameIdentifier, userID.ToString(CultureInfo.InvariantCulture)),
 				new Claim(JwtRegisteredClaimNames.Name, token.GetClaim(OpenIddictConstants.Claims.Name) ?? String.Empty),
 				new Claim(JwtRegisteredClaimNames.Address, IPHelpers.NormalizeIP(Context.Connection.RemoteIpAddress?.ToString())),
 				new Claim(ClientIDClaim, clientID),
@@ -543,7 +544,7 @@ namespace GenOnlineService.Identity
 			EUserSessionType sessionType = client.SessionType;
 			if (token.HasScope(AccountsSettings.GameScope) && sessionType != EUserSessionType.None)
 			{
-				claims.Add(new Claim(SessionTypeClaim, ((int)sessionType).ToString()));
+				claims.Add(new Claim(SessionTypeClaim, ((int)sessionType).ToString(CultureInfo.InvariantCulture)));
 				claims.Add(new Claim(ClaimTypes.Role, "Player"));
 				claims.Add(new Claim(ClaimTypes.Role, sessionType.ToString()));
 			}
