@@ -69,7 +69,7 @@ namespace GenOnlineService.Flags
 
 		private JsonObject ContextOf() => ContextOf(HttpContext);
 
-		// The environment is the service environment live, test or dev, never the ASP.NET environment name
+		// The environment is the service environment's name (Service:environment), never the ASP.NET environment name
 		internal static JsonObject ContextOf(HttpContext http)
 		{
 			Int64 userID = RealtimeClaims.UserID(http.User);

@@ -31,18 +31,30 @@ namespace GenOnlineService.Investigation
 		AddressFacts? Lookup(string ipAddress);
 	}
 
-	// MaxMind GeoLite2: the City database the sign-in lookup opens (GeoLocation), and the ASN database when it is deployed
+	public static class GeoIpFiles
+	{
+		public const string DefaultCityPath = "data/GeoLite2-City.mmdb";
+		public const string DefaultAsnPath = "data/GeoLite2-ASN.mmdb";
+
+		public static string CityPath { get; private set; } = DefaultCityPath;
+		public static string AsnPath { get; private set; } = DefaultAsnPath;
+
+		public static void Configure(IConfiguration config)
+		{
+			IConfigurationSection section = config.GetSection("GeoIP");
+			CityPath = PathOr(section["city_path"], DefaultCityPath);
+			AsnPath = PathOr(section["asn_path"], DefaultAsnPath);
+		}
+
+		private static string PathOr(string? value, string fallback) => String.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+	}
+
 	public sealed class MaxMindAddressDirectory : IAddressDirectory, IDisposable
 	{
-		// The file GeoLocation reads at sign-in
-		public const string CityPath = "data/GeoLite2-City.mmdb";
-		// GeoLite2-ASN, from the same geoipupdate run once its edition id is configured
-		public const string AsnPath = "data/GeoLite2-ASN.mmdb";
-
 		private const int MaximumCached = 10000;
 
 		private static readonly ILogger s_log = AppLog.For(typeof(MaxMindAddressDirectory));
-		private static readonly Lazy<MaxMindAddressDirectory> s_default = new(() => new MaxMindAddressDirectory(CityPath, AsnPath));
+		private static readonly Lazy<MaxMindAddressDirectory> s_default = new(() => new MaxMindAddressDirectory(GeoIpFiles.CityPath, GeoIpFiles.AsnPath));
 
 		private readonly DatabaseReader? m_city;
 		private readonly DatabaseReader? m_asn;

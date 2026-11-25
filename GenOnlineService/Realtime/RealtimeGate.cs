@@ -107,7 +107,7 @@ namespace GenOnlineService.Realtime
 		{
 			try
 			{
-				return new DatabaseReader("data/GeoLite2-City.mmdb");
+				return new DatabaseReader(GenOnlineService.Investigation.GeoIpFiles.CityPath);
 			}
 			catch (Exception ex)
 			{

@@ -1089,9 +1089,11 @@ namespace GenOnlineService
 			// display name tags derive from this secret; outside Development a missing one stops the service here
 			Names.NameTags.Configure(builder.Configuration, builder.Environment);
 
-			// the deploy environment is live, test or dev, and outside Development a missing or unknown one stops the service here
+			// the deploy environment's name; outside Development a missing or malformed one stops the service here
 			ServiceEnvironment serviceEnvironment = ServiceEnvironment.Configure(builder.Configuration, builder.Environment);
 			builder.Services.AddSingleton(serviceEnvironment);
+
+			GenOnlineService.Investigation.GeoIpFiles.Configure(builder.Configuration);
 
 			// Process the original client IP, request scheme, and host only when
 			// one or more trusted reverse proxies are configured.

@@ -18,18 +18,18 @@
 
 namespace GenOnlineService
 {
-	// The deploy environment this service runs as: live, test or dev.
+	// The deploy environment this service runs as, a name the operator picks (live, test, staging, eu-prod, ...).
 	// It is separate from the ASP.NET environment, which only switches framework behaviour, so a live and a test pod can both run as Production.
 	public sealed class ServiceEnvironment
 	{
 		public const string ConfigSection = "Service";
 		public const string ConfigKey = "environment";
 
-		public const string Live = "live";
-		public const string Test = "test";
 		public const string Dev = "dev";
 
-		public static readonly IReadOnlyList<string> Names = [Live, Test, Dev];
+		// a label for flag targeting and Sentry: lower case letters, digits and dashes, starting with a letter
+		private static readonly System.Text.RegularExpressions.Regex s_name =
+			new System.Text.RegularExpressions.Regex("^[a-z][a-z0-9-]{0,31}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
 		public string Name { get; }
 
@@ -48,11 +48,11 @@ namespace GenOnlineService
 				{
 					return new ServiceEnvironment(Dev);
 				}
-				throw new InvalidOperationException($"{ConfigSection}:{ConfigKey} is not set. Set it to live, test or dev.");
+				throw new InvalidOperationException($"{ConfigSection}:{ConfigKey} is not set. Set it to the name of this deploy environment, for example live or test.");
 			}
-			if (!Names.Contains(value, StringComparer.Ordinal))
+			if (!s_name.IsMatch(value))
 			{
-				throw new InvalidOperationException($"{ConfigSection}:{ConfigKey} is `{value}`. It must be live, test or dev.");
+				throw new InvalidOperationException($"{ConfigSection}:{ConfigKey} is `{value}`. It must be 1 to 32 lower case letters, digits and dashes, starting with a letter.");
 			}
 			return new ServiceEnvironment(value);
 		}
