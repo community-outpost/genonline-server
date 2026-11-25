@@ -1,0 +1,215 @@
+@page "/admin/cases"
+@inject PortalApi Api
+@inject NavigationManager Navigation
+
+<PageTitle>Review queue · Generals Online</PageTitle>
+
+<PageHeader Description="One row per player with something waiting. Open a row to see the reports, anti-cheat findings and rule matches together, then decide them in one go. Anti-cheat signals come first.">
+    <Title>Review queue</Title>
+    <Actions>
+        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="LoadAsync">
+            <LucideIcon Name="refresh-cw" Class="bb:h-4 bb:w-4" />
+            Refresh
+        </BbButton>
+    </Actions>
+</PageHeader>
+
+@if (!Session.Staff)
+{
+    <Refusal Title="Review queue" Description="The review queue is for staff." Icon="lock" />
+}
+else
+{
+    @if (m_error != null)
+    {
+        <BbAlert Variant="AlertVariant.Danger">
+            <Icon>
+                <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+            </Icon>
+            <ChildContent>
+                <BbAlertTitle>The queue could not load</BbAlertTitle>
+                <BbAlertDescription>@PortalText.Error(m_error)</BbAlertDescription>
+            </ChildContent>
+        </BbAlert>
+    }
+
+    <BbCard>
+        <BbCardHeader>
+            <BbCardTitle As="h2">@(m_total is int total ? $"{PortalText.Count(total)} {(total == 1 ? "player" : "players")} to review" : "Players to review")</BbCardTitle>
+            @if (!CanReviewAntiCheat)
+            {
+                <BbCardDescription>Anti-cheat findings and rule matches need the anticheat.review permission, so you see player reports only.</BbCardDescription>
+            }
+        </BbCardHeader>
+        <BbCardContent>
+            <div class="bb:mb-4 bb:flex bb:flex-wrap bb:gap-3">
+                <BbNativeSelect TValue="string" Value="@m_kind" ValueChanged="@(async (string? v) => await ShowAsync(v, m_claimed))" AriaLabel="Signal kind" Class="go-select" data-testid="case-kind">
+                    <option value="">Every kind</option>
+                    @foreach (string kind in Kinds)
+                    {
+                        <option value="@kind">@PortalCaseKinds.Title(kind)</option>
+                    }
+                </BbNativeSelect>
+                <BbNativeSelect TValue="string" Value="@m_claimed" ValueChanged="@(async (string? v) => await ShowAsync(m_kind, v))" AriaLabel="Claimed" Class="go-select" data-testid="case-claimed">
+                    <option value="all">Claimed or not</option>
+                    <option value="unclaimed">Not claimed</option>
+                    <option value="mine">Claimed by me</option>
+                </BbNativeSelect>
+            </div>
+
+            @if (m_rows == null)
+            {
+                <FeedSkeleton />
+            }
+            else
+            {
+                <div class="go-table-frame">
+                <BbDataTable TData="PortalCaseRow" Data="@m_rows" ShowToolbar="false" ShowPagination="false" AriaLabel="Players to review">
+                    <Columns>
+                        <BbDataTableColumn TData="PortalCaseRow" TValue="string" Property="@(r => r.Player.FullName)" Header="Player">
+                            <CellTemplate Context="row">
+                                <div class="bb:space-y-1">
+                                    <BbLink Href="@PortalRoutes.PlayerCasePage(row.Player.Id)" data-testid="case-open">@row.Player.FullName</BbLink>
+                                    <div class="bb:flex bb:flex-wrap bb:gap-1 bb:text-xs bb:text-muted-foreground">
+                                        <span>joined <When Value="@row.AccountCreatedAt" /></span>
+                                        @if (row.Banned)
+                                        {
+                                            <BbBadge Variant="BadgeVariant.SoftDestructive">banned</BbBadge>
+                                        }
+                                        @if (row.Muted)
+                                        {
+                                            <BbBadge Variant="BadgeVariant.SoftDestructive">muted</BbBadge>
+                                        }
+                                        @if (row.PriorCases > 0)
+                                        {
+                                            <BbBadge Variant="BadgeVariant.Outline">@PortalText.Count(row.PriorCases) earlier @(row.PriorCases == 1 ? "case" : "cases")</BbBadge>
+                                        }
+                                    </div>
+                                </div>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalCaseRow" TValue="int" Property="@(r => r.Priority)" Header="Waiting">
+                            <CellTemplate Context="row">
+                                <div class="bb:flex bb:flex-wrap bb:gap-1">
+                                    @foreach (string kind in PortalCaseKinds.All.Where(row.Waiting.ContainsKey))
+                                    {
+                                        <BbBadge Variant="@(PortalCaseKinds.IsAntiCheat(kind) ? BadgeVariant.SoftDestructive : BadgeVariant.Secondary)" title="@PortalCaseKinds.Title(kind)">
+                                            <LucideIcon Name="@PortalCaseKinds.Icon(kind)" Class="bb:h-3 bb:w-3" />
+                                            @PortalCaseKinds.ShortTitle(kind) @row.Waiting[kind]
+                                        </BbBadge>
+                                    }
+                                </div>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalCaseRow" TValue="string" Property="@(r => (r.LastAt ?? DateTime.MinValue).ToString("o"))" Header="Latest" CellClass="go-nowrap">
+                            <CellTemplate Context="row">
+                                @if (row.LastAt is DateTime last)
+                                {
+                                    <When Value="@last" />
+                                }
+                                @if (row.FirstAt is DateTime first && row.LastAt != first)
+                                {
+                                    <div class="bb:text-xs bb:text-muted-foreground">first <When Value="@first" /></div>
+                                }
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalCaseRow" TValue="string" Property="@(r => r.ClaimedBy == null ? "" : r.ClaimedBy.FullName)" Header="Claimed">
+                            <CellTemplate Context="row">
+                                @if (row.ClaimedBy != null)
+                                {
+                                    <span>@(row.ClaimedBy.Id == Session.UserId ? "You" : row.ClaimedBy.FullName)</span>
+                                }
+                                else
+                                {
+                                    <span class="bb:text-muted-foreground">—</span>
+                                }
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                    </Columns>
+                    <EmptyTemplate>
+                        <BbEmpty Size="EmptySize.Small" Title="Nothing to review" Description="No report, anti-cheat finding or rule match waits for a decision.">
+                            <Icon>
+                                <LucideIcon Name="inbox" />
+                            </Icon>
+                        </BbEmpty>
+                    </EmptyTemplate>
+                </BbDataTable>
+                </div>
+                @if (m_total > m_rows.Count)
+                {
+                    <div class="bb:mt-3 bb:flex bb:items-center bb:gap-3 bb:text-sm bb:text-muted-foreground">
+                        <span>Showing @PortalText.Count(m_rows.Count) of @PortalText.Count(m_total ?? 0)</span>
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="MoreAsync" Loading="@m_loadingMore" data-testid="case-more">Show more</BbButton>
+                    </div>
+                }
+            }
+        </BbCardContent>
+    </BbCard>
+}
+
+@code {
+    private const int PageSize = 50;
+
+    [SupplyParameterFromQuery(Name = "kind")]
+    public string? Kind { get; set; }
+
+    [SupplyParameterFromQuery(Name = "claimed")]
+    public string? Claimed { get; set; }
+
+    private List<PortalCaseRow>? m_rows;
+    private int? m_total;
+    private string? m_error;
+    private string m_kind = "";
+    private string m_claimed = "all";
+    private bool m_loadingMore;
+
+    private PortalSessionInfo Session => Api.Session!;
+
+    private bool CanReviewAntiCheat => Session.Can(PortalPermissions.AnticheatReview);
+
+    private IEnumerable<string> Kinds => PortalCaseKinds.All.Where(kind => CanReviewAntiCheat || !PortalCaseKinds.IsAntiCheat(kind));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        m_kind = Kind != null && Kinds.Contains(Kind) ? Kind : "";
+        m_claimed = Claimed is "mine" or "unclaimed" ? Claimed : "all";
+        if (Session.Staff)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private Task ShowAsync(string? kind, string? claimed)
+    {
+        Dictionary<string, object?> query = new()
+        {
+            ["kind"] = String.IsNullOrEmpty(kind) ? null : kind,
+            ["claimed"] = claimed is "mine" or "unclaimed" ? claimed : null
+        };
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(query));
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadAsync()
+    {
+        m_rows = null;
+        PortalAnswer<PortalCaseList> answer = await Api.ListCasesAsync(m_kind.Length == 0 ? null : [m_kind], m_claimed, 0, PageSize);
+        m_error = answer.Error;
+        m_rows = (answer.Value?.Cases ?? []).ToList();
+        m_total = answer.Value?.Total;
+    }
+
+    private async Task MoreAsync()
+    {
+        if (m_rows == null)
+        {
+            return;
+        }
+        m_loadingMore = true;
+        PortalAnswer<PortalCaseList> answer = await Api.ListCasesAsync(m_kind.Length == 0 ? null : [m_kind], m_claimed, m_rows.Count, PageSize);
+        m_loadingMore = false;
+        m_error = answer.Error;
+        m_rows.AddRange(answer.Value?.Cases ?? []);
+        m_total = answer.Value?.Total ?? m_total;
+    }
+}

@@ -86,13 +86,13 @@
                     <BbSidebarGroupLabel>Moderation</BbSidebarGroupLabel>
                     <BbSidebarMenu>
                         <BbSidebarMenuItem>
-                            <BbSidebarMenuButton Href="@PortalRoutes.ReportsPage" Tooltip="Reports">
-                                <LucideIcon Name="flag" Class="bb:h-4 bb:w-4" />
-                                <span>Reports</span>
+                            <BbSidebarMenuButton Href="@PortalRoutes.CasesPage" Tooltip="Review queue">
+                                <LucideIcon Name="inbox" Class="bb:h-4 bb:w-4" />
+                                <span>Review queue</span>
                             </BbSidebarMenuButton>
-                            @if (m_openReports > 0)
+                            @if (m_playersToReview > 0)
                             {
-                                <BbSidebarMenuBadge>@PortalText.Count(m_openReports)</BbSidebarMenuBadge>
+                                <BbSidebarMenuBadge>@PortalText.Count(m_playersToReview)</BbSidebarMenuBadge>
                             }
                         </BbSidebarMenuItem>
                         @if (staff.Can(PortalPermissions.AppealsReview))
@@ -137,19 +137,6 @@
                     <BbSidebarGroup>
                         <BbSidebarGroupLabel>Anti-cheat</BbSidebarGroupLabel>
                         <BbSidebarMenu>
-                            @foreach (PortalReviewList list in PortalReviewList.All)
-                            {
-                                <BbSidebarMenuItem>
-                                    <BbSidebarMenuButton Href="@PortalRoutes.AntiCheatList(list.Kind)" Tooltip="@list.Title">
-                                        <LucideIcon Name="@PortalReviewList.IconOf(list.Kind)" Class="bb:h-4 bb:w-4" />
-                                        <span>@list.ShortTitle</span>
-                                    </BbSidebarMenuButton>
-                                    @if (m_queues.TryGetValue(list.Kind, out int waiting) && waiting > 0)
-                                    {
-                                        <BbSidebarMenuBadge>@PortalText.Count(waiting)</BbSidebarMenuBadge>
-                                    }
-                                </BbSidebarMenuItem>
-                            }
                             <BbSidebarMenuItem>
                                 <BbSidebarMenuButton Href="@PortalRoutes.RuleMatchesPage" Tooltip="Matches of the automated rules">
                                     <LucideIcon Name="workflow" Class="bb:h-4 bb:w-4" />
@@ -328,8 +315,7 @@
 @code {
     private bool m_failed;
     private string? m_search;
-    private int m_openReports;
-    private Dictionary<string, int> m_queues = new();
+    private int m_playersToReview;
 
     protected override async Task OnInitializedAsync()
     {
@@ -349,15 +335,13 @@
         }
     }
 
-    // The sidebar badges: open reports and the unreviewed rows of each anti-cheat list. Pages call this after a change
-    // so the badges follow; a failed read keeps the last numbers, the pages show their own errors
+    // a failed read keeps the last numbers; pages show their own errors
     public async Task RefreshCountsAsync(PortalOverview? known = null)
     {
         PortalOverview? overview = known ?? (await Api.GetOverviewAsync()).Value;
         if (overview != null)
         {
-            m_openReports = overview.OpenReports;
-            m_queues = (overview.Anticheat ?? []).ToDictionary(q => q.Kind, q => q.Unreviewed);
+            m_playersToReview = overview.PlayersToReview;
             StateHasChanged();
         }
     }
@@ -377,14 +361,19 @@
         string[] parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
         string section = parts.Length > 1 ? parts[1] : "";
         string? item = parts.Length > 2 ? parts[2] : null;
+        string? sub = parts.Length > 3 ? parts[3] : null;
 
         switch (section)
         {
             case "":
                 yield return ("Overview", null);
                 break;
-            case "reports":
-                yield return ("Reports", null);
+            case "cases":
+                yield return ("Review queue", item == null ? null : PortalRoutes.CasesPage);
+                if (item != null)
+                {
+                    yield return ("Case " + item, null);
+                }
                 break;
             case "appeals":
                 yield return ("Appeals", null);
@@ -393,7 +382,11 @@
                 yield return ("Players", item == null ? null : PortalRoutes.PlayersPage);
                 if (item != null)
                 {
-                    yield return ("Player " + item, null);
+                    yield return ("Player " + item, sub == null ? null : PortalRoutes.PlayersPage + "/" + item);
+                }
+                if (sub == "case")
+                {
+                    yield return ("Case", null);
                 }
                 break;
             case "matches":
@@ -458,13 +451,6 @@
                 if (item != null)
                 {
                     yield return ("Role " + Uri.UnescapeDataString(item), null);
-                }
-                break;
-            case "anticheat":
-                yield return ("Anti-cheat", null);
-                if (item != null)
-                {
-                    yield return (PortalReviewList.Find(item)?.Title ?? item, null);
                 }
                 break;
             default:

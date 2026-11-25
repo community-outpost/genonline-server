@@ -1,0 +1,507 @@
+@* Both reads are audited *@
+@page "/admin/players/{Id:long}/case"
+@page "/admin/cases/{CaseId:long}"
+@inject PortalApi Api
+@inject ToastService Toasts
+@inject NavigationManager Navigation
+
+<PageTitle>@(m_case == null ? "Case" : "Case of " + m_case.Player.FullName) · Generals Online</PageTitle>
+
+@if (!Session.Staff)
+{
+    <Refusal Title="Case" Description="Cases are for staff." Icon="lock" />
+}
+else if (m_error != null)
+{
+    <Refusal Title="The case could not load" Description="@PortalText.Error(m_error)" Icon="circle-alert" />
+}
+else if (m_case == null)
+{
+    <FeedSkeleton />
+}
+else
+{
+    PortalCase found = m_case;
+    <PageHeader Description="@HeaderText(found)">
+        <Title>
+            <BbLink Href="@PortalRoutes.PlayerPage(found.Player.Id)">@found.Player.FullName</BbLink>
+        </Title>
+        <Actions>
+            @if (Waiting)
+            {
+                @if (found.Case?.ClaimedBy is PortalMember claimer)
+                {
+                    <span class="bb:text-sm bb:text-muted-foreground" data-testid="claimed-by">Claimed by @(claimer.Id == Session.UserId ? "you" : claimer.FullName)</span>
+                    @if (claimer.Id == Session.UserId)
+                    {
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="ReleaseAsync" Loading="@m_claiming">Release</BbButton>
+                    }
+                    else
+                    {
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="ClaimAsync" Loading="@m_claiming">Take over</BbButton>
+                    }
+                }
+                else
+                {
+                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="ClaimAsync" Loading="@m_claiming" data-testid="claim">
+                        <LucideIcon Name="hand" Class="bb:h-4 bb:w-4" />
+                        Claim
+                    </BbButton>
+                }
+            }
+            <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="LoadAsync">
+                <LucideIcon Name="refresh-cw" Class="bb:h-4 bb:w-4" />
+                Refresh
+            </BbButton>
+        </Actions>
+    </PageHeader>
+
+    <div class="bb:mb-4 bb:flex bb:flex-wrap bb:gap-2" data-testid="standing">
+        <BbBadge Variant="BadgeVariant.Outline">joined <When Value="@found.Standing.AccountCreatedAt" /></BbBadge>
+        @if (found.Standing.LastSignInAt is DateTime seen)
+        {
+            <BbBadge Variant="BadgeVariant.Outline">last seen <When Value="@seen" /></BbBadge>
+        }
+        @foreach (PortalCaseSanction active in found.Standing.ActiveSanctions)
+        {
+            <BbBadge Variant="BadgeVariant.SoftDestructive" title="@active.Reason">@active.Type @(active.ExpiresAt is DateTime until ? "until " + PortalText.Date(until) : "without end")</BbBadge>
+        }
+        <BbBadge Variant="BadgeVariant.Outline">@PortalText.Count(found.Standing.Sanctions) @(found.Standing.Sanctions == 1 ? "sanction" : "sanctions") on record</BbBadge>
+        @if (found.Standing.OpenAppeals > 0)
+        {
+            <BbLink Href="@PortalRoutes.AppealsPage"><BbBadge Variant="BadgeVariant.Secondary">@PortalText.Count(found.Standing.OpenAppeals) open @(found.Standing.OpenAppeals == 1 ? "appeal" : "appeals")</BbBadge></BbLink>
+        }
+    </div>
+
+    @if (!Waiting && found.Case is PortalCaseSummary decided)
+    {
+        <BbAlert Variant="@(decided.Outcome == "sanctioned" ? AlertVariant.Warning : AlertVariant.Default)" Class="bb:mb-4">
+            <Icon>
+                <LucideIcon Name="@(decided.Outcome == "sanctioned" ? "gavel" : "check")" Class="bb:h-4 bb:w-4" />
+            </Icon>
+            <ChildContent>
+                <BbAlertTitle>@(decided.Outcome == "sanctioned" ? "Decided with a sanction" : "Decided with no action")</BbAlertTitle>
+                <BbAlertDescription>
+                    @if (decided.ClosedBy != null)
+                    {
+                        <span>By @decided.ClosedBy.FullName, </span>
+                    }
+                    @if (decided.ClosedAt is DateTime closedAt)
+                    {
+                        <When Value="@closedAt" />
+                    }
+                    @if (!String.IsNullOrEmpty(decided.Note))
+                    {
+                        <div style="white-space: pre-wrap; overflow-wrap: anywhere">@decided.Note</div>
+                    }
+                </BbAlertDescription>
+            </ChildContent>
+        </BbAlert>
+    }
+
+    <div class="go-case">
+        <section class="bb:space-y-4">
+            <h2 class="bb:text-lg bb:font-semibold">@(Waiting ? "Waiting" : "What this case covered") (@found.Signals.Count)</h2>
+            @if (found.Signals.Count == 0)
+            {
+                <BbEmpty Size="EmptySize.Small" Title="Nothing waits" Description="Every signal about this player is decided. New ones open the next case.">
+                    <Icon>
+                        <LucideIcon Name="inbox" />
+                    </Icon>
+                </BbEmpty>
+            }
+            @foreach (PortalCaseSignal signal in found.Signals)
+            {
+                string key = KeyOf(signal);
+                <BbCard data-testid="case-signal">
+                    <BbCardHeader>
+                        <div class="bb:flex bb:items-start bb:gap-3">
+                            @if (Waiting)
+                            {
+                                <input type="checkbox" class="go-check" checked="@m_selected.Contains(key)" @onchange="@((ChangeEventArgs e) => Toggle(key, e.Value is true))" aria-label="@($"Decide {PortalCaseKinds.Title(signal.Kind)} {signal.Id}")" />
+                            }
+                            <div class="bb:flex-1 bb:space-y-1">
+                                <BbCardTitle As="h3">
+                                    <LucideIcon Name="@PortalCaseKinds.Icon(signal.Kind)" Class="bb:h-4 bb:w-4" />
+                                    @TitleOf(signal)
+                                </BbCardTitle>
+                                <BbCardDescription>
+                                    @if (signal.At is DateTime at)
+                                    {
+                                        <When Value="@at" />
+                                    }
+                                    @if (signal.MatchId is long matchID)
+                                    {
+                                        <span> · <BbLink Href="@PortalRoutes.MatchPage(matchID)">match @matchID</BbLink></span>
+                                    }
+                                    @if (signal.LobbyId is long lobbyID)
+                                    {
+                                        <span> · lobby @lobbyID</span>
+                                    }
+                                </BbCardDescription>
+                            </div>
+                        </div>
+                    </BbCardHeader>
+                    <BbCardContent>
+                        @switch (signal.Kind)
+                        {
+                            case PortalCaseKinds.Report:
+                                <div class="bb:space-y-3">
+                                    <div class="bb:text-sm">
+                                        Reported by
+                                        @if (signal.Reporter != null)
+                                        {
+                                            <BbLink Href="@PortalRoutes.PlayerPage(signal.Reporter.Id)">@signal.Reporter.FullName</BbLink>
+                                        }
+                                        @if (!String.IsNullOrEmpty(signal.Reason))
+                                        {
+                                            <p class="bb:mt-1" style="white-space: pre-wrap; overflow-wrap: anywhere" data-testid="report-reason">“@signal.Reason”</p>
+                                        }
+                                    </div>
+                                    @if (signal.Conversation is { Count: > 0 } lines)
+                                    {
+                                        <ol class="go-thread" aria-label="Chat">
+                                            @foreach (PortalCaseMessage line in lines)
+                                            {
+                                                <li class="@(line.Part == "message" ? "go-thread-reported" : "")" data-testid="@(line.Part == "message" ? "reported-line" : "chat-line")">
+                                                    <span class="go-thread-meta">
+                                                        <BbLink Href="@PortalRoutes.PlayerPage(line.Author.Id)">@line.Author.FullName</BbLink>
+                                                        <When Value="@line.At" />
+                                                    </span>
+                                                    <span class="@(line.Deleted ? "go-thread-deleted" : "")" style="white-space: pre-wrap; overflow-wrap: anywhere">@line.Content</span>
+                                                    @if (line.Deleted)
+                                                    {
+                                                        <BbBadge Variant="BadgeVariant.Outline">deleted</BbBadge>
+                                                    }
+                                                </li>
+                                            }
+                                        </ol>
+                                        @if (signal.AfterPending == true)
+                                        {
+                                            <p class="bb:text-xs bb:text-muted-foreground">The messages after the reported one are added just before chat retention removes it.</p>
+                                        }
+                                    }
+                                    else if (signal.MessageId == null)
+                                    {
+                                        <p class="bb:text-sm bb:text-muted-foreground">The reporter saw no chat from this player.</p>
+                                    }
+                                </div>
+                                break;
+                            case "modules":
+                                <dl class="go-case-facts">
+                                    <dt>Module</dt><dd class="bb:font-mono">@signal.ModuleName</dd>
+                                    <dt>Folder</dt><dd class="bb:font-mono" style="overflow-wrap: anywhere">@signal.ModulePath</dd>
+                                    <dt>Size</dt><dd>@PortalText.Bytes(signal.ModuleSize)</dd>
+                                </dl>
+                                break;
+                            case "quickmatch_rules":
+                                <dl class="go-case-facts">
+                                    <dt>Asked for</dt><dd>@signal.Method</dd>
+                                    <dt>Sides</dt><dd>@signal.SideList</dd>
+                                    <dt>Playlist</dt><dd>@signal.PlaylistId</dd>
+                                </dl>
+                                break;
+                            case "new_accounts":
+                                <p class="bb:text-sm">A new account played a quick match game. Check the match for play that looks like a returning cheater.</p>
+                                break;
+                            case PortalCaseKinds.RuleMatch:
+                                <div class="bb:space-y-2">
+                                    <div class="bb:text-sm">
+                                        @if (signal.RuleId is long ruleID)
+                                        {
+                                            <BbLink Href="@PortalRoutes.RulePage(ruleID)">@(signal.RuleName ?? "Rule " + ruleID)</BbLink>
+                                        }
+                                        <span class="bb:text-muted-foreground"> version @signal.RuleVersion, on @signal.Trigger: @signal.RuleOutcome@(String.IsNullOrEmpty(signal.Actions) ? "" : " (" + signal.Actions + ")")</span>
+                                    </div>
+                                    @if (signal.Facts is System.Text.Json.JsonElement facts)
+                                    {
+                                        <RuleFactsList Facts="@facts" />
+                                    }
+                                </div>
+                                break;
+                            default:
+                                <p class="bb:text-sm" style="overflow-wrap: anywhere">@signal.Reason</p>
+                                break;
+                        }
+                    </BbCardContent>
+                </BbCard>
+            }
+        </section>
+
+        <aside class="bb:space-y-4">
+            @if (Waiting && found.Signals.Count > 0)
+            {
+                <BbCard>
+                    <BbCardHeader>
+                        <BbCardTitle As="h2">Decision</BbCardTitle>
+                        <BbCardDescription>Decides the @PortalText.Count(m_selected.Count) ticked @(m_selected.Count == 1 ? "signal" : "signals"). Reports resolve as actioned with a sanction and dismissed without one.</BbCardDescription>
+                    </BbCardHeader>
+                    <BbCardContent>
+                        <div class="bb:space-y-4">
+                            <div class="bb:space-y-2">
+                                <BbLabel For="case-outcome">Outcome</BbLabel>
+                                <BbNativeSelect TValue="string" Id="case-outcome" Value="@m_outcome" ValueChanged="@((string? v) => ChooseOutcome(v))" Class="bb:w-full" data-testid="case-outcome">
+                                    <option value="no_action">No action</option>
+                                    @if (Session.Can(PortalPermissions.Kick))
+                                    {
+                                        <option value="kick">Kick</option>
+                                    }
+                                    @if (Session.Can(PortalPermissions.Mute))
+                                    {
+                                        <option value="mute">Mute</option>
+                                    }
+                                    @if (Session.Can(PortalPermissions.Ban))
+                                    {
+                                        <option value="ban">Ban</option>
+                                    }
+                                </BbNativeSelect>
+                            </div>
+                            @if (m_outcome is "mute" or "ban")
+                            {
+                                <div class="bb:space-y-2">
+                                    <BbLabel For="case-duration">Duration</BbLabel>
+                                    <BbNativeSelect TValue="string" Id="case-duration" @bind-Value="m_duration" Class="bb:w-full">
+                                        @foreach ((string seconds, string text) in m_outcome == "mute" ? s_muteDurations : s_banDurations)
+                                        {
+                                            <option value="@seconds">@text</option>
+                                        }
+                                    </BbNativeSelect>
+                                </div>
+                            }
+                            @if (m_outcome != "no_action")
+                            {
+                                <div class="bb:space-y-2">
+                                    <BbLabel For="case-reason">Reason the player sees@(m_outcome == "ban" ? " (required)" : "")</BbLabel>
+                                    <BbTextarea Id="case-reason" @bind-Value="m_reason" @bind-Value:event="oninput" autocomplete="off" />
+                                </div>
+                            }
+                            <div class="bb:space-y-2">
+                                <BbLabel For="case-note">Note for staff</BbLabel>
+                                <BbTextarea Id="case-note" @bind-Value="m_note" @bind-Value:event="oninput" Placeholder="Why, for the case history…" autocomplete="off" data-testid="case-note" />
+                            </div>
+                            <BbButton Variant="@(m_outcome == "ban" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="CloseAsync" Loading="@m_saving"
+                                      Disabled="@(m_selected.Count == 0 || (m_outcome == "ban" && String.IsNullOrWhiteSpace(m_reason)))" Class="bb:w-full" data-testid="case-close">
+                                @(m_outcome == "no_action" ? "Close with no action" : "Close and " + m_outcome)
+                            </BbButton>
+                        </div>
+                    </BbCardContent>
+                </BbCard>
+            }
+
+            @foreach (PortalMatch match in found.Matches)
+            {
+                <BbCard data-testid="case-match">
+                    <BbCardHeader>
+                        <BbCardTitle As="h2"><BbLink Href="@PortalRoutes.MatchPage(match.Id)">Match @match.Id</BbLink></BbCardTitle>
+                        <BbCardDescription>@match.Map.Name · <When Value="@match.StartedAt" /></BbCardDescription>
+                    </BbCardHeader>
+                    <BbCardContent>
+                        <ul class="bb:space-y-2 bb:text-sm">
+                            @foreach (PortalMatchSlot slot in match.Slots.Where(s => s.UserId != null))
+                            {
+                                <li>
+                                    <div class="bb:flex bb:items-center bb:gap-2">
+                                        <BbLink Href="@PortalRoutes.PlayerPage(slot.UserId!.Value)">@slot.FullName</BbLink>
+                                        @if (slot.UserId == found.Player.Id)
+                                        {
+                                            <BbBadge Variant="BadgeVariant.Secondary">this player</BbBadge>
+                                        }
+                                        @if (slot.Won)
+                                        {
+                                            <BbBadge Variant="BadgeVariant.Outline">won</BbBadge>
+                                        }
+                                    </div>
+                                    @foreach (PortalMatchFile file in slot.Files.Where(f => f.Url != null))
+                                    {
+                                        <a href="@file.Url" target="_blank" rel="noopener noreferrer" class="bb:mr-3 bb:text-xs">@file.Type</a>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </BbCardContent>
+                </BbCard>
+            }
+
+            @if (found.Standing.PriorCases.Count > 0)
+            {
+                <BbCard>
+                    <BbCardHeader>
+                        <BbCardTitle As="h2">Earlier cases</BbCardTitle>
+                    </BbCardHeader>
+                    <BbCardContent>
+                        <ul class="bb:space-y-2 bb:text-sm">
+                            @foreach (PortalCaseSummary prior in found.Standing.PriorCases)
+                            {
+                                <li>
+                                    <BbLink Href="@PortalRoutes.DecidedCasePage(prior.Id)">@(prior.Outcome == "sanctioned" ? "Sanctioned" : "No action")</BbLink>
+                                    @if (prior.ClosedAt is DateTime closed)
+                                    {
+                                        <span class="bb:text-muted-foreground"> <When Value="@closed" /></span>
+                                    }
+                                    @if (!String.IsNullOrEmpty(prior.Note))
+                                    {
+                                        <div class="bb:text-xs bb:text-muted-foreground" style="overflow-wrap: anywhere">@prior.Note</div>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </BbCardContent>
+                </BbCard>
+            }
+        </aside>
+    </div>
+}
+
+@code {
+    private static readonly (string Seconds, string Text)[] s_muteDurations =
+    {
+        ("3600", "1 hour"), ("86400", "1 day"), ("604800", "7 days"), ("2592000", "30 days"), ("7776000", "90 days")
+    };
+
+    // An empty value is a ban without an end
+    private static readonly (string Seconds, string Text)[] s_banDurations =
+    {
+        ("86400", "1 day"), ("604800", "7 days"), ("2592000", "30 days"), ("", "Permanent")
+    };
+
+    [Parameter]
+    public long? Id { get; set; }
+
+    [Parameter]
+    public long? CaseId { get; set; }
+
+    private PortalCase? m_case;
+    private string? m_error;
+    private readonly HashSet<string> m_selected = new(StringComparer.Ordinal);
+    private string m_outcome = "no_action";
+    private string m_duration = "";
+    private string? m_reason;
+    private string? m_note;
+    private bool m_saving;
+    private bool m_claiming;
+
+    private PortalSessionInfo Session => Api.Session!;
+
+    private bool Waiting => CaseId == null;
+
+    private static string KeyOf(PortalCaseSignal signal) => signal.Kind + ":" + signal.Id;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Session.Staff)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        m_case = null;
+        m_error = null;
+        PortalAnswer<PortalCase> answer = CaseId is long caseID ? await Api.GetDecidedCaseAsync(caseID) : await Api.GetWaitingCaseAsync(Id ?? 0);
+        m_error = answer.Error;
+        m_case = answer.Value;
+        m_selected.Clear();
+        foreach (PortalCaseSignal signal in m_case?.Signals ?? [])
+        {
+            m_selected.Add(KeyOf(signal));
+        }
+    }
+
+    private void Toggle(string key, bool on)
+    {
+        if (on)
+        {
+            m_selected.Add(key);
+        }
+        else
+        {
+            m_selected.Remove(key);
+        }
+    }
+
+    private void ChooseOutcome(string? outcome)
+    {
+        m_outcome = outcome is "kick" or "mute" or "ban" ? outcome : "no_action";
+        m_duration = m_outcome == "mute" ? s_muteDurations[0].Seconds : m_outcome == "ban" ? s_banDurations[0].Seconds : "";
+    }
+
+    private static string HeaderText(PortalCase found)
+    {
+        if (found.Case?.Status == "closed")
+        {
+            return "A decided case and the signals it covered.";
+        }
+        int kinds = found.Signals.Select(s => s.Kind).Distinct().Count();
+        return found.Signals.Count == 0 ? "Nothing waits about this player." : $"{PortalText.Count(found.Signals.Count)} waiting {(found.Signals.Count == 1 ? "signal" : "signals")} of {kinds} {(kinds == 1 ? "kind" : "kinds")}, newest first.";
+    }
+
+    private static string TitleOf(PortalCaseSignal signal) => signal.Kind switch
+    {
+        PortalCaseKinds.Report => $"{PortalReportCategories.Title(signal.Category)} report{(signal.MessageId != null ? " of a message" : "")}",
+        PortalCaseKinds.RuleMatch => "Automated rule flagged the player",
+        _ => PortalCaseKinds.Title(signal.Kind)
+    };
+
+    private async Task ClaimAsync()
+    {
+        m_claiming = true;
+        PortalAnswer<PortalCaseSummary> answer = await Api.ClaimCaseAsync(m_case!.Player.Id);
+        m_claiming = false;
+        if (answer.Error != null)
+        {
+            Toasts.Error(PortalText.Error(answer.Error), "Not claimed");
+            return;
+        }
+        m_case = m_case with { Case = answer.Value };
+    }
+
+    private async Task ReleaseAsync()
+    {
+        m_claiming = true;
+        PortalOutcome outcome = await Api.ReleaseCaseAsync(m_case!.Player.Id);
+        m_claiming = false;
+        if (!outcome.Ok)
+        {
+            Toasts.Error(PortalText.Error(outcome.Error), "Not released");
+            return;
+        }
+        m_case = m_case with { Case = null };
+    }
+
+    private async Task CloseAsync()
+    {
+        if (m_case == null || m_selected.Count == 0)
+        {
+            return;
+        }
+        PortalCase found = m_case;
+        string? note = String.IsNullOrWhiteSpace(m_note) ? null : m_note.Trim();
+        string? reason = String.IsNullOrWhiteSpace(m_reason) ? null : m_reason.Trim();
+        PortalCloseCase request = new PortalCloseCase
+        {
+            Signals = found.Signals.Where(s => m_selected.Contains(KeyOf(s))).Select(s => new PortalCaseSignalRef { Kind = s.Kind, Id = s.Id }).ToArray(),
+            Outcome = m_outcome == "no_action" ? "no_action" : "sanctioned",
+            Sanction = m_outcome == "no_action" ? null : new PortalSanctionRequest
+            {
+                Type = m_outcome,
+                DurationS = m_outcome != "kick" && long.TryParse(m_duration, out long seconds) ? seconds : null,
+                Reason = reason
+            },
+            Note = note
+        };
+
+        m_saving = true;
+        PortalAnswer<PortalCaseClosed> answer = await Api.CloseCaseAsync(found.Player.Id, request);
+        m_saving = false;
+        if (answer.Error != null)
+        {
+            Toasts.Error(answer.Error == "conflict" ? "Someone else decided these signals meanwhile." : PortalText.Error(answer.Error), "Case not closed");
+            await LoadAsync();
+            return;
+        }
+
+        Toasts.Success($"The case of {found.Player.FullName} is closed, {PortalText.Count(answer.Value!.Decided)} {(answer.Value.Decided == 1 ? "signal" : "signals")} decided.", "Case closed");
+        Navigation.NavigateTo(PortalRoutes.CasesPage);
+    }
+}

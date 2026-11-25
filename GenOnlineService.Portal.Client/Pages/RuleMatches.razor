@@ -1,9 +1,6 @@
-@* The matches of the automated rules and their review queue, for anticheat.review as the other review lists: newest first,
-   filtered in the address by review state, rule, trigger and outcome, each with the version that fired and the facts
-   that decided it. A pending match is marked reviewed or dismissed *@
+@* The page only lists matches: a flagged match is decided in the review queue *@
 @page "/admin/rules/matches"
 @inject PortalApi Api
-@inject ToastService Toasts
 @inject NavigationManager Navigation
 @using DataGridRequest = BlazorBlueprint.Primitives.DataGrid.DataGridRequest
 
@@ -15,7 +12,7 @@
 }
 else
 {
-    <PageHeader Description="Every time an automated rule matched a player. Flag matches, and Enforce matches with a flag action, wait here for review.">
+    <PageHeader Description="Every time an automated rule matched a player. Flag matches, and Enforce matches with a flag action, are decided in the review queue.">
         <Title>
             <span class="bb:flex bb:items-center bb:gap-4">
                 <LucideIcon Name="workflow" Class="bb:h-6 bb:w-6 bb:text-muted-foreground" />
@@ -23,6 +20,10 @@ else
             </span>
         </Title>
         <Actions>
+            <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Href="@PortalRoutes.CasesPage">
+                <LucideIcon Name="inbox" Class="bb:h-4 bb:w-4" />
+                Review queue
+            </BbButton>
             @if (Api.Session.Can(PortalPermissions.RulesManage))
             {
                 <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Href="@PortalRoutes.RulesPage">
@@ -52,7 +53,7 @@ else
 
     <BbCard Class="go-filtered">
         <BbCardContent Class="bb:pt-6">
-            <BbDataGrid @ref="m_grid" @key="m_viewKey" TData="PortalRuleMatch" ItemsProvider="@LoadAsync" ItemKey="@(m => m.Id)" InitialPageSize="20" AriaLabel="Rule matches" data-testid="rule-matches">
+            <BbDataGrid @key="m_viewKey" TData="PortalRuleMatch" ItemsProvider="@LoadAsync" ItemKey="@(m => m.Id)" InitialPageSize="20" AriaLabel="Rule matches" data-testid="rule-matches">
                 <Toolbar>
                     <div class="go-filterbar-selects">
                         <BbNativeSelect TValue="string" Value="@m_query.Review" ValueChanged="@((string v) => Show(m_query with { Review = v }))" AriaLabel="Review state" Class="bb:w-40" data-testid="match-review">
@@ -139,15 +140,7 @@ else
                         <ChildContent Context="match">
                             @if (match.ReviewState == "pending")
                             {
-                                <div class="go-row-actions">
-                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => ReviewAsync(match, "reviewed"))" Disabled="@m_busy" data-testid="mark-reviewed">
-                                        <LucideIcon Name="check" Class="bb:h-4 bb:w-4" />
-                                        Reviewed
-                                    </BbButton>
-                                    <BbButton Variant="ButtonVariant.Ghost" Size="ButtonSize.Small" OnClick="@(() => ReviewAsync(match, "dismissed"))" Disabled="@m_busy" data-testid="dismiss">
-                                        Dismiss
-                                    </BbButton>
-                                </div>
+                                <span class="go-muted bb:text-sm">in the review queue</span>
                             }
                             else if (match.ReviewState == "none")
                             {
@@ -192,11 +185,9 @@ else
     [SupplyParameterFromQuery(Name = "outcome")]
     public string? Outcome { get; set; }
 
-    private BbDataGrid<PortalRuleMatch>? m_grid;
     private PortalRuleMatchQuery m_query = new PortalRuleMatchQuery();
     private string m_viewKey = "";
     private string? m_error;
-    private bool m_busy;
     private PortalRuleCatalog? m_catalog;
     private List<PortalRule> m_rules = [];
 
@@ -251,24 +242,5 @@ else
         }
         PortalRuleMatchPage page = answer.Value ?? new PortalRuleMatchPage();
         return new BlazorBlueprint.Primitives.DataGrid.DataGridResult<PortalRuleMatch> { Items = page.Matches.ToList(), TotalItemCount = page.Total };
-    }
-
-    private async Task ReviewAsync(PortalRuleMatch match, string review)
-    {
-        m_busy = true;
-        PortalRuleOutcome<PortalRuleMatch> changed = await Api.ReviewRuleMatchAsync(match.Id, review);
-        m_busy = false;
-        if (changed.Ok)
-        {
-            Toasts.Success($"The match of {match.Player.FullName} is {review}.", review == "reviewed" ? "Marked reviewed" : "Dismissed");
-        }
-        else
-        {
-            Toasts.Error(PortalText.Error(changed.Error), "Not changed");
-        }
-        if (m_grid != null)
-        {
-            await m_grid.RefreshDataAsync();
-        }
     }
 }

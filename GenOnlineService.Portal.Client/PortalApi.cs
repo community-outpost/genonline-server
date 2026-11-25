@@ -90,30 +90,23 @@ namespace GenOnlineService.Portal.Client
 
 		public Task<PortalAnswer<PortalOverview>> GetOverviewAsync(CancellationToken cancellationToken = default) => GetAsync<PortalOverview>(PortalRoutes.Overview, cancellationToken);
 
-		// The queue, or with reportedID / reporterID the reports against or by one player; a refusal comes back as its error code
-		public async Task<PortalAnswer<PortalReportPage>> GetReportsAsync(string status, string? search, bool newestFirst, int start, int count, CancellationToken cancellationToken, long? reportedID = null, long? reporterID = null)
+		public async Task<PortalAnswer<PortalCaseList>> ListCasesAsync(IReadOnlyCollection<string>? kinds, string claimed, int start, int count, CancellationToken cancellationToken = default)
 		{
-			string query = $"{PortalRoutes.ReportSearch}?status={Uri.EscapeDataString(status)}&{PageOf(start, count)}&sort={(newestFirst ? "desc" : "asc")}";
-			if (!String.IsNullOrWhiteSpace(search))
-			{
-				query += "&search=" + Uri.EscapeDataString(search);
-			}
-			if (reportedID is long reported)
-			{
-				query += "&reported_id=" + reported;
-			}
-			if (reporterID is long reporter)
-			{
-				query += "&reporter_id=" + reporter;
-			}
-			(PortalAnswer<PortalReportPage> answer, int total) = await GetPageAsync<PortalReportPage>(query, cancellationToken);
+			string kind = kinds == null || kinds.Count == 0 ? "" : "&kind=" + Uri.EscapeDataString(String.Join(",", kinds));
+			(PortalAnswer<PortalCaseList> answer, int total) = await GetPageAsync<PortalCaseList>($"{PortalRoutes.Cases}?claimed={Uri.EscapeDataString(claimed)}{kind}&{PageOf(start, count)}", cancellationToken);
 			return answer.Value == null ? answer : answer with { Value = answer.Value with { Total = total } };
 		}
 
-		public Task<PortalOutcome> ResolveReportAsync(long reportID, string status, string? note)
-		{
-			return SendAsync(HttpMethod.Patch, $"{PortalRoutes.Reports}/{reportID}", new PortalResolveRequest { Status = status, ResolutionNote = note });
-		}
+		// The host writes an audit row for both reads, they show chat and anti-cheat evidence
+		public Task<PortalAnswer<PortalCase>> GetWaitingCaseAsync(long userID) => GetAsync<PortalCase>($"{PortalRoutes.AdminPlayers}/{userID}/case");
+
+		public Task<PortalAnswer<PortalCase>> GetDecidedCaseAsync(long caseID) => GetAsync<PortalCase>($"{PortalRoutes.Cases}/{caseID}");
+
+		public Task<PortalAnswer<PortalCaseSummary>> ClaimCaseAsync(long userID) => SendForAsync<PortalCaseSummary>(HttpMethod.Put, $"{PortalRoutes.AdminPlayers}/{userID}/case/claim", new { });
+
+		public Task<PortalOutcome> ReleaseCaseAsync(long userID) => SendAsync(HttpMethod.Delete, $"{PortalRoutes.AdminPlayers}/{userID}/case/claim", new { });
+
+		public Task<PortalAnswer<PortalCaseClosed>> CloseCaseAsync(long userID, PortalCloseCase request) => SendForAsync<PortalCaseClosed>(HttpMethod.Post, $"{PortalRoutes.AdminPlayers}/{userID}/case/close", request);
 
 		// oldest first, the first 100
 		public Task<PortalAnswer<PortalAppealList>> ListAppealsAsync(string status, CancellationToken cancellationToken = default) =>
@@ -192,19 +185,6 @@ namespace GenOnlineService.Portal.Client
 			int? total = response.Headers.TryGetValues("X-Total", out IEnumerable<string>? totals) && int.TryParse(totals.FirstOrDefault(), out int value) ? value : null;
 			bool hasNext = response.Headers.TryGetValues("X-Next-Page", out IEnumerable<string>? next) && !String.IsNullOrEmpty(next.FirstOrDefault());
 			return new PortalAnswer<PortalMatchPage>(page == null ? null : page with { Total = total, HasNext = hasNext }, null);
-		}
-
-		// reviewed is false, true or all; userID keeps the rows of one player
-		public async Task<PortalAnswer<PortalAntiCheatPage>> GetAntiCheatAsync(string kind, string reviewed, int start, int count, CancellationToken cancellationToken, long? userID = null)
-		{
-			string player = userID is long id ? "&user_id=" + id : "";
-			(PortalAnswer<PortalAntiCheatPage> answer, int total) = await GetPageAsync<PortalAntiCheatPage>($"{PortalRoutes.AntiCheat}/{Uri.EscapeDataString(kind)}?reviewed={reviewed}{player}&{PageOf(start, count)}", cancellationToken);
-			return answer.Value == null ? answer : answer with { Value = answer.Value with { Total = total } };
-		}
-
-		public Task<PortalOutcome> ReviewAsync(string kind, long reportID)
-		{
-			return SendAsync(HttpMethod.Patch, $"{PortalRoutes.AntiCheat}/{Uri.EscapeDataString(kind)}/{reportID}", new PortalReviewRequest { Reviewed = true });
 		}
 
 		public Task<PortalOutcome> CreateSanctionAsync(long userID, string type, long? durationS, string? reason)
@@ -367,9 +347,6 @@ namespace GenOnlineService.Portal.Client
 			(PortalAnswer<PortalRuleMatchList> answer, int total) = await GetPageAsync<PortalRuleMatchList>(path, cancellationToken);
 			return answer.Ok ? new PortalAnswer<PortalRuleMatchPage>(new PortalRuleMatchPage { Matches = answer.Value!.Matches, Total = total }, null) : new PortalAnswer<PortalRuleMatchPage>(null, answer.Error);
 		}
-
-		public Task<PortalRuleOutcome<PortalRuleMatch>> ReviewRuleMatchAsync(long id, string review) =>
-			SendRuleAsync<PortalRuleMatch>(HttpMethod.Patch, $"{PortalRoutes.RuleMatches}/{id}", new { review });
 
 		public Task<PortalOutcome> GrantRoleAsync(long userID, string role) => SendAsync(HttpMethod.Put, $"{PortalRoutes.Players}/{userID}/roles/{Uri.EscapeDataString(role)}", new { });
 

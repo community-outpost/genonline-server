@@ -33,14 +33,13 @@ namespace GenOnlineService.Portal.Client
 	public static class PortalRoutes
 	{
 		public const string Overview = "api/v1/admin/overview";
-		public const string Reports = "api/v1/reports";
 		public const string Appeals = "api/v1/appeals";
-		public const string ReportSearch = "api/v1/reports/search";
+		public const string Cases = "api/v1/admin/cases";
+		public const string AdminPlayers = "api/v1/admin/players";
 		public const string Players = "api/v1/players";
 		public const string PlayerSearch = "api/v1/players/search";
 		public const string Sanctions = "api/v1/sanctions";
 		public const string Matches = "api/v1/matches";
-		public const string AntiCheat = "api/v1/anticheat_reports";
 		public const string AuditEvents = "api/v1/audit_events";
 		public const string ServiceAccounts = "api/v1/service_accounts";
 		public const string MatchSearch = "api/v1/matches/search";
@@ -65,11 +64,10 @@ namespace GenOnlineService.Portal.Client
 		public const string LogoPath = "/portal/logo.svg";
 		public const string AdminPages = "/admin";
 		public const string OverviewPage = AdminPages;
-		public const string ReportsPage = "/admin/reports";
 		public const string AppealsPage = "/admin/appeals";
+		public const string CasesPage = "/admin/cases";
 		public const string PlayersPage = "/admin/players";
 		public const string MatchesPage = "/admin/matches";
-		public const string AntiCheatPage = "/admin/anticheat";
 		public const string AuditPage = "/admin/audit";
 		public const string PartnersPage = "/admin/partners";
 		public const string ApiDocs = "/api/docs";
@@ -86,17 +84,16 @@ namespace GenOnlineService.Portal.Client
 
 		public static string PlayerPage(long id) => PlayersPage + "/" + id;
 
+		public static string PlayerCasePage(long userID) => PlayersPage + "/" + userID + "/case";
+		public static string DecidedCasePage(long caseID) => CasesPage + "/" + caseID;
+
 		public static string RulePage(long id) => RulesPage + "/" + id;
 
 		public static string RolePage(string name) => RolesPage + "/" + Uri.EscapeDataString(name);
 
 		public static string RuleMatchesOf(long id) => RuleMatchesPage + "?rule=" + id.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-		// one tab of the player page: activity, sanctions, reports, anticheat, roles, matches, signins, duplicates
 		public static string PlayerTab(long id, string tab) => PlayerPage(id) + "?tab=" + tab;
-
-		// the reports against and by a player, on the player page
-		public static string PlayerReports(long id) => PlayerTab(id, "reports");
 
 		public static string PlayersSearch(string term) => PlayersPage + "?q=" + Uri.EscapeDataString(term);
 
@@ -107,8 +104,6 @@ namespace GenOnlineService.Portal.Client
 		public static string LobbyPage(long id) => LobbiesPage + "/" + id;
 
 		public static string MatchesOf(long player) => MatchesPage + "?player=" + player.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-		public static string AntiCheatList(string kind) => AntiCheatPage + "/" + kind;
 
 		public static string AuditOf(long target) => AuditPage + "?target=" + target;
 
@@ -255,11 +250,10 @@ namespace GenOnlineService.Portal.Client
 		};
 	}
 
-	// The unreviewed rows of one review list on the dashboard
 	public sealed record PortalQueue
 	{
 		public string Kind { get; init; } = "";
-		public int Unreviewed { get; init; }
+		public int Waiting { get; init; }
 	}
 
 	public sealed record PortalOverviewSanction
@@ -275,17 +269,15 @@ namespace GenOnlineService.Portal.Client
 		public bool Active { get; init; }
 	}
 
-	// The staff dashboard: live counts, the queues, and the newest reports and sanctions. The anti-cheat numbers are
-	// null for staff without anticheat.review
+	// the anti-cheat and rule kinds of Waiting are left out for staff without anticheat.review
 	public sealed record PortalOverview
 	{
 		public int PlayersOnline { get; init; }
 		public int LobbiesOpen { get; init; }
 		public int MatchesToday { get; init; }
-		public int OpenReports { get; init; }
-		public int? UnreviewedAnticheat { get; init; }
-		public IReadOnlyList<PortalQueue>? Anticheat { get; init; }
-		public IReadOnlyList<PortalReport> RecentReports { get; init; } = [];
+		public int PlayersToReview { get; init; }
+		public IReadOnlyList<PortalQueue> Waiting { get; init; } = [];
+		public IReadOnlyList<PortalCaseRow> NextCases { get; init; } = [];
 		public IReadOnlyList<PortalOverviewSanction> RecentSanctions { get; init; } = [];
 	}
 
@@ -319,75 +311,6 @@ namespace GenOnlineService.Portal.Client
 		public string FullName => Tag == null ? Name : Name + "#" + Tag;
 	}
 
-	// One row of the staff queue, the fields of /api/v1/reports
-	public sealed record PortalReport
-	{
-		public long Id { get; init; }
-		public PortalMember Reporter { get; init; } = new PortalMember();
-		public PortalMember Reported { get; init; } = new PortalMember();
-		public string? MessageId { get; init; }
-		public string? Reason { get; init; }
-		public string Status { get; init; } = "";
-		public DateTime CreatedAt { get; init; }
-		public DateTime? ResolvedAt { get; init; }
-		// user, service_account or cli; the player when a staff member closed it
-		public string? ResolvedByKind { get; init; }
-		public PortalMember? ResolvedBy { get; init; }
-		public string? ResolutionNote { get; init; }
-		// The reported message's text as the report stored it, null for a report of a player
-		public string? MessageContent { get; init; }
-
-		// Flat values for the grid columns
-		[JsonIgnore]
-		public string ReporterName => Reporter.FullName;
-		[JsonIgnore]
-		public string ReportedName => Reported.FullName;
-
-		// Who closed the report, in words
-		[JsonIgnore]
-		public string? ResolverName => ResolvedBy?.FullName ?? (ResolvedByKind == null ? null : PortalText.ActorKind(ResolvedByKind));
-	}
-
-	// The report queue as the address holds it: statuses (all or a comma list), the search and the order
-	public sealed record PortalReportQuery
-	{
-		public const string DefaultStatus = "open";
-		public static readonly IReadOnlyList<string> Statuses = ["open", "actioned", "dismissed"];
-
-		public string Status { get; init; } = DefaultStatus;
-		public string? Search { get; init; }
-		public bool NewestFirst { get; init; }
-
-		// Unknown statuses fall back to the open queue, as the host would refuse them
-		public static PortalReportQuery FromAddress(string? status, string? q, string? sort)
-		{
-			string[] parts = (status ?? DefaultStatus).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-			string kept = parts.Contains("all") ? "all"
-				: parts.Length > 0 && parts.All(Statuses.Contains) ? String.Join(',', Statuses.Where(parts.Contains))
-				: DefaultStatus;
-			return new PortalReportQuery
-			{
-				Status = kept,
-				Search = String.IsNullOrWhiteSpace(q) ? null : q.Trim(),
-				NewestFirst = sort == "desc"
-			};
-		}
-
-		public IReadOnlyDictionary<string, object?> ToAddress() => new Dictionary<string, object?>
-		{
-			["status"] = Status == DefaultStatus ? null : Status,
-			["q"] = Search,
-			["sort"] = NewestFirst ? "desc" : null
-		};
-	}
-
-	// One page of the queue and the size of the whole filtered queue
-	public sealed record PortalReportPage
-	{
-		public IReadOnlyList<PortalReport> Reports { get; init; } = [];
-		public int Total { get; init; }
-	}
-
 	public sealed record PortalAppeal
 	{
 		public long Id { get; init; }
@@ -416,12 +339,6 @@ namespace GenOnlineService.Portal.Client
 		public string? Decision { get; init; }
 		public string? Reason { get; init; }
 		public DateTime? ExpiresAt { get; init; }
-	}
-
-	public sealed record PortalResolveRequest
-	{
-		public string? Status { get; init; }
-		public string? ResolutionNote { get; init; }
 	}
 
 	public sealed record PortalPlayerRow
@@ -758,6 +675,8 @@ namespace GenOnlineService.Portal.Client
 	{
 		public string Name { get; init; } = "";
 		public string Type { get; init; } = "";
+		public string? Url { get; init; }
+		public string? Status { get; init; }
 	}
 
 	public sealed record PortalMatchSlot
@@ -801,50 +720,6 @@ namespace GenOnlineService.Portal.Client
 		public DateTime StartedAt { get; init; }
 		public DateTime? FinishedAt { get; init; }
 		public IReadOnlyList<PortalMatchSlot> Slots { get; init; } = [];
-	}
-
-	// One row of a review list, the fields of /api/v1/anticheat_reports/:kind
-	public sealed record PortalAntiCheatReport
-	{
-		public long Id { get; init; }
-		public PortalMember Player { get; init; } = new PortalMember();
-		public long? MatchId { get; init; }
-		public string? ModuleName { get; init; }
-		public string? ModulePath { get; init; }
-		public long? ModuleSize { get; init; }
-		public string? Reason { get; init; }
-		public long? LobbyId { get; init; }
-		public int? PlaylistId { get; init; }
-		public string? Method { get; init; }
-		public IReadOnlyList<int>? Sides { get; init; }
-
-		// when the row was raised; an older row without it carries the start of its match
-		public DateTime? ReportedAt { get; init; }
-		public DateTime? MatchStartedAt { get; init; }
-		public DateTime? ReviewedAt { get; init; }
-		public PortalMember? Reviewer { get; init; }
-
-		public string SideList => Sides == null ? "" : String.Join(", ", Sides.Select(PortalText.Side));
-	}
-
-	// One page of a review list as the address holds it: unreviewed (default), reviewed or all
-	public static class PortalReviewState
-	{
-		public const string Unreviewed = "false";
-		public static readonly IReadOnlyList<string> All = [Unreviewed, "true", "all"];
-
-		public static string FromAddress(string? reviewed) => reviewed != null && All.Contains(reviewed) ? reviewed : Unreviewed;
-	}
-
-	public sealed record PortalAntiCheatPage
-	{
-		public IReadOnlyList<PortalAntiCheatReport> Reports { get; init; } = [];
-		public int Total { get; init; }
-	}
-
-	public sealed record PortalReviewRequest
-	{
-		public bool Reviewed { get; init; }
 	}
 
 	public sealed record PortalAuditActor
@@ -1447,5 +1322,180 @@ namespace GenOnlineService.Portal.Client
 	public sealed record PortalFlagComment
 	{
 		public string? Comment { get; init; }
+	}
+
+	public static class PortalCaseKinds
+	{
+		public const string Report = "report";
+		public const string RuleMatch = "rule_match";
+
+		public static readonly IReadOnlyList<string> All = ["report", "modules", "probes", "devices", "quickmatch_rules", "new_accounts", "rule_match"];
+
+		public static string Title(string kind) => kind switch
+		{
+			Report => "Player reports",
+			RuleMatch => "Automated rules",
+			_ => PortalReviewList.Find(kind)?.Title ?? kind
+		};
+
+		public static string ShortTitle(string kind) => kind switch
+		{
+			Report => "Reports",
+			RuleMatch => "Rules",
+			_ => PortalReviewList.Find(kind)?.ShortTitle ?? kind
+		};
+
+		public static string Icon(string kind) => kind switch
+		{
+			Report => "flag",
+			RuleMatch => "workflow",
+			"quickmatch_rules" => "swords",
+			_ => PortalReviewList.IconOf(kind)
+		};
+
+		// anti-cheat and rule signals need anticheat.review, reports any staff permission
+		public static bool IsAntiCheat(string kind) => kind != Report;
+	}
+
+	public static class PortalReportCategories
+	{
+		public static string Title(string? category) => category switch
+		{
+			"chat" => "Chat",
+			"cheating" => "Cheating",
+			"griefing" => "Griefing",
+			"name" => "Offensive name",
+			"harassment" => "Harassment",
+			_ => "Other"
+		};
+	}
+
+	public sealed record PortalCaseRow
+	{
+		public PortalMember Player { get; init; } = new PortalMember();
+		public DateTime AccountCreatedAt { get; init; }
+		public bool Banned { get; init; }
+		public bool Muted { get; init; }
+		public int PriorCases { get; init; }
+		public IReadOnlyDictionary<string, int> Waiting { get; init; } = new Dictionary<string, int>();
+		public DateTime? FirstAt { get; init; }
+		public DateTime? LastAt { get; init; }
+		public PortalMember? ClaimedBy { get; init; }
+		public DateTime? ClaimedAt { get; init; }
+		public int Priority { get; init; }
+
+		[JsonIgnore]
+		public int WaitingTotal => Waiting.Values.Sum();
+	}
+
+	public sealed record PortalCaseList
+	{
+		public IReadOnlyList<PortalCaseRow> Cases { get; init; } = [];
+		public int Total { get; init; }
+	}
+
+	public sealed record PortalCaseSummary
+	{
+		public long Id { get; init; }
+		public string Status { get; init; } = "";
+		public DateTime OpenedAt { get; init; }
+		public PortalMember? ClaimedBy { get; init; }
+		public DateTime? ClaimedAt { get; init; }
+		public DateTime? ClosedAt { get; init; }
+		public PortalMember? ClosedBy { get; init; }
+		public string? Outcome { get; init; }
+		public string? Note { get; init; }
+		public long? SanctionId { get; init; }
+	}
+
+	public sealed record PortalCaseMessage
+	{
+		public long Id { get; init; }
+		public PortalMember Author { get; init; } = new PortalMember();
+		public string Content { get; init; } = "";
+		public DateTime At { get; init; }
+		public bool Deleted { get; init; }
+		public string Part { get; init; } = "";
+	}
+
+	public sealed record PortalCaseSignal
+	{
+		public string Kind { get; init; } = "";
+		public long Id { get; init; }
+		public DateTime? At { get; init; }
+		public long? MatchId { get; init; }
+		public long? LobbyId { get; init; }
+		public PortalMember? Reporter { get; init; }
+		public string? Category { get; init; }
+		public string? MessageId { get; init; }
+		public IReadOnlyList<PortalCaseMessage>? Conversation { get; init; }
+		public bool? AfterPending { get; init; }
+		public string? Reason { get; init; }
+		public string? ModuleName { get; init; }
+		public string? ModulePath { get; init; }
+		public long? ModuleSize { get; init; }
+		public int? PlaylistId { get; init; }
+		public string? Method { get; init; }
+		public IReadOnlyList<int>? Sides { get; init; }
+		public long? RuleId { get; init; }
+		public string? RuleName { get; init; }
+		public int? RuleVersion { get; init; }
+		public string? Trigger { get; init; }
+		public string? RuleOutcome { get; init; }
+		public string? Actions { get; init; }
+		public System.Text.Json.JsonElement? Facts { get; init; }
+
+		[JsonIgnore]
+		public string SideList => Sides == null ? "" : String.Join(", ", Sides.Select(PortalText.Side));
+	}
+
+	public sealed record PortalCaseSanction
+	{
+		public long Id { get; init; }
+		public string Type { get; init; } = "";
+		public DateTime? ExpiresAt { get; init; }
+		public string? Reason { get; init; }
+	}
+
+	public sealed record PortalCaseStanding
+	{
+		public DateTime AccountCreatedAt { get; init; }
+		public DateTime? LastSignInAt { get; init; }
+		public IReadOnlyList<PortalCaseSanction> ActiveSanctions { get; init; } = [];
+		public int Sanctions { get; init; }
+		public int OpenAppeals { get; init; }
+		public IReadOnlyList<PortalCaseSummary> PriorCases { get; init; } = [];
+	}
+
+	public sealed record PortalCase
+	{
+		public PortalMember Player { get; init; } = new PortalMember();
+		public PortalCaseStanding Standing { get; init; } = new PortalCaseStanding();
+		public PortalCaseSummary? Case { get; init; }
+		public IReadOnlyList<PortalCaseSignal> Signals { get; init; } = [];
+		public IReadOnlyList<PortalMatch> Matches { get; init; } = [];
+	}
+
+	public sealed record PortalCaseSignalRef
+	{
+		public string Kind { get; init; } = "";
+		public long Id { get; init; }
+	}
+
+	public sealed record PortalCloseCase
+	{
+		public IReadOnlyList<PortalCaseSignalRef> Signals { get; init; } = [];
+		public string Outcome { get; init; } = "no_action";
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public PortalSanctionRequest? Sanction { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Note { get; init; }
+	}
+
+	public sealed record PortalCaseClosed
+	{
+		public long CaseId { get; init; }
+		public int Decided { get; init; }
+		public long? SanctionId { get; init; }
 	}
 }

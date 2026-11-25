@@ -2728,3 +2728,16 @@ select.gp-input { width: auto; min-width: 240px; }
 .gp-more-menu form { margin: 0; }
 .gp .gp-more-menu button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 10px; border: 0; border-radius: var(--go-radius-md); background: transparent; color: var(--go-color-text-secondary); font: inherit; text-align: start; cursor: pointer; }
 .gp .gp-more-menu button:hover { background: var(--go-color-bg-raised); color: var(--go-color-text-primary); }
+
+.go-case { display: grid; gap: var(--go-space-4); grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) { .go-case { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); align-items: start; } }
+.go-case-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px var(--go-space-3); margin: 0; font-size: var(--go-font-size-sm); }
+.go-case-facts dt { color: var(--go-color-text-muted); }
+.go-case-facts dd { margin: 0; }
+.go-check { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--go-color-accent-default); }
+
+.go-thread { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: var(--go-font-size-sm); }
+.go-thread li { display: grid; gap: 2px; padding: 6px 8px; border-radius: var(--go-radius-md); }
+.go-thread-meta { display: flex; gap: var(--go-space-2); font-size: var(--go-font-size-xs); color: var(--go-color-text-muted); }
+.go-thread-reported { background: var(--go-color-accent-tint-14); box-shadow: inset 3px 0 0 var(--go-color-accent-default); }
+.go-thread-deleted { text-decoration: line-through; color: var(--go-color-text-muted); }

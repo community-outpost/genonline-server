@@ -153,11 +153,7 @@ else
         <BbTabsList>
             <BbTabsTrigger Value="activity">Activity</BbTabsTrigger>
             <BbTabsTrigger Value="sanctions">Sanctions (@player.Sanctions.Count)</BbTabsTrigger>
-            <BbTabsTrigger Value="reports" data-testid="tab-reports">Reports</BbTabsTrigger>
-            @if (Session.Can(PortalPermissions.AnticheatReview))
-            {
-                <BbTabsTrigger Value="anticheat" data-testid="tab-anticheat">Anti-cheat</BbTabsTrigger>
-            }
+            <BbTabsTrigger Value="cases" data-testid="tab-cases">Cases</BbTabsTrigger>
             <BbTabsTrigger Value="roles">Roles (@player.RoleGrants.Count)</BbTabsTrigger>
             <BbTabsTrigger Value="matches">Matches</BbTabsTrigger>
             <BbTabsTrigger Value="signins">Sign-ins and devices</BbTabsTrigger>
@@ -361,188 +357,81 @@ else
             </BbCard>
         </BbTabsContent>
 
-        <BbTabsContent Value="reports" Class="bb:mt-4">
-            <div class="bb:space-y-4">
-                @foreach ((string side, string title, string description) in s_reportSides)
-                {
-                    <BbCard>
-                        <BbCardHeader>
-                            <BbCardTitle As="h2">@title</BbCardTitle>
-                            <BbCardDescription>@description</BbCardDescription>
-                        </BbCardHeader>
-                        <BbCardContent>
-                            @if (m_reportErrors.GetValueOrDefault(side) is string reportError)
-                            {
-                                <BbAlert Variant="AlertVariant.Danger" Class="bb:mb-4">
-                                    <Icon>
-                                        <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
-                                    </Icon>
-                                    <ChildContent>
-                                        <BbAlertTitle>The reports could not load</BbAlertTitle>
-                                        <BbAlertDescription>@PortalText.Error(reportError)</BbAlertDescription>
-                                    </ChildContent>
-                                </BbAlert>
-                            }
-                            <BbDataGrid @key="@(player.Id + side)" TData="PortalReport" ItemsProvider="@(request => LoadReportsAsync(side, request))" ItemKey="@(r => r.Id)" InitialPageSize="10" AriaLabel="@title" data-testid="@($"player-reports-{side}")">
-                                <Columns>
-                                    <BbDataGridPropertyColumn TData="PortalReport" TProp="DateTime" Property="@(r => r.CreatedAt)" Title="Reported" Width="110px">
-                                        <CellTemplate>
-                                            <When Value="@context.CreatedAt" />
-                                        </CellTemplate>
-                                    </BbDataGridPropertyColumn>
-                                    <BbDataGridTemplateColumn TData="PortalReport" Title="@(side == "against" ? "By" : "Reported player")">
-                                        <ChildContent Context="report">
-                                            @{ PortalMember other = side == "against" ? report.Reporter : report.Reported; }
-                                            <BbLink Href="@PortalRoutes.PlayerPage(other.Id)">@other.FullName</BbLink>
-                                        </ChildContent>
-                                    </BbDataGridTemplateColumn>
-                                    <BbDataGridPropertyColumn TData="PortalReport" TProp="string" Property="@(r => r.Reason!)" Title="Reason">
-                                        <CellTemplate>
-                                            @if (String.IsNullOrEmpty(context.Reason))
+        <BbTabsContent Value="cases" Class="bb:mt-4">
+            <BbCard>
+                <BbCardHeader>
+                    <div class="bb:flex bb:items-center bb:justify-between bb:gap-2">
+                        <BbCardTitle As="h2">Cases</BbCardTitle>
+                        <BbButton Size="ButtonSize.Small" Href="@PortalRoutes.PlayerCasePage(Id)" data-testid="open-case">
+                            <LucideIcon Name="inbox" Class="bb:h-4 bb:w-4" />
+                            Open the waiting case
+                        </BbButton>
+                    </div>
+                    <BbCardDescription>The cases staff decided for this player, the newest first.</BbCardDescription>
+                </BbCardHeader>
+                <BbCardContent>
+                    @if (m_casesError != null)
+                    {
+                        <BbAlert Variant="AlertVariant.Danger" Class="bb:mb-4">
+                            <Icon>
+                                <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+                            </Icon>
+                            <ChildContent>
+                                <BbAlertTitle>The cases could not load</BbAlertTitle>
+                                <BbAlertDescription>@PortalText.Error(m_casesError)</BbAlertDescription>
+                            </ChildContent>
+                        </BbAlert>
+                    }
+                    @if (m_cases == null)
+                    {
+                        <BbSkeleton Class="go-skeleton-panel" />
+                    }
+                    else
+                    {
+                        <BbDataTable TData="PortalCaseSummary" Data="@m_cases" ShowToolbar="false" ShowPagination="@(m_cases.Count > 20)" InitialPageSize="20" AriaLabel="Decided cases" data-testid="player-cases">
+                            <Columns>
+                                <BbDataTableColumn TData="PortalCaseSummary" TValue="DateTime?" Property="@(c => c.ClosedAt)" Header="Closed">
+                                    <CellTemplate Context="c">
+                                        <BbLink Href="@PortalRoutes.DecidedCasePage(c.Id)">
+                                            @if (c.ClosedAt is DateTime closed)
                                             {
-                                                <span class="go-muted">No reason given</span>
-                                            }
-                                            else
-                                            {
-                                                @context.Reason
-                                            }
-                                        </CellTemplate>
-                                    </BbDataGridPropertyColumn>
-                                    <BbDataGridTemplateColumn TData="PortalReport" Title="Status" Width="240px">
-                                        <ChildContent Context="report">
-                                            <div class="bb:space-y-1">
-                                                <BbBadge Variant="@PortalBadges.OfReport(report.Status)">@report.Status</BbBadge>
-                                                @if (report.ResolvedAt is DateTime resolved)
-                                                {
-                                                    <div class="bb:text-xs bb:text-muted-foreground">
-                                                        @if (report.ResolverName != null)
-                                                        {
-                                                            <span>by @report.ResolverName, </span>
-                                                        }
-                                                        <When Value="@resolved" />
-                                                    </div>
-                                                    @if (!String.IsNullOrEmpty(report.ResolutionNote))
-                                                    {
-                                                        <div class="bb:text-xs go-clamp" title="@report.ResolutionNote">@report.ResolutionNote</div>
-                                                    }
-                                                }
-                                            </div>
-                                        </ChildContent>
-                                    </BbDataGridTemplateColumn>
-                                </Columns>
-                                <EmptyTemplate>
-                                    <BbEmpty Size="EmptySize.Small" Title="No reports" Description="@(side == "against" ? "Nobody has reported this player." : "This player has not reported anyone.")">
-                                        <Icon>
-                                            <LucideIcon Name="inbox" />
-                                        </Icon>
-                                    </BbEmpty>
-                                </EmptyTemplate>
-                                <LoadingTemplate>
-                                    <p class="bb:p-4 bb:text-sm bb:text-muted-foreground" role="status">Loading…</p>
-                                </LoadingTemplate>
-                            </BbDataGrid>
-                        </BbCardContent>
-                    </BbCard>
-                }
-            </div>
-        </BbTabsContent>
-
-        @if (Session.Can(PortalPermissions.AnticheatReview))
-        {
-            <BbTabsContent Value="anticheat" Class="bb:mt-4">
-                <BbCard>
-                    <BbCardHeader>
-                        <BbCardTitle As="h2">Anti-cheat rows</BbCardTitle>
-                        <BbCardDescription>Every row of the five review lists for this player, reviewed or not, the newest of each list first (up to 100 a list). Review them on their list.</BbCardDescription>
-                    </BbCardHeader>
-                    <BbCardContent>
-                        @if (m_antiCheatError != null)
-                        {
-                            <BbAlert Variant="AlertVariant.Danger" Class="bb:mb-4">
-                                <Icon>
-                                    <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
-                                </Icon>
-                                <ChildContent>
-                                    <BbAlertTitle>The anti-cheat rows could not load</BbAlertTitle>
-                                    <BbAlertDescription>@PortalText.Error(m_antiCheatError)</BbAlertDescription>
-                                </ChildContent>
-                            </BbAlert>
-                        }
-                        @if (m_antiCheat == null)
-                        {
-                            <BbSkeleton Class="go-skeleton-panel" />
-                        }
-                        else
-                        {
-                            <BbDataTable TData="PlayerAntiCheatRow" Data="@m_antiCheat" ShowToolbar="false" ShowPagination="@(m_antiCheat.Count > 20)" InitialPageSize="20" AriaLabel="Anti-cheat rows" data-testid="player-anticheat">
-                                <Columns>
-                                    <BbDataTableColumn TData="PlayerAntiCheatRow" TValue="string" Property="@(r => r.List.ShortTitle)" Header="List">
-                                        <CellTemplate Context="row">
-                                            <BbLink Href="@PortalRoutes.AntiCheatList(row.List.Kind)" Class="bb:inline-flex bb:items-center bb:gap-2">
-                                                <LucideIcon Name="@PortalReviewList.IconOf(row.List.Kind)" Class="bb:h-4 bb:w-4 bb:text-muted-foreground" />
-                                                @row.List.ShortTitle
-                                            </BbLink>
-                                        </CellTemplate>
-                                    </BbDataTableColumn>
-                                    <BbDataTableColumn TData="PlayerAntiCheatRow" TValue="DateTime?" Property="@(r => r.Report.ReportedAt ?? r.Report.MatchStartedAt)" Header="Raised">
-                                        <CellTemplate Context="row">
-                                            @if (row.Report.ReportedAt is DateTime reported)
-                                            {
-                                                <When Value="@reported" />
-                                            }
-                                            else if (row.Report.MatchStartedAt is DateTime started)
-                                            {
-                                                <span title="Stored before rows kept their own time; this is when its match started"><When Value="@started" /> <span class="go-muted bb:text-xs">match start</span></span>
+                                                <When Value="@closed" />
                                             }
                                             else
                                             {
                                                 <span class="go-muted">—</span>
                                             }
-                                        </CellTemplate>
-                                    </BbDataTableColumn>
-                                    <BbDataTableColumn TData="PlayerAntiCheatRow" TValue="long?" Property="@(r => r.Report.MatchId)" Header="Match">
-                                        <CellTemplate Context="row">
-                                            @if (row.Report.MatchId is long matchID)
-                                            {
-                                                <BbLink Href="@PortalRoutes.MatchPage(matchID)" Class="go-id">@matchID</BbLink>
-                                            }
-                                            else
-                                            {
-                                                <span class="go-muted">@(row.List.Kind == "quickmatch_rules" ? "before start" : "sign-in")</span>
-                                            }
-                                        </CellTemplate>
-                                    </BbDataTableColumn>
-                                    <BbDataTableColumn TData="PlayerAntiCheatRow" TValue="string" Property="@(r => r.Detail)" Header="What">
-                                        <CellTemplate Context="row">
-                                            <span class="@(row.List.Kind == "modules" ? "bb:font-mono bb:text-xs" : "")">@row.Detail</span>
-                                        </CellTemplate>
-                                    </BbDataTableColumn>
-                                    <BbDataTableColumn TData="PlayerAntiCheatRow" TValue="DateTime?" Property="@(r => r.Report.ReviewedAt)" Header="Review">
-                                        <CellTemplate Context="row">
-                                            @if (row.Report.ReviewedAt is DateTime reviewed)
-                                            {
-                                                <span class="bb:text-xs">reviewed@(row.Report.Reviewer != null ? " by " + row.Report.Reviewer.FullName : ""), <When Value="@reviewed" /></span>
-                                            }
-                                            else
-                                            {
-                                                <BbBadge Variant="BadgeVariant.SoftDestructive">unreviewed</BbBadge>
-                                            }
-                                        </CellTemplate>
-                                    </BbDataTableColumn>
-                                </Columns>
-                                <EmptyTemplate>
-                                    <BbEmpty Size="EmptySize.Small" Title="Nothing on record" Description="No anti-cheat list holds a row of this player.">
-                                        <Icon>
-                                            <LucideIcon Name="shield-check" />
-                                        </Icon>
-                                    </BbEmpty>
-                                </EmptyTemplate>
-                            </BbDataTable>
-                        }
-                    </BbCardContent>
-                </BbCard>
-            </BbTabsContent>
-        }
+                                        </BbLink>
+                                    </CellTemplate>
+                                </BbDataTableColumn>
+                                <BbDataTableColumn TData="PortalCaseSummary" TValue="string" Property="@(c => c.ClosedBy!.FullName)" Header="Closed by">
+                                    <CellTemplate Context="c">
+                                        @(c.ClosedBy?.FullName ?? "—")
+                                    </CellTemplate>
+                                </BbDataTableColumn>
+                                <BbDataTableColumn TData="PortalCaseSummary" TValue="string" Property="@(c => c.Outcome!)" Header="Outcome">
+                                    <CellTemplate Context="c">
+                                        @(c.Outcome == "sanctioned" ? "Sanctioned" : c.Outcome == "no_action" ? "No action" : "—")
+                                    </CellTemplate>
+                                </BbDataTableColumn>
+                                <BbDataTableColumn TData="PortalCaseSummary" TValue="string" Property="@(c => c.Note!)" Header="Note">
+                                    <CellTemplate Context="c">
+                                        @(c.Note ?? "")
+                                    </CellTemplate>
+                                </BbDataTableColumn>
+                            </Columns>
+                            <EmptyTemplate>
+                                <BbEmpty Size="EmptySize.Small" Title="No decided cases" Description="No case of this player has been decided yet.">
+                                    <Icon>
+                                        <LucideIcon Name="inbox" />
+                                    </Icon>
+                                </BbEmpty>
+                            </EmptyTemplate>
+                        </BbDataTable>
+                    }
+                </BbCardContent>
+            </BbCard>
+        </BbTabsContent>
 
         <BbTabsContent Value="roles" Class="bb:mt-4">
             <BbCard>
@@ -1068,7 +957,7 @@ else
     [SupplyParameterFromQuery(Name = "tab")]
     public string? Tab { get; set; }
 
-    private static readonly string[] s_tabs = ["activity", "sanctions", "reports", "anticheat", "roles", "matches", "signins", "duplicates", "connections"];
+    private static readonly string[] s_tabs = ["activity", "sanctions", "cases", "roles", "matches", "signins", "duplicates", "connections"];
     private string m_tab = "activity";
 
     private PortalPlayer? m_player;
@@ -1104,10 +993,10 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        m_tab = Tab != null && s_tabs.Contains(Tab) && (Tab != "anticheat" || Session.Can(PortalPermissions.AnticheatReview)) ? Tab : "activity";
+        m_tab = Tab != null && s_tabs.Contains(Tab) ? Tab : "activity";
         if (m_player?.Id == Id)
         {
-            await LoadAntiCheatAsync();
+            await LoadCasesAsync();
             await LoadConnectionsAsync();
             return;
         }
@@ -1118,9 +1007,8 @@ else
         m_devicesRevealed = false;
         m_connections = null;
         m_connectionsError = null;
-        m_antiCheat = null;
-        m_antiCheatError = null;
-        m_reportErrors.Clear();
+        m_cases = null;
+        m_casesError = null;
         await LoadAsync();
 
         // the host audits this read, so it runs once per opened page and not after each action
@@ -1130,7 +1018,7 @@ else
             m_inspection = answer.Value;
             m_inspectionError = answer.Ok ? null : answer.Error;
         }
-        await LoadAntiCheatAsync();
+        await LoadCasesAsync();
         await LoadConnectionsAsync();
     }
 
@@ -1207,65 +1095,19 @@ else
         return new BlazorBlueprint.Primitives.DataGrid.DataGridResult<PortalMatchRow> { Items = page.Matches.ToList(), TotalItemCount = total };
     }
 
-    // The Reports tab: the reports against the player and the ones it filed
-    private static readonly (string Side, string Title, string Description)[] s_reportSides =
-    [
-        ("against", "Reports against this player", "Every report naming this player, open and closed, the newest first."),
-        ("by", "Reports by this player", "Every report this player filed, the newest first.")
-    ];
-    private readonly Dictionary<string, string?> m_reportErrors = new();
+    // the Cases tab loads on first open; the host audits that read
+    private List<PortalCaseSummary>? m_cases;
+    private string? m_casesError;
 
-    // One row of the Anti-cheat tab, with the list it comes from
-    private sealed record PlayerAntiCheatRow(PortalReviewList List, PortalAntiCheatReport Report)
+    private async Task LoadCasesAsync()
     {
-        public string Detail => List.Kind switch
-        {
-            "modules" => $"{Report.ModuleName} ({PortalText.Bytes(Report.ModuleSize)})",
-            "quickmatch_rules" => $"{Report.Method} asking for {Report.SideList}",
-            "new_accounts" => "A new account in a quick match",
-            _ => Report.Reason ?? ""
-        };
-    }
-
-    private List<PlayerAntiCheatRow>? m_antiCheat;
-    private string? m_antiCheatError;
-
-    private async ValueTask<BlazorBlueprint.Primitives.DataGrid.DataGridResult<PortalReport>> LoadReportsAsync(string side, BlazorBlueprint.Primitives.DataGrid.DataGridRequest request)
-    {
-        PortalAnswer<PortalReportPage> answer = await Api.GetReportsAsync("all", null, true, request.StartIndex, request.Count ?? 10, request.CancellationToken,
-            reportedID: side == "against" ? Id : null, reporterID: side == "by" ? Id : null);
-        string? error = answer.Ok ? null : answer.Error;
-        if (error != m_reportErrors.GetValueOrDefault(side))
-        {
-            m_reportErrors[side] = error;
-            StateHasChanged();
-        }
-        PortalReportPage page = answer.Value ?? new PortalReportPage();
-        return new BlazorBlueprint.Primitives.DataGrid.DataGridResult<PortalReport> { Items = page.Reports.ToList(), TotalItemCount = page.Total };
-    }
-
-    // The five lists once per opened player, when the tab is first shown
-    private async Task LoadAntiCheatAsync()
-    {
-        if (m_antiCheat != null || m_tab != "anticheat" || !Session.Can(PortalPermissions.AnticheatReview))
+        if (m_cases != null || m_tab != "cases")
         {
             return;
         }
-
-        var rows = new List<PlayerAntiCheatRow>();
-        string? error = null;
-        foreach (PortalReviewList list in PortalReviewList.All)
-        {
-            PortalAnswer<PortalAntiCheatPage> answer = await Api.GetAntiCheatAsync(list.Kind, "all", 0, 100, CancellationToken.None, Id);
-            if (!answer.Ok)
-            {
-                error ??= answer.Error;
-                continue;
-            }
-            rows.AddRange(answer.Value!.Reports.Select(report => new PlayerAntiCheatRow(list, report)));
-        }
-        m_antiCheatError = error;
-        m_antiCheat = rows.OrderByDescending(r => r.Report.ReportedAt ?? r.Report.MatchStartedAt ?? DateTime.MinValue).ToList();
+        PortalAnswer<PortalCase> answer = await Api.GetWaitingCaseAsync(Id);
+        m_casesError = answer.Ok ? null : answer.Error;
+        m_cases = (answer.Value?.Standing.PriorCases ?? []).ToList();
     }
 
     private bool NeedsReason => ReasonRequired && String.IsNullOrWhiteSpace(m_reason);
