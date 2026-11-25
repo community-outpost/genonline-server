@@ -386,7 +386,6 @@ static partial class MatchmakingManager
 			m_LastELOExpansionTime = DateTime.UtcNow;
         }
 
-		DateTime m_CreationTime = DateTime.Now;
         DateTime m_LastELOExpansionTime = DateTime.UtcNow;
 
 		private TimeSpan TimeSinceLastEloExpansion()

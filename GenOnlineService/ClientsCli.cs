@@ -275,7 +275,7 @@ namespace GenOnlineService
 				throw new CliException($"Client {clientID} already exists.");
 			}
 
-			OpenIddictApplicationDescriptor descriptor = ClientRegistry.Descriptor(clientID, name, bConfidential, kind, bFirstParty, true, redirectUris, scopes);
+			OpenIddictApplicationDescriptor descriptor = ClientRegistry.Descriptor(clientID, name, bConfidential, bFirstParty, true, redirectUris, scopes);
 			string? secret = bConfidential ? NewSecret() : null;
 			descriptor.ClientSecret = secret;
 
@@ -342,7 +342,7 @@ namespace GenOnlineService
 
 			OpenIddictApplicationDescriptor descriptor = new();
 			await applications.PopulateAsync(descriptor, application);
-			OpenIddictApplicationDescriptor next = ClientRegistry.Descriptor(clientID, name, bConfidential, row.Kind, bFirstParty, bEnabled, redirectUris, scopes);
+			OpenIddictApplicationDescriptor next = ClientRegistry.Descriptor(clientID, name, bConfidential, bFirstParty, bEnabled, redirectUris, scopes);
 
 			// the stored secret hash is kept unless it is rotated
 			string? secret = bRotate ? NewSecret() : null;

@@ -73,13 +73,9 @@ namespace Database
 	// "GenOnlineService import" converts the old production schema one way: validate writes nothing, convert and verify share one transaction
 	public static class Import
 	{
-		private const int BatchSize = 2000;
-		private const int MaxExamples = 20;
 		private const string ImportActor = "import";
 		private const string LegacyBanReason = "Imported legacy ban";
 
-		private const int AccountTypeGhost = 2;
-		private const int AccountTypeDevAccount = 3;
 		public static ImportSettings ReadSettings(IConfiguration config)
 		{
 			IConfiguration section = config.GetSection("Import");

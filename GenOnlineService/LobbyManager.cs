@@ -627,7 +627,7 @@ namespace GenOnlineService
 		private void SendStartSignallingToMember(LobbyMember recipient, LobbyMember peer, PeerStepValues values)
 		{
 			ForgetConnection(recipient.UserID, peer.UserID);
-			RealtimeOut.Fire(GameClientOf(recipient).StartSignalling(StartSignallingFor(recipient, peer, values)));
+			RealtimeOut.Fire(GameClientOf(recipient).StartSignalling(StartSignallingFor(peer, values)));
 		}
 
 		private readonly PeerPairs m_PeerPairs = new();
@@ -675,8 +675,8 @@ namespace GenOnlineService
 			MarkLiveDirty();
 			PeerStepValues values = PairValuesLocked(source, target, transportsSource, transportsTarget);
 			ForgetConnection(sourceUserID, targetUserID);
-			RealtimeOut.Fire(caller.StartSignalling(StartSignallingFor(source, target, values)));
-			RealtimeOut.Fire(RealtimeOut.UserGame(targetUserID).StartSignalling(StartSignallingFor(target, source, values)));
+			RealtimeOut.Fire(caller.StartSignalling(StartSignallingFor(target, values)));
+			RealtimeOut.Fire(RealtimeOut.UserGame(targetUserID).StartSignalling(StartSignallingFor(source, values)));
 			return Task.CompletedTask;
 		});
 
@@ -899,7 +899,7 @@ namespace GenOnlineService
 
 		private PeerStepValues PairValuesLocked(LobbyMember a, LobbyMember b) => PairValuesLocked(a, b, TransportsOf(a), TransportsOf(b));
 
-		private StartSignallingEvent StartSignallingFor(LobbyMember recipient, LobbyMember peer, PeerStepValues values)
+		private StartSignallingEvent StartSignallingFor(LobbyMember peer, PeerStepValues values)
 		{
 			return new StartSignallingEvent
 			{
@@ -1727,11 +1727,11 @@ public async Task FinalizeACChecks()
 				}
 
 				PeerStepValues values = PairValuesLocked(newMember, memberEntry);
-				RealtimeOut.Fire(joining.StartSignalling(StartSignallingFor(newMember, memberEntry, values)));
+				RealtimeOut.Fire(joining.StartSignalling(StartSignallingFor(memberEntry, values)));
 				RealtimeOut.Fire(joining.AnticheatRegister(AnticheatPeerFor(memberEntry)));
 
 				IRealtimeClient existing = RealtimeOut.Session(remoteSession);
-				RealtimeOut.Fire(existing.StartSignalling(StartSignallingFor(memberEntry, newMember, values)));
+				RealtimeOut.Fire(existing.StartSignalling(StartSignallingFor(newMember, values)));
 				RealtimeOut.Fire(existing.AnticheatRegister(AnticheatPeerFor(newMember)));
 			}
 
@@ -2367,7 +2367,7 @@ public async Task FinalizeACChecks()
 			DirtyRetransmitLobbyList();
 		}
 
-		public async Task UpdateSide(AppDbContext _db, int newSide, int start_pos)
+		public async Task UpdateSide(AppDbContext _db, int newSide)
 		{
 			Side = newSide;
 

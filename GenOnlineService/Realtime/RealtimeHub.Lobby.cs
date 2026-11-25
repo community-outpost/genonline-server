@@ -373,7 +373,7 @@ namespace GenOnlineService.Realtime
 					await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
 					if (request.Side is int side)
 					{
-						await member.UpdateSide(db, side, member.StartingPosition);
+						await member.UpdateSide(db, side);
 					}
 					if (request.Color is int color)
 					{

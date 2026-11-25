@@ -43,18 +43,6 @@ public enum EDiscordChannelIDs
 	DirectMessage = 0
 }
 
-public enum EDiscordUserTypeRequirements
-{
-	Player,
-	Staff
-}
-
-public enum DiscordCommandParsingFlags
-{
-	Default = 0,
-	GreedyArgs = 1
-}
-
 public static class Helpers
 {
 	public static string ComputeMD5Hash(string input)
@@ -84,20 +72,11 @@ public static class Helpers
 
 		return (Int64)now.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
 	}
-
-	public static string FormatString(string strFormat, params object[] strParams)
-	{
-		return String.Format(new System.Globalization.CultureInfo("en-US"), strFormat, strParams);
-	}
 }
 
 public class DiscordBot
 {
 	private static readonly Microsoft.Extensions.Logging.ILogger s_log = AppLog.For(typeof(DiscordBot));
-	enum EBotAction
-	{
-		PushScriptedMessage
-	}
 
 	DiscordSocketClient? discord = null;
 
@@ -306,13 +285,6 @@ public class DiscordBot
 			Int64 unixTimestamp = Helpers.GetUnixTimestamp();
 			m_dictCooldowns[user.Id] = unixTimestamp;
 		}
-	}
-
-	bool HasRole(IGuildUser user, string roleName)
-	{
-		return user.RoleIds
-				   .Select(roleId => user.Guild.GetRole(roleId))
-				   .Any(role => role.Name.Equals(roleName, StringComparison.OrdinalIgnoreCase));
 	}
 
 	// Slash commands need no privileged intent, so the bot never reads message content

@@ -343,12 +343,6 @@ namespace GenOnlineService.Realtime
 			};
 		}
 
-		// True when the user is the sender or the recipient of a direct message, any user is a party of channel and lobby rows
-		private static bool IsParty(ChatMessage row, Int64 userID)
-		{
-			return row.Kind != ChatMessageKinds.Direct || row.SenderID == userID || row.RecipientID == userID;
-		}
-
 		private static MessageType WireType(string stored) => stored switch
 		{
 			ChatMessageTypes.Action => MessageType.Action,

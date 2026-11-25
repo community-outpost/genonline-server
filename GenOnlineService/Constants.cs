@@ -49,29 +49,6 @@ namespace GenOnlineService
 
 		public const int OBSERVER_SIDE_VALUE = 1;
 	}
-	public enum EPendingLoginState
-	{
-		None = -1,
-		Waiting = 0,
-		LoginSuccess = 1,
-		LoginFailed = 2
-	};
-
-	public enum EIPVersion
-	{
-		IPV4 = 0,
-		IPV6
-	}
-
-	public enum EConnectionState
-	{
-		NOT_CONNECTED,
-		CONNECTING_DIRECT,
-		CONNECTING_RELAY,
-		CONNECTED_DIRECT,
-		CONNECTED_RELAY,
-		CONNECTION_FAILED
-	};
 
 	public enum ELobbyState
 	{
@@ -81,20 +58,6 @@ namespace GenOnlineService
 		COMPLETE,
 		// a custom lobby start runs its mesh check and countdown in this state
 		COUNTDOWN
-	}
-
-	[Flags]
-	public enum ERoomFlags : int
-	{
-		ROOM_FLAGS_NONE = 0,
-		ROOM_FLAGS_SHOW_ALL_MATCHES = 1 << 0
-	}
-	public class RoomData
-	{
-		public int id { get; set; } = -1;
-		public string name { get; set; } = "";
-		public int? parent_id { get; set; }
-		public ERoomFlags flags { get; set; } = ERoomFlags.ROOM_FLAGS_NONE;
 	}
 
 	internal sealed class RoomConfigData
@@ -1268,9 +1231,6 @@ namespace GenOnlineService
 
 		public async static Task SetUsedLoggedIn(Int64 userID, EUserSessionType sessionType)
 		{
-			// TODO_EFCORE: website uses this index as 1 (60hz) to 0 (30hz), update it to use new enum + support new clients, also need to update DB to match
-			// TODO_EFCORE: Move away from db for this and just have website login call endpoint on service
-
 			s_log.LogInformation("StartSession deleting other sessions for user {UserId}", userID);
 
 			// kill any WS they had too, StartSession comes before WS connects
@@ -1284,15 +1244,6 @@ namespace GenOnlineService
 				await GenOnlineService.WebSocketManager.DeleteSession(userID, sessionType, oldWS, false, sess);
 			}
 		}
-	}
-
-	public enum EAccountType
-	{
-		Unknown = -1,
-		Steam = 0,
-		Discord = 1,
-		Ghost = 2,
-		DevAccount = 3
 	}
 
 	public class PlayerStats

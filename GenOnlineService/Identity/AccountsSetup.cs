@@ -521,7 +521,7 @@ namespace GenOnlineService.Identity
 				}
 
 				await using var transaction = await db.Database.BeginTransactionAsync();
-				await manager.CreateAsync(ClientRegistry.Descriptor(client.ClientID, client.DisplayName, false, client.Kind, true, true, client.RedirectUris, scopes));
+				await manager.CreateAsync(ClientRegistry.Descriptor(client.ClientID, client.DisplayName, false, true, true, client.RedirectUris, scopes));
 
 				DateTime now = DateTime.UtcNow;
 				var row = new Client { ClientID = client.ClientID, Kind = client.Kind, Game = client.Game, FirstParty = true, Enabled = true, MinVersion = client.MinVersion, CreatedAt = now, UpdatedAt = now };

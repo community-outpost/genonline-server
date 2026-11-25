@@ -27,7 +27,6 @@ namespace GenOnlineService.Realtime
 	{
 		private const int EvidenceMessages = 10;
 		private const int EvidenceCandidates = 200;
-		private const int ReportListLimit = 100;
 
 		// One player report per reporter and player at a time on this copy, so the open report check holds
 		private static readonly SemaphoreSlim[] s_reportLocks = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();

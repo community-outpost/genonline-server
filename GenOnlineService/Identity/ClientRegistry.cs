@@ -279,7 +279,7 @@ namespace GenOnlineService.Identity
 		}
 
 		// a disabled client keeps its row but loses its endpoints, so OpenIddict refuses it first
-		public static OpenIddictApplicationDescriptor Descriptor(string clientID, string displayName, bool bConfidential, string kind, bool bFirstParty, bool bEnabled,
+		public static OpenIddictApplicationDescriptor Descriptor(string clientID, string displayName, bool bConfidential, bool bFirstParty, bool bEnabled,
 			IEnumerable<string> redirectUris, IEnumerable<string> scopes)
 		{
 			var descriptor = new OpenIddictApplicationDescriptor
