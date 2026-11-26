@@ -57,8 +57,8 @@ namespace GenOnlineService.Portal.Client
 		public const string RuleMatches = "api/v1/rules/matches";
 		public const string Roles = "api/v1/roles";
 		public const string Permissions = "api/v1/permissions";
-		public const string SignIn = "users/sign_in";
-		public const string SignOut = "users/sign_out";
+		public const string SignIn = "session/sign_in";
+		public const string SignOut = "session/sign_out";
 
 		public const string AccountPage = "/profile";
 		public const string LogoPath = "/portal/logo.svg";

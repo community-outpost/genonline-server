@@ -83,9 +83,11 @@ namespace GenOnlineService.Api
 		}
 
 		// Only without an Authorization header; any bearer value keeps the bearer path
+		// With separate hosts this applies on the portal host only
 		public static bool AdmitsSignInCookie(HttpContext context)
 		{
-			return String.IsNullOrEmpty(context.Request.Headers.Authorization.ToString()) && context.GetEndpoint()?.Metadata.GetMetadata<AllowSignInCookieAttribute>() != null;
+			return String.IsNullOrEmpty(context.Request.Headers.Authorization.ToString()) && context.GetEndpoint()?.Metadata.GetMetadata<AllowSignInCookieAttribute>() != null
+				&& (context.RequestServices.GetService<AccountsSettings>()?.Hosts ?? HostSettings.Single).IsPortal(context.Request);
 		}
 
 		// Marker added by SignInCookieHandler; no token scheme produces it

@@ -118,7 +118,7 @@ namespace GenOnlineService.Identity
 			{
 				return BlockedPath;
 			}
-			if (path.StartsWith("/users/auth/", StringComparison.Ordinal) || path == "/users/sign_out")
+			if (path.StartsWith("/users/auth/", StringComparison.Ordinal) || path == "/users/sign_out" || path == PortalSession.SignOutPath)
 			{
 				return "/users/sign_in";
 			}

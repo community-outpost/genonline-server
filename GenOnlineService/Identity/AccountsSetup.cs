@@ -191,6 +191,17 @@ namespace GenOnlineService.Identity
 					options.Cookie.SameSite = SameSiteMode.Lax;
 					options.Cookie.SecurePolicy = settings.RequireHttps ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
 					options.ExpireTimeSpan = TimeSpan.FromDays(14);
+
+					// the portal host has no sign-in page: its pages start the OAuth flow to the login host instead
+					var toSignIn = options.Events.OnRedirectToLogin;
+					options.Events.OnRedirectToLogin = context =>
+					{
+						if (settings.Hosts.Split && settings.Hosts.IsPortal(context.Request))
+						{
+							context.RedirectUri = PortalSession.SignInPath + new Uri(context.RedirectUri).Query;
+						}
+						return toSignIn(context);
+					};
 				});
 
 				cookies.TwoFactorUserIdCookie?.Configure(options =>
@@ -283,7 +294,7 @@ namespace GenOnlineService.Identity
 			});
 
 			List<UpstreamProviderSettings> providers = settings.EnabledProviders.ToList();
-			if (providers.Any(p => p.Kind != ProviderKind.Steam))
+			if (settings.Hosts.Split || providers.Any(p => p.Kind != ProviderKind.Steam))
 			{
 				openIddict.AddClient(options =>
 				{
@@ -297,7 +308,19 @@ namespace GenOnlineService.Identity
 					}
 
 					options.UseSystemNetHttp();
-					AddUpstreamRegistrations(options, providers);
+					AddUpstreamRegistrations(options, providers, settings.Hosts.Split ? PortalSession.CallbackPath.TrimStart('/') : null);
+					if (settings.Hosts.Split)
+					{
+						// the portal is a client of this service's own login host, as any website would be
+						options.AddRegistration(new OpenIddictClientRegistration
+						{
+							ProviderName = PortalSession.Provider,
+							Issuer = new Uri(settings.Issuer!, UriKind.Absolute),
+							ClientId = PortalSession.ClientID,
+							RedirectUri = new Uri(PortalSession.RedirectUri(settings.Hosts), UriKind.Absolute),
+							Scopes = { Scopes.OpenId }
+						});
+					}
 				});
 			}
 
@@ -312,10 +335,10 @@ namespace GenOnlineService.Identity
 			}
 		}
 
-		public static void AddUpstreamRegistrations(OpenIddictClientBuilder options, IEnumerable<UpstreamProviderSettings> providers)
+		public static void AddUpstreamRegistrations(OpenIddictClientBuilder options, IEnumerable<UpstreamProviderSettings> providers, string? portalCallbackPath = null)
 		{
 			List<UpstreamProviderSettings> registered = providers.Where(p => p.Kind != ProviderKind.Steam).ToList();
-			options.SetRedirectionEndpointUris(registered.Select(p => p.CallbackPath).ToArray());
+			options.SetRedirectionEndpointUris(registered.Select(p => p.CallbackPath).Concat(portalCallbackPath == null ? [] : [portalCallbackPath]).ToArray());
 
 			// a provider whose return URL is another host's comes back here through that host's redirect, which the built-in endpoint check would take for a mix-up
 			if (registered.Any(p => p.RedirectUri != null))
@@ -505,7 +528,8 @@ namespace GenOnlineService.Identity
 			var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 			AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-			foreach (OAuthClientSettings client in settings.Clients)
+			IEnumerable<OAuthClientSettings> clients = settings.Hosts.Split ? settings.Clients.Append(PortalSession.Client(settings.Hosts)) : settings.Clients;
+			foreach (OAuthClientSettings client in clients)
 			{
 				if (await db.Clients.AnyAsync(c => c.ClientID == client.ClientID) || await manager.FindByClientIdAsync(client.ClientID) != null)
 				{
@@ -543,6 +567,15 @@ namespace GenOnlineService.Identity
 				await transaction.CommitAsync();
 
 				s_log.LogInformation("Seeded first-party client {ClientId}", client.ClientID);
+			}
+
+			// the portal's return address follows Hosts:portal, whatever an earlier start registered
+			if (settings.Hosts.Split && await manager.FindByClientIdAsync(PortalSession.ClientID) is { } portal
+				&& !(await manager.GetRedirectUrisAsync(portal)).SequenceEqual([PortalSession.RedirectUri(settings.Hosts)]))
+			{
+				OAuthClientSettings client = PortalSession.Client(settings.Hosts);
+				await manager.UpdateAsync(portal, ClientRegistry.Descriptor(client.ClientID, client.DisplayName, false, true, true, client.RedirectUris, DefaultScopes(client.Kind)));
+				s_log.LogInformation("The portal's return address is now {RedirectUri}", client.RedirectUris[0]);
 			}
 
 			await ClientRegistry.Reload(db);

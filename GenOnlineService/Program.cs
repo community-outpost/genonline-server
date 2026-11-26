@@ -1546,6 +1546,7 @@ namespace GenOnlineService
 
 			app.UseCors();
 			app.Use(GenOnlineService.Rest.RestSetup.StatusBodies);
+			app.UseHostSplit(accountsSettings.Hosts);
 			GenOnlineService.Failover.RealtimeFailover.UseRealtimeStandbyGate(app);
 			app.UseRealtimeQueryToken();
 			app.UseAuthentication();

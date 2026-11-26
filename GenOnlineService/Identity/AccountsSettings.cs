@@ -184,6 +184,7 @@ namespace GenOnlineService.Identity
 		public List<UpstreamProviderSettings> Providers { get; init; } = new();
 		public PasswordSignInSettings Password { get; init; } = new();
 		public AgreementsSettings Agreements { get; init; } = new();
+		public HostSettings Hosts { get; init; } = HostSettings.Single;
 
 		public static readonly IReadOnlyList<string> DefaultCoverImages = ["/portal/faction-usa.webp", "/portal/faction-china.webp", "/portal/faction-gla.webp"];
 
@@ -255,8 +256,19 @@ namespace GenOnlineService.Identity
 				provider.Validate();
 			}
 
+			HostSettings hosts = HostSettings.Read(config, section.GetValue<string>("issuer"));
+			if (hosts.Split && section.GetValue<bool?>("enabled") == false)
+			{
+				throw new InvalidOperationException("Hosts names a login and a portal host, which need Accounts:enabled.");
+			}
+			if (hosts.Split && (clients.Any(c => c.ClientID == PortalSession.ClientID) || providers.Any(p => p.Name == PortalSession.Provider)))
+			{
+				throw new InvalidOperationException($"The client id {PortalSession.ClientID} and the provider name {PortalSession.Provider} belong to the portal's own sign-in when Hosts names separate hosts.");
+			}
+
 			return new AccountsSettings
 			{
+				Hosts = hosts,
 				Enabled = section.GetValue<bool?>("enabled") ?? true,
 				Issuer = section.GetValue<string>("issuer"),
 				Audience = section.GetValue<string>("audience") ?? DefaultAudience,

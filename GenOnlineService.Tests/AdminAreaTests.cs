@@ -52,7 +52,16 @@ internal sealed class AdminBrowser
 
 	private readonly RequestDelegate m_pipeline;
 	private readonly IServiceProvider m_services;
-	private readonly Dictionary<string, string> m_cookies = new();
+	// one jar per host, as a browser keeps host-only cookies
+	private readonly Dictionary<string, Dictionary<string, string>> m_jars = new(StringComparer.OrdinalIgnoreCase);
+
+	public string HostName { get; set; } = Host;
+
+	public string Scheme { get; set; } = "http";
+
+	public Dictionary<string, string> Jar(string host) => m_jars.TryGetValue(host, out Dictionary<string, string>? jar) ? jar : m_jars[host] = new();
+
+	private Dictionary<string, string> m_cookies => Jar(HostName);
 
 	public AdminBrowser(ProbeDatabase probe, params (string Key, string Value)[] extra) : this(probe, (Action<IServiceCollection>?)null, extra)
 	{
@@ -92,6 +101,7 @@ internal sealed class AdminBrowser
 		var app = new ApplicationBuilder(m_services);
 		app.UseRouting();
 		app.Use(RestSetup.StatusBodies);
+		app.UseHostSplit(accounts.Hosts);
 		app.UseAuthentication();
 		app.UseSignInCookieRules();
 		app.UseAuthorization();
@@ -124,8 +134,8 @@ internal sealed class AdminBrowser
 		var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
 		scope.ServiceProvider.GetRequiredService<IHttpContextAccessor>().HttpContext = context;
 		context.Request.Method = method;
-		context.Request.Scheme = "http";
-		context.Request.Host = new HostString(Host);
+		context.Request.Scheme = Scheme;
+		context.Request.Host = new HostString(HostName);
 		context.Connection.RemoteIpAddress = RemoteAddress;
 		int query = pathAndQuery.IndexOf('?');
 		context.Request.Path = query < 0 ? pathAndQuery : pathAndQuery.Substring(0, query);
@@ -177,6 +187,53 @@ internal sealed class AdminBrowser
 		}
 
 		return new PageResponse(context.Response.StatusCode, Encoding.UTF8.GetString(responseBody.ToArray()), context.Response.Headers.Location.ToString() is { Length: > 0 } l ? l : null, setCookies, context.Response.Headers.XFrameOptions.ToString()) { Headers = context.Response.Headers };
+	}
+
+	// What the service itself fetches over HTTP (its OAuth client's discovery and code exchange), answered by this pipeline: no cookies
+	public DelegatingHandler BackChannel() => new PipelineHandler(this);
+
+	// a delegating handler that never delegates: OpenIddict insists on its own primary handler
+	private sealed class PipelineHandler : DelegatingHandler
+	{
+		private readonly AdminBrowser m_browser;
+
+		public PipelineHandler(AdminBrowser browser)
+		{
+			m_browser = browser;
+		}
+
+		protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+		{
+			using IServiceScope scope = m_browser.m_services.CreateScope();
+			var context = new DefaultHttpContext { RequestServices = scope.ServiceProvider };
+			context.Request.Method = request.Method.Method;
+			context.Request.Scheme = request.RequestUri!.Scheme;
+			context.Request.Host = new HostString(request.RequestUri.Authority);
+			context.Request.Path = request.RequestUri.AbsolutePath;
+			context.Request.QueryString = new QueryString(request.RequestUri.Query);
+			foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
+			{
+				context.Request.Headers[header.Key] = header.Value.ToArray();
+			}
+			if (request.Content != null)
+			{
+				byte[] body = await request.Content.ReadAsByteArrayAsync(cancellationToken);
+				context.Request.ContentType = request.Content.Headers.ContentType?.ToString();
+				context.Request.ContentLength = body.Length;
+				context.Request.Body = new MemoryStream(body);
+			}
+			var responseBody = new MemoryStream();
+			context.Response.Body = responseBody;
+
+			await m_browser.m_pipeline(context);
+
+			var response = new HttpResponseMessage((HttpStatusCode)context.Response.StatusCode) { RequestMessage = request, Content = new ByteArrayContent(responseBody.ToArray()) };
+			if (context.Response.ContentType != null)
+			{
+				response.Content.Headers.TryAddWithoutValidation("Content-Type", context.Response.ContentType);
+			}
+			return response;
+		}
 	}
 
 	public async Task SignUp(string name, string email)

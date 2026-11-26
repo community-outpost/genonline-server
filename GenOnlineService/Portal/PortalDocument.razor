@@ -21,7 +21,8 @@
         <meta name="csrf-header" content="@host.CsrfHeader" />
         <meta name="csrf-token" content="@host.CsrfToken" />
     }
-    <script>window.goPortalMeta = function (name) { var meta = document.querySelector('meta[name="' + name + '"]'); return meta ? meta.getAttribute('content') : null; };</script>
+    <script>window.goPortalMeta = function (name) { var meta = document.querySelector('meta[name="' + name + '"]'); return meta ? meta.getAttribute('content') : null; };
+        window.goPortalSignOut = function (path) { var form = document.createElement('form'); form.method = 'post'; form.action = '/' + path; document.body.appendChild(form); form.submit(); };</script>
     @Head
 </head>
 <body class="bb:bg-background bb:text-foreground">

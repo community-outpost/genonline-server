@@ -517,10 +517,10 @@ namespace GenOnlineService.Portal.Client
 			}
 		}
 
+		// A form post the browser follows: with separate hosts the answer goes on to the login host, which a fetch may not follow
 		public async Task SignOutAsync()
 		{
-			using HttpResponseMessage response = await m_http.PostAsync(PortalRoutes.SignOut, null);
-			m_navigation.NavigateTo(PortalRoutes.SignIn, forceLoad: true);
+			await m_js.InvokeVoidAsync("goPortalSignOut", PortalRoutes.SignOut);
 		}
 
 		public void SignIn()

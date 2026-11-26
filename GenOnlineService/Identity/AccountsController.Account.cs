@@ -168,7 +168,7 @@ namespace GenOnlineService.Identity
 			string tag = "#" + Database.DisplayNames.FormatTag(user.NameTag);
 			IReadOnlyCollection<string> roles = StaffRoles.RolesOf(user.ID);
 			bool staff = await m_passwords.IsStaff(user.ID);
-			string signOut = FormStart("/users/sign_out", AccountPath) + $"<button type=\"submit\">{PortalLook.Icon("log-out")}{WebUtility.HtmlEncode(T("SignOut"))}</button></form>";
+			string signOut = FormStart(PortalSession.SignOutPath, AccountPath) + $"<button type=\"submit\">{PortalLook.Icon("log-out")}{WebUtility.HtmlEncode(T("SignOut"))}</button></form>";
 			var shell = new AccountShell(user.Username, tag, user.ID.ToString(CultureInfo.InvariantCulture), roles.Count == 0 ? T("Account.RolePlayer") : String.Join(", ", roles), staff, signOut);
 
 			int requests;
