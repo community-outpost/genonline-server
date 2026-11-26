@@ -419,6 +419,10 @@ namespace GenOnlineService.Portal.Client
 		// The roles the caller may grant or revoke on this player: roles.manage and the rank rule, empty otherwise
 		public IReadOnlyList<string> AssignableRoles { get; init; } = [];
 
+		// The Discord account the bot treats as this player, for its staff commands only (never a sign-in), and both calls need roles.manage
+		public string? DiscordBotUserId { get; init; }
+		public bool CanLinkDiscordBot { get; init; }
+
 		// False where the sign-in provider owns the names
 		public bool CanRename { get; init; }
 

@@ -45,6 +45,7 @@ namespace GenOnlineService.Rest
 		public const string AppealDecided = "appeal.decided";
 
 		public const string RoleRank = "roles.rank";
+		public const string DiscordBotInUse = "discord_bot.in_use";
 
 		// A role held only through a sign-in provider, which follows that provider's sign-ins
 		public const string RoleUpstream = "roles.upstream";
@@ -79,6 +80,7 @@ namespace GenOnlineService.Rest
 			[RestCodes.AppealExists] = StatusCodes.Status409Conflict,
 			[RestCodes.AppealDecided] = StatusCodes.Status409Conflict,
 			[RestCodes.RoleRank] = StatusCodes.Status403Forbidden,
+			[RestCodes.DiscordBotInUse] = StatusCodes.Status409Conflict,
 			[RestCodes.RoleUpstream] = StatusCodes.Status409Conflict,
 			[RestCodes.RoleExists] = StatusCodes.Status409Conflict,
 			[RestCodes.RolePositionTaken] = StatusCodes.Status409Conflict,

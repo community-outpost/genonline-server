@@ -513,8 +513,15 @@ namespace GenOnlineService.Rest
 			{
 				await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(HttpContext.RequestAborted);
 				Database.ModerationActor actor = CallerActors.Of(User);
-				IReadOnlyList<string> assignable = RoleRules.Assignable(actor, await RoleRules.CallerRankAsync(db, actor), userID, await RoleRules.RankAsync(db, userID));
-				player = Result.Success(player.Data! with { AssignableRoles = assignable });
+				int callerRank = await RoleRules.CallerRankAsync(db, actor);
+				int targetRank = await RoleRules.RankAsync(db, userID);
+				Int64? discordBotUser = await Database.DiscordBotLinks.Get(db, userID);
+				player = Result.Success(player.Data! with
+				{
+					AssignableRoles = RoleRules.Assignable(actor, callerRank, userID, targetRank),
+					DiscordBotUserId = discordBotUser?.ToString(),
+					CanLinkDiscordBot = RoleRules.Check(actor, callerRank, userID, targetRank, []) == null
+				});
 			}
 			return ApiResults.Answer(player);
 		}

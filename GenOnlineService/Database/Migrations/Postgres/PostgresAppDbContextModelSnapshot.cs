@@ -883,6 +883,34 @@ namespace GenOnlineService.Migrations.Postgres
                     b.ToTable("devices", (string)null);
                 });
 
+            modelBuilder.Entity("DiscordBotLink", b =>
+                {
+                    b.Property<long>("UserID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.Property<long>("DiscordUserID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("discord_user_id");
+
+                    b.Property<DateTime>("LinkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("linked_at");
+
+                    b.Property<string>("LinkedBy")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("linked_by");
+
+                    b.HasKey("UserID");
+
+                    b.HasIndex("DiscordUserID")
+                        .IsUnique()
+                        .HasDatabaseName("ux_discord_bot_links_discord_user_id");
+
+                    b.ToTable("discord_bot_links", (string)null);
+                });
+
             modelBuilder.Entity("FlagRevision", b =>
                 {
                     b.Property<int>("Number")

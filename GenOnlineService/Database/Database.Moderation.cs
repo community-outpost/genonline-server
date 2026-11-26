@@ -80,6 +80,8 @@ public static class ModerationActions
 	public const string NameReset = "name_reset";
 	public const string RoleGrant = "role_grant";
 	public const string RoleRevoke = "role_revoke";
+	public const string DiscordBotLink = "discord_bot_link";
+	public const string DiscordBotUnlink = "discord_bot_unlink";
 	public const string RoleCreate = "role_create";
 	public const string RoleUpdate = "role_update";
 	public const string RoleDelete = "role_delete";

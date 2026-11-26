@@ -125,6 +125,7 @@ namespace GenOnlineService.Identity
 			await db.UserRecoveryCodes.Where(c => c.UserID == userID).ExecuteDeleteAsync(cancellationToken);
 			await db.UserAgreements.Where(a => a.UserID == userID).ExecuteDeleteAsync(cancellationToken);
 			await db.UserRoles.Where(r => r.UserID == userID).ExecuteDeleteAsync(cancellationToken);
+			await db.DiscordBotLinks.Where(l => l.UserID == userID).ExecuteDeleteAsync(cancellationToken);
 			await db.Friendships.Where(f => f.UserIdLow == userID || f.UserIdHigh == userID).ExecuteDeleteAsync(cancellationToken);
 			await db.FriendRequests.Where(f => f.FromUserId == userID || f.ToUserId == userID).ExecuteDeleteAsync(cancellationToken);
 			await db.Blocks.Where(b => b.UserId == userID || b.BlockedUserId == userID).ExecuteDeleteAsync(cancellationToken);

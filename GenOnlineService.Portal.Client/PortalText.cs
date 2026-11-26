@@ -146,6 +146,7 @@ namespace GenOnlineService.Portal.Client
 			"appeal.exists" => "This sanction has an appeal already.",
 			"appeal.not_allowed" => "This sanction cannot be appealed.",
 			"roles.rank" => "That role ranks the same as or above your own.",
+			"discord_bot.in_use" => "That Discord account is already linked to another player.",
 			"roles.upstream" => "That role comes from a sign-in provider and follows its sign-ins.",
 			"roles.locked" => "The owner role cannot be changed here.",
 			"roles.builtin" => "A built-in role cannot be deleted or moved.",

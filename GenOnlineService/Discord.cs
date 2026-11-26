@@ -358,7 +358,8 @@ public class DiscordBot
 		_ => null
 	};
 
-	// A linked GenOnline account with the permission comes first, the legacy discord_admins list is the fallback until staff accounts are linked
+	// A GenOnline account with the permission comes first: one signing in with this Discord account, or one staff linked
+	// to it for the bot only. The legacy discord_admins list is the fallback until staff accounts are linked
 	private static async Task<Database.ModerationActor?> ResolveStaff(ulong discordUserID, string permission)
 	{
 		string name = $"discord:{discordUserID}";
@@ -372,6 +373,10 @@ public class DiscordBot
 				.Where(i => i.Provider == IdentityProviders.Discord && i.ExternUid == externUid)
 				.Select(i => i.UserID)
 				.ToListAsync();
+			if (discordUserID <= Int64.MaxValue && await Database.DiscordBotLinks.UserOf(db, (Int64)discordUserID) is Int64 botLinked && !linkedUserIDs.Contains(botLinked))
+			{
+				linkedUserIDs.Add(botLinked);
+			}
 
 			foreach (Int64 userID in linkedUserIDs)
 			{

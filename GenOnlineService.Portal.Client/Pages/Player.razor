@@ -515,6 +515,51 @@ else
                     }
                 </BbCardContent>
             </BbCard>
+
+            @if (Session.Can(PortalPermissions.RolesManage))
+            {
+                <BbCard Class="bb:mt-4">
+                    <BbCardHeader>
+                        <BbCardTitle As="h2">Discord bot</BbCardTitle>
+                        <BbCardDescription>The Discord account the bot treats as this player, so it can use the bot's staff commands with this player's permissions. It is not a sign-in and the player doesn't see it. Every change is in the audit log.</BbCardDescription>
+                    </BbCardHeader>
+                    <BbCardContent Class="bb:space-y-4">
+                        @if (player.DiscordBotUserId != null)
+                        {
+                            <div class="bb:flex bb:flex-wrap bb:items-center bb:gap-2" data-testid="discord-bot-link">
+                                <LucideIcon Name="bot" Class="bb:h-4 bb:w-4 bb:text-muted-foreground" />
+                                <span class="bb:font-mono">@player.DiscordBotUserId</span>
+                                @if (player.CanLinkDiscordBot)
+                                {
+                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Loading="@m_linkingDiscord" OnClick="UnlinkDiscordAsync" data-testid="discord-bot-unlink">Remove</BbButton>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="bb:text-sm bb:text-muted-foreground">No Discord account is linked for the bot.</p>
+                        }
+
+                        @if (player.CanLinkDiscordBot)
+                        {
+                            <form class="bb:flex bb:flex-wrap bb:items-end bb:gap-2" @onsubmit="LinkDiscordAsync">
+                                <div class="bb:space-y-2">
+                                    <BbLabel For="discord-bot-id">Discord user id</BbLabel>
+                                    <BbInput Id="discord-bot-id" @bind-Value="m_discordID" Placeholder="123456789012345678" inputmode="numeric" autocomplete="off" Class="bb:w-56" />
+                                </div>
+                                <BbButton Type="ButtonType.Submit" Size="ButtonSize.Small" Loading="@m_linkingDiscord" data-testid="discord-bot-save">
+                                    <LucideIcon Name="link" Class="bb:h-4 bb:w-4" />
+                                    @(player.DiscordBotUserId == null ? "Link" : "Replace")
+                                </BbButton>
+                            </form>
+                        }
+                        else
+                        {
+                            <p class="bb:text-sm bb:text-muted-foreground" data-testid="discord-bot-out-of-reach">You can link the Discord account of players you outrank only.</p>
+                        }
+                    </BbCardContent>
+                </BbCard>
+            }
         </BbTabsContent>
 
         <BbTabsContent Value="matches" Class="bb:mt-4">
@@ -980,6 +1025,8 @@ else
     private string? m_reason;
     private string? m_role;
     private string? m_grantRole;
+    private string m_discordID = "";
+    private bool m_linkingDiscord;
     private bool m_granting;
 
     private string? m_password;
@@ -1236,6 +1283,47 @@ else
         if (outcome.Ok)
         {
             Toasts.Success($"{role} is granted and in the audit log.", "Done");
+        }
+        else
+        {
+            Toasts.Error(PortalText.Error(outcome.Error), "Not done");
+        }
+        await LoadAsync();
+    }
+
+    private async Task LinkDiscordAsync()
+    {
+        string discordID = m_discordID.Trim();
+        if (discordID.Length == 0)
+        {
+            return;
+        }
+
+        m_linkingDiscord = true;
+        PortalOutcome outcome = await Api.LinkDiscordBotAsync(Id, discordID);
+        m_linkingDiscord = false;
+
+        if (outcome.Ok)
+        {
+            m_discordID = "";
+            Toasts.Success("The Discord account is linked for the bot and in the audit log.", "Done");
+        }
+        else
+        {
+            Toasts.Error(outcome.Error == "invalid_argument" ? "That isn't a Discord user id: 15 to 20 digits." : PortalText.Error(outcome.Error), "Not done");
+        }
+        await LoadAsync();
+    }
+
+    private async Task UnlinkDiscordAsync()
+    {
+        m_linkingDiscord = true;
+        PortalOutcome outcome = await Api.UnlinkDiscordBotAsync(Id);
+        m_linkingDiscord = false;
+
+        if (outcome.Ok)
+        {
+            Toasts.Success("The Discord account is no longer linked for the bot.", "Done");
         }
         else
         {

@@ -30,12 +30,14 @@ namespace GenOnlineService
 			+ "  GenOnlineService users two-factor-reset <user_id> [--reason <text>]\n"
 			+ "  GenOnlineService users name-reset <user_id> [--reason <text>]\n"
 			+ "  GenOnlineService users delete <user_id> --reason <text> --yes\n"
+			+ "  GenOnlineService users discord-bot-link <user_id> --discord <discord_user_id> | --clear\n"
 			+ "password-reset prints a new random password once, or sets the one read from standard input with --password-stdin.\n"
 			+ "Both end the account's lockout, revoke every sign-in of the game with its refresh tokens, and sign it out of the website within a minute.\n"
 			+ "name-reset replaces an inappropriate player name with a placeholder and ends every sign-in; the player chooses a new name when signing in again.\n"
 			+ "delete erases the account on its owner's request and cannot be undone: the personal data goes, the account id stays with a\n"
 			+ "neutral name so matches, ratings and bans keep it, and the name leaves the player's matches. While a ban is active its device\n"
-			+ "ids and sign-in provider ids stay (as hashes) until the ban ends. --yes confirms; the reason (the request) is required.";
+			+ "ids and sign-in provider ids stay (as hashes) until the ban ends. --yes confirms; the reason (the request) is required.\n"
+			+ "discord-bot-link sets (or with --clear removes) the Discord account the bot treats as this user for its staff commands; it is never a sign-in.";
 
 		private sealed class CliException : Exception
 		{
@@ -47,7 +49,7 @@ namespace GenOnlineService
 			public AppDbContext CreateDbContext() => Program.OpenConfiguredDbContext();
 		}
 
-		private sealed record Arguments(string Command, Int64 UserID, bool PasswordFromStdin, string? Reason, bool Confirmed);
+		private sealed record Arguments(string Command, Int64 UserID, bool PasswordFromStdin, string? Reason, bool Confirmed, string? Discord = null, bool Clear = false);
 
 		private static Arguments Parse(string[] args)
 		{
@@ -57,14 +59,16 @@ namespace GenOnlineService
 			}
 
 			string command = args[1].ToLowerInvariant();
-			if (command != "password-reset" && command != "two-factor-reset" && command != "name-reset" && command != "delete")
+			if (command != "password-reset" && command != "two-factor-reset" && command != "name-reset" && command != "delete" && command != "discord-bot-link")
 			{
 				throw new CliException(Usage);
 			}
 
 			bool fromStdin = false;
 			bool confirmed = false;
+			bool clear = false;
 			string? reason = null;
+			string? discord = null;
 			for (int i = 3; i < args.Length; i++)
 			{
 				if (args[i].Equals("--password-stdin", StringComparison.OrdinalIgnoreCase) && command == "password-reset")
@@ -75,7 +79,15 @@ namespace GenOnlineService
 				{
 					confirmed = true;
 				}
-				else if (args[i].Equals("--reason", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+				else if (args[i].Equals("--discord", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length && command == "discord-bot-link")
+				{
+					discord = args[++i];
+				}
+				else if (args[i].Equals("--clear", StringComparison.OrdinalIgnoreCase) && command == "discord-bot-link")
+				{
+					clear = true;
+				}
+				else if (args[i].Equals("--reason", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length && command != "discord-bot-link")
 				{
 					reason = args[++i];
 				}
@@ -91,13 +103,49 @@ namespace GenOnlineService
 				throw new CliException($"delete cannot be undone: give the request as --reason <text> and confirm with --yes.{Environment.NewLine}{Usage}");
 			}
 
-			return new Arguments(command, userID, fromStdin, reason, confirmed);
+			if (command == "discord-bot-link" && (discord == null) == !clear)
+			{
+				throw new CliException($"discord-bot-link takes either --discord <discord_user_id> or --clear.{Environment.NewLine}{Usage}");
+			}
+
+			return new Arguments(command, userID, fromStdin, reason, confirmed, discord, clear);
 		}
 
 		private static string CliActor()
 		{
 			string actor = "cli:" + Environment.UserName;
 			return actor.Length > 64 ? actor.Substring(0, 64) : actor;
+		}
+
+		// The CLI has no rank: it is how an owner, whom nobody outranks, links their own Discord account
+		private static async Task<int> LinkDiscordBot(AppDbContext db, Arguments parsed)
+		{
+			if (!await Database.Users.Exists(db, parsed.UserID))
+			{
+				throw new CliException($"No user with id {parsed.UserID}.");
+			}
+
+			var actor = new Database.ModerationActor { Kind = AuditActorKinds.Cli, Name = CliActor(), Source = ModerationSources.Cli };
+			if (parsed.Clear)
+			{
+				Console.WriteLine(await Database.DiscordBotLinks.Clear(db, parsed.UserID, actor)
+					? $"User {parsed.UserID} has no Discord account linked for the bot any more."
+					: $"User {parsed.UserID} had no Discord account linked for the bot.");
+				return 0;
+			}
+
+			if (!Database.DiscordBotLinks.TryParse(parsed.Discord, out Int64 discordUserID))
+			{
+				throw new CliException("A Discord user id is 15 to 20 digits.");
+			}
+
+			(Database.DiscordBotLinkOutcome outcome, Int64? heldBy) = await Database.DiscordBotLinks.Set(db, parsed.UserID, discordUserID, actor);
+			if (outcome == Database.DiscordBotLinkOutcome.InUse)
+			{
+				throw new CliException($"Discord user {discordUserID} is already linked to user {heldBy}.");
+			}
+			Console.WriteLine($"The bot treats Discord user {discordUserID} as user {parsed.UserID}.");
+			return 0;
 		}
 
 		public static async Task<int> RunUsers(string[] args)
@@ -110,6 +158,11 @@ namespace GenOnlineService
 				if ((await db.Database.GetPendingMigrationsAsync()).Any())
 				{
 					throw new CliException("The database has pending migrations. Run \"GenOnlineService migrate\" first.");
+				}
+
+				if (parsed.Command == "discord-bot-link")
+				{
+					return await LinkDiscordBot(db, parsed);
 				}
 
 				if (parsed.Command == "name-reset")

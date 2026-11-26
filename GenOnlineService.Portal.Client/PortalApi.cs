@@ -352,6 +352,10 @@ namespace GenOnlineService.Portal.Client
 
 		public Task<PortalOutcome> RevokeRoleAsync(long userID, string role) => SendAsync(HttpMethod.Delete, $"{PortalRoutes.Players}/{userID}/roles/{Uri.EscapeDataString(role)}", new { });
 
+		public Task<PortalOutcome> LinkDiscordBotAsync(long userID, string discordUserID) => SendAsync(HttpMethod.Put, $"{PortalRoutes.Players}/{userID}/discord_bot_link", new { discord_user_id = discordUserID });
+
+		public Task<PortalOutcome> UnlinkDiscordBotAsync(long userID) => SendAsync(HttpMethod.Delete, $"{PortalRoutes.Players}/{userID}/discord_bot_link", new { });
+
 		public Task<PortalAnswer<PortalRoleList>> ListRolesAsync(CancellationToken cancellationToken = default) => GetAsync<PortalRoleList>(PortalRoutes.Roles, cancellationToken);
 
 		public Task<PortalAnswer<PortalPermissionList>> ListPermissionsAsync(CancellationToken cancellationToken = default) => GetAsync<PortalPermissionList>(PortalRoutes.Permissions, cancellationToken);
