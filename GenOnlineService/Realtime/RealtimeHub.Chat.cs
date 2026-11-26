@@ -318,9 +318,9 @@ namespace GenOnlineService.Realtime
 			}
 
 			string channel = RealtimeGroups.Channel(channelID);
-			await Clients.Group(channel).MemberAdd(new MemberAddEvent { ChannelId = channel, Member = RealtimeMembers.Of(session) });
+			await AnnounceChannelJoinAsync(session, channelID);
 			await Groups.AddToGroupAsync(Context.ConnectionId, channel);
-			await Clients.Caller.ChannelMembers(BuildChannelMembers(channelID));
+			await Clients.Caller.ChannelMembers(BuildChannelMembers(channelID, session.m_UserID));
 			await SendChannelHistoryAsync(channelID);
 		}
 
@@ -352,9 +352,8 @@ namespace GenOnlineService.Realtime
 
 				if (newChannel >= 0)
 				{
-					string channel = RealtimeGroups.Channel(newChannel);
-					await Clients.Group(channel).MemberAdd(new MemberAddEvent { ChannelId = channel, Member = RealtimeMembers.Of(session) });
-					await Groups.AddToGroupAsync(Context.ConnectionId, channel);
+					await AnnounceChannelJoinAsync(session, newChannel);
+					await Groups.AddToGroupAsync(Context.ConnectionId, RealtimeGroups.Channel(newChannel));
 				}
 
 				PublishPresence(session.m_UserID);
@@ -362,7 +361,7 @@ namespace GenOnlineService.Realtime
 
 			if (newChannel >= 0)
 			{
-				await Clients.Caller.ChannelMembers(BuildChannelMembers(newChannel));
+				await Clients.Caller.ChannelMembers(BuildChannelMembers(newChannel, session.m_UserID));
 				await SendChannelHistoryAsync(newChannel);
 			}
 		}
@@ -370,6 +369,12 @@ namespace GenOnlineService.Realtime
 		// MemberRemove carries only the user id, so the user's sessions still in the channel are added again
 		private static async Task AnnounceChannelLeaveAsync(UserSession leaving, Int16 channelID)
 		{
+			// an invisible user was never announced to the others
+			if (RealtimePresence.StatusOf(leaving.m_UserID) == PresenceStatus.Invisible)
+			{
+				return;
+			}
+
 			string channel = RealtimeGroups.Channel(channelID);
 			IRealtimeClient audience = RealtimeOut.Group(channel);
 			await audience.MemberRemove(new MemberRemoveEvent { ChannelId = channel, UserId = leaving.m_UserID });
@@ -383,12 +388,58 @@ namespace GenOnlineService.Realtime
 			}
 		}
 
-		private static ChannelMembersEvent BuildChannelMembers(Int16 channelID)
+		// An invisible user shows in the channel list of no one but themselves
+		internal static bool ChannelVisibleTo(Int64 viewerID, Int64 memberID, PresenceStatus status) => memberID == viewerID || status != PresenceStatus.Invisible;
+
+		private static async Task AnnounceChannelJoinAsync(UserSession session, Int16 channelID)
+		{
+			if (RealtimePresence.StatusOf(session.m_UserID) != PresenceStatus.Invisible)
+			{
+				string channel = RealtimeGroups.Channel(channelID);
+				await RealtimeOut.Group(channel).MemberAdd(new MemberAddEvent { ChannelId = channel, Member = RealtimeMembers.Of(session) });
+			}
+		}
+
+		// Going invisible removes the user from the lists of the others and coming back adds them again, their own connections keep their list
+		private static async Task AnnounceChannelVisibilityAsync(Int64 userID, bool visible)
+		{
+			List<string> own = new();
+			foreach (UserSession session in WebSocketManager.GetAllDataFromUser(userID))
+			{
+				string? connectionID = RealtimeAudience.ConnectionOf(session);
+				if (connectionID != null)
+				{
+					own.Add(connectionID);
+				}
+			}
+
+			foreach (UserSession session in WebSocketManager.GetAllDataFromUser(userID))
+			{
+				if (session.networkRoomID < 0 || RealtimeAudience.ConnectionOf(session) == null)
+				{
+					continue;
+				}
+
+				string channel = RealtimeGroups.Channel(session.networkRoomID);
+				IRealtimeClient audience = RealtimeOut.GroupExcept(channel, own);
+				if (visible)
+				{
+					await audience.MemberAdd(new MemberAddEvent { ChannelId = channel, Member = RealtimeMembers.Of(session) });
+				}
+				else
+				{
+					await audience.MemberRemove(new MemberRemoveEvent { ChannelId = channel, UserId = userID });
+				}
+			}
+		}
+
+		private static ChannelMembersEvent BuildChannelMembers(Int16 channelID, Int64 viewerID)
 		{
 			List<Member> members = new();
 			foreach (UserSession session in RealtimeAudience.AllSessions())
 			{
-				if (session.networkRoomID == channelID && RealtimeAudience.ConnectionOf(session) != null)
+				if (session.networkRoomID == channelID && RealtimeAudience.ConnectionOf(session) != null
+					&& ChannelVisibleTo(viewerID, session.m_UserID, RealtimePresence.StatusOf(session.m_UserID)))
 				{
 					members.Add(RealtimeMembers.Of(session));
 				}

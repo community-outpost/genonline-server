@@ -49,5 +49,15 @@ namespace GenOnlineService.Tests
 			Assert.True(RealtimeHub.ChangesGameTerms(new UpdateLobbyRequest { Settings = new UpdateLobbySettings { StartingCash = 5000 } }));
 			Assert.True(RealtimeHub.ChangesGameTerms(new UpdateLobbyRequest { Visibility = LobbyVisibility.Friends, Settings = new UpdateLobbySettings { AllowObservers = false } }));
 		}
+
+		[Theory]
+		[InlineData(PresenceStatus.Invisible, 5, 5, true)]
+		[InlineData(PresenceStatus.Invisible, 5, 6, false)]
+		[InlineData(PresenceStatus.Online, 5, 6, true)]
+		[InlineData(PresenceStatus.DoNotDisturb, 5, 6, true)]
+		public void InvisibleMembersShowInTheChannelListOfNoOneButThemselves(PresenceStatus status, long viewer, long member, bool shown)
+		{
+			Assert.Equal(shown, RealtimeHub.ChannelVisibleTo(viewer, member, status));
+		}
 	}
 }
