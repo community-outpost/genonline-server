@@ -52,8 +52,16 @@ namespace GenOnlineService.Realtime
 			Source = ModerationSources.Api
 		};
 
-		public static async Task<Result<CreateSanctionResponse>> CreateAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 target, CreateSanctionRequest request, Func<string, Task<Failure?>> requirePermission)
+		public static Task<Result<CreateSanctionResponse>> CreateAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 target, CreateSanctionRequest request, Func<string, Task<Failure?>> requirePermission)
+			=> CreateAsync(dbFactory, ApiActorOf(me), target, request, requirePermission);
+
+		// A staff member's sanction through any route, whose actor names the route in the audit log and must carry the account
+		public static async Task<Result<CreateSanctionResponse>> CreateAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, CreateSanctionRequest request, Func<string, Task<Failure?>> requirePermission)
 		{
+			if (actor.UserID is not Int64)
+			{
+				throw new ArgumentException("A staff sanction needs the acting account", nameof(actor));
+			}
 			if (request.Type is not SanctionType type)
 			{
 				return Result.Invalid("type");
@@ -67,9 +75,9 @@ namespace GenOnlineService.Realtime
 
 			return type switch
 			{
-				SanctionType.Kick => await KickAsync(dbFactory, me, target, request.Reason),
-				SanctionType.Mute => await MuteAsync(dbFactory, me, target, request.DurationS, request.Reason),
-				_ => await BanAsync(dbFactory, me, target, request.DurationS, request.Reason)
+				SanctionType.Kick => await KickAsync(dbFactory, actor, target, request.Reason),
+				SanctionType.Mute => await MuteAsync(dbFactory, actor, target, request.DurationS, request.Reason),
+				_ => await BanAsync(dbFactory, actor, target, request.DurationS, request.Reason)
 			};
 		}
 
@@ -133,15 +141,15 @@ namespace GenOnlineService.Realtime
 			return sanction;
 		}
 
-		private static async Task<Result<CreateSanctionResponse>> KickAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 target, string? reason)
+		private static async Task<Result<CreateSanctionResponse>> KickAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, string? reason)
 		{
-			Failure? failure = CheckModeration(me, target, reason);
+			Failure? failure = CheckModeration(actor.UserID!.Value, target, reason);
 			if (failure != null)
 			{
 				return failure.Value;
 			}
 
-			return await KickAsActorAsync(dbFactory, ApiActorOf(me), target, reason);
+			return await KickAsActorAsync(dbFactory, actor, target, reason);
 		}
 
 		private static async Task<Result<CreateSanctionResponse>> KickAsActorAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, string? reason)
@@ -167,15 +175,15 @@ namespace GenOnlineService.Realtime
 			return await Database.Users.Exists(db, target) ? Result.Fail(ErrorCodes.ModerationTargetOffline) : Result.NotFound("user");
 		}
 
-		private static async Task<Result<CreateSanctionResponse>> MuteAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 target, long? durationS, string? reason)
+		private static async Task<Result<CreateSanctionResponse>> MuteAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, long? durationS, string? reason)
 		{
-			Failure? failure = CheckModeration(me, target, reason) ?? CheckDuration(durationS, required: true);
+			Failure? failure = CheckModeration(actor.UserID!.Value, target, reason) ?? CheckDuration(durationS, required: true);
 			if (failure != null)
 			{
 				return failure.Value;
 			}
 
-			return await MuteAsActorAsync(dbFactory, ApiActorOf(me), target, DateTime.UtcNow.AddSeconds(durationS!.Value), reason);
+			return await MuteAsActorAsync(dbFactory, actor, target, DateTime.UtcNow.AddSeconds(durationS!.Value), reason);
 		}
 
 		private static async Task<Result<CreateSanctionResponse>> MuteAsActorAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, DateTime expiresAt, string? reason, bool unlessActive = false)
@@ -202,15 +210,15 @@ namespace GenOnlineService.Realtime
 			return Result.Success(new CreateSanctionResponse { SanctionId = mute.ID });
 		}
 
-		private static async Task<Result<CreateSanctionResponse>> BanAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 target, long? durationS, string? reason)
+		private static async Task<Result<CreateSanctionResponse>> BanAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, long? durationS, string? reason)
 		{
-			Failure? failure = CheckModeration(me, target, reason, reasonRequired: true) ?? CheckDuration(durationS, required: false);
+			Failure? failure = CheckModeration(actor.UserID!.Value, target, reason, reasonRequired: true) ?? CheckDuration(durationS, required: false);
 			if (failure != null)
 			{
 				return failure.Value;
 			}
 
-			return await BanAsActorAsync(dbFactory, ApiActorOf(me), target, durationS == null ? null : DateTime.UtcNow.AddSeconds(durationS.Value), reason);
+			return await BanAsActorAsync(dbFactory, actor, target, durationS == null ? null : DateTime.UtcNow.AddSeconds(durationS.Value), reason);
 		}
 
 		private static async Task<Result<CreateSanctionResponse>> BanAsActorAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, DateTime? expiresAt, string? reason, bool unlessActive = false)
@@ -263,8 +271,12 @@ namespace GenOnlineService.Realtime
 		}
 
 		// Lifts one mute or ban of this environment, lifting one that already ended succeeds and is still audited
-		public static async Task<Result<Empty>> LiftAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 sanctionID, string? reason, Func<string, Task<Failure?>> requirePermission)
+		public static Task<Result<Empty>> LiftAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 sanctionID, string? reason, Func<string, Task<Failure?>> requirePermission)
+			=> LiftAsync(dbFactory, ApiActorOf(me), sanctionID, reason, requirePermission);
+
+		public static async Task<Result<Empty>> LiftAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 sanctionID, string? reason, Func<string, Task<Failure?>> requirePermission)
 		{
+			Int64 me = actor.UserID ?? throw new ArgumentException("Lifting a sanction needs the acting account", nameof(actor));
 			await using AppDbContext db = await dbFactory.CreateDbContextAsync();
 			Sanction? sanction = sanctionID > 0 ? await Database.Moderation.GetSanction(db, sanctionID) : null;
 			if (sanction == null || sanction.Type == SanctionTypes.Kick)
@@ -285,7 +297,7 @@ namespace GenOnlineService.Realtime
 				return Result.NotFound("sanction");
 			}
 
-			await Database.Moderation.LiftSanction(db, sanction.ID, reason ?? String.Empty, ApiActorOf(me));
+			await Database.Moderation.LiftSanction(db, sanction.ID, reason ?? String.Empty, actor);
 			if (sanction.Type == SanctionTypes.Ban)
 			{
 				// lets the player connect again without waiting for the reload tick

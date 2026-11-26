@@ -288,36 +288,8 @@ public class DiscordBot
 	}
 
 	// Slash commands need no privileged intent, so the bot never reads message content
-	private static ApplicationCommandProperties[] BuildCommands()
-	{
-		// staff commands stay visible to everyone, the service decides who may run them
-		static SlashCommandBuilder Staff(string name, string description) => new SlashCommandBuilder()
-			.WithName(name)
-			.WithDescription(description);
-
-		return new ApplicationCommandProperties[]
-		{
-			new SlashCommandBuilder().WithName("players").WithDescription("Shows how many players are online").Build(),
-			new SlashCommandBuilder().WithName("lobbies").WithDescription("Shows how many lobbies exist").Build(),
-			Staff("uptime", "Shows when the service started").Build(),
-			Staff("peak", "Shows the highest player count since the last restart").Build(),
-			Staff("whois", "Finds the user id of an online player")
-				.AddOption("name", ApplicationCommandOptionType.String, "Display name, or Name#tag", isRequired: true, maxLength: 37)
-				.Build(),
-			Staff("kick", "Kicks an online player from the server")
-				.AddOption("user_id", ApplicationCommandOptionType.Integer, "User id of the player", isRequired: true, minValue: 1)
-				.AddOption("reason", ApplicationCommandOptionType.String, "Reason shown to the player", isRequired: false, maxLength: ModerationManager.MaximumReasonLength)
-				.Build(),
-			Staff("rename", "Replaces an offensive display name, the tag follows the new name")
-				.AddOption("user_id", ApplicationCommandOptionType.Integer, "User id of the player", isRequired: true, minValue: 1)
-				.AddOption("name", ApplicationCommandOptionType.String, "The new display name", isRequired: true, maxLength: GenOnlineService.Realtime.RealtimeHub.NameMaxLength)
-				.AddOption("reason", ApplicationCommandOptionType.String, "Reason kept in the audit log", isRequired: false, maxLength: ModerationManager.MaximumReasonLength)
-				.Build(),
-			Staff("announce", "Sends an announcement to every online player")
-				.AddOption("message", ApplicationCommandOptionType.String, "Announcement text", isRequired: true, maxLength: 512)
-				.Build()
-		};
-	}
+	// Staff commands stay visible to everyone, and the service decides who may run them
+	private string m_root = DiscordCommands.DefaultRoot;
 
 	private bool m_bCommandsRegistered = false;
 
@@ -343,71 +315,62 @@ public class DiscordBot
 			return;
 		}
 
-		await guild.BulkOverwriteApplicationCommandAsync(BuildCommands()).ConfigureAwait(false);
+		string root = Program.g_Config.GetSection("Discord").GetValue<string>("command_name") ?? DiscordCommands.DefaultRoot;
+		if (!DiscordCommands.IsValidRoot(root))
+		{
+			s_log.LogError("Discord:command_name {CommandName} is not a Discord command name (1 to 32 of a-z, 0-9, - and _), slash commands are not registered", root);
+			return;
+		}
+		m_root = root;
+
+		// replaces every command the bot registered before, so a renamed root leaves nothing behind
+		await guild.BulkOverwriteApplicationCommandAsync([DiscordCommands.BuildRoot(root)]).ConfigureAwait(false);
 		m_bCommandsRegistered = true;
 	}
 
-	private static string? RequiredPermission(string commandName) => commandName switch
+	// The GenOnline accounts behind a Discord user, one signing in with that Discord account and one staff linked to it for the
+	// bot only, so a Discord user without either gets no staff command
+	private static async Task<List<Int64>> AccountsOf(ulong discordUserID)
 	{
-		"kick" => Permissions.ModerationKick,
-		"rename" => Permissions.ModerationRename,
-		"whois" => Permissions.ModerationKick,
-		"uptime" => Permissions.ServerStats,
-		"peak" => Permissions.ServerStats,
-		"announce" => Permissions.AnnouncementsSend,
-		_ => null
-	};
-
-	// A GenOnline account with the permission comes first: one signing in with this Discord account, or one staff linked
-	// to it for the bot only. The legacy discord_admins list is the fallback until staff accounts are linked
-	private static async Task<Database.ModerationActor?> ResolveStaff(ulong discordUserID, string permission)
-	{
-		string name = $"discord:{discordUserID}";
-
-		using (var scope = ServiceLocator.Services.CreateScope())
+		using var scope = ServiceLocator.Services.CreateScope();
+		var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+		await using var db = await factory.CreateDbContextAsync();
+		string externUid = discordUserID.ToString();
+		List<Int64> accounts = await db.Identities.AsNoTracking()
+			.Where(i => i.Provider == IdentityProviders.Discord && i.ExternUid == externUid)
+			.Select(i => i.UserID)
+			.ToListAsync();
+		if (discordUserID <= Int64.MaxValue && await Database.DiscordBotLinks.UserOf(db, (Int64)discordUserID) is Int64 botLinked && !accounts.Contains(botLinked))
 		{
-			var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-			await using var db = await factory.CreateDbContextAsync();
-			string externUid = discordUserID.ToString();
-			List<Int64> linkedUserIDs = await db.Identities.AsNoTracking()
-				.Where(i => i.Provider == IdentityProviders.Discord && i.ExternUid == externUid)
-				.Select(i => i.UserID)
-				.ToListAsync();
-			if (discordUserID <= Int64.MaxValue && await Database.DiscordBotLinks.UserOf(db, (Int64)discordUserID) is Int64 botLinked && !linkedUserIDs.Contains(botLinked))
-			{
-				linkedUserIDs.Add(botLinked);
-			}
-
-			foreach (Int64 userID in linkedUserIDs)
-			{
-				if (StaffRoles.HasPermission(userID, permission))
-				{
-					return new Database.ModerationActor { Kind = AuditActorKinds.Discord, UserID = userID, Name = name, Source = ModerationSources.Discord };
-				}
-			}
+			accounts.Add(botLinked);
 		}
-
-		List<UInt64>? legacyAdmins = Program.g_Config?.GetSection("Discord").GetSection("discord_admins").Get<List<UInt64>>();
-		if (legacyAdmins?.Contains(discordUserID) == true)
-		{
-			s_log.LogInformation("Discord user {DiscordUserId} used {Permission} through the discord_admins list", discordUserID, permission);
-			return new Database.ModerationActor { Kind = AuditActorKinds.Discord, Name = name, Source = ModerationSources.Discord };
-		}
-
-		return null;
+		return accounts;
 	}
 
-	private static T? GetOption<T>(SocketSlashCommand command, string name)
+	private static Database.ModerationActor? ActorFor(ulong discordUserID, IEnumerable<Int64> accounts, string permission)
 	{
-		object? value = command.Data.Options.FirstOrDefault(o => o.Name == name)?.Value;
-		return value is T typed ? typed : default;
+		foreach (Int64 userID in accounts)
+		{
+			if (StaffRoles.HasPermission(userID, permission))
+			{
+				return new Database.ModerationActor { Kind = AuditActorKinds.Discord, UserID = userID, Name = $"discord:{discordUserID}", Source = ModerationSources.Discord };
+			}
+		}
+		return null;
 	}
 
 	private async Task OnSlashCommandAsync(SocketSlashCommand command)
 	{
 		try
 		{
-			if (command.CommandName == "players" || command.CommandName == "lobbies")
+			SocketSlashCommandDataOption? sub = command.Data.Options.FirstOrDefault(o => o.Type == ApplicationCommandOptionType.SubCommand);
+			if (command.CommandName != m_root || sub == null)
+			{
+				await command.RespondAsync("Unknown command.", ephemeral: true);
+				return;
+			}
+
+			if (sub.Name == "players" || sub.Name == "lobbies")
 			{
 				if (DoesDiscordClientHaveCooldown(command.ChannelId ?? 0, command.User))
 				{
@@ -417,17 +380,24 @@ public class DiscordBot
 
 				CreateCooldown(command.ChannelId ?? 0, command.User);
 
-				string publicReply = command.CommandName == "players"
+				string publicReply = sub.Name == "players"
 					? $"There are currently {GenOnlineService.WebSocketManager.GetNumberOfUsersOnline()} players online."
 					: $"There are currently {ServiceLocator.Services.GetRequiredService<LobbyManager>().GetNumLobbies()} lobbies.";
 				await command.RespondAsync(publicReply, allowedMentions: AllowedMentions.None);
 				return;
 			}
 
-			string? permission = RequiredPermission(command.CommandName);
-			if (permission == null)
+			DiscordCommand? known = DiscordCommands.Find(sub.Name);
+			if (known == null)
 			{
 				await command.RespondAsync("Unknown command.", ephemeral: true);
+				return;
+			}
+
+			List<Int64> accounts = await AccountsOf(command.User.Id);
+			if (known.Name == DiscordCommands.Help)
+			{
+				await command.RespondAsync(DiscordCommands.HelpText(m_root, permission => accounts.Any(a => StaffRoles.HasPermission(a, permission))), ephemeral: true);
 				return;
 			}
 
@@ -437,16 +407,16 @@ public class DiscordBot
 				return;
 			}
 
-			Database.ModerationActor? actor = await ResolveStaff(command.User.Id, permission);
+			Database.ModerationActor? actor = known.Permission == null ? null : ActorFor(command.User.Id, accounts, known.Permission);
 			if (actor == null)
 			{
-				await command.RespondAsync("You don't have access to this command.", ephemeral: true);
+				await command.RespondAsync($"You don't have access to this command. /{m_root} help lists the ones you can use.", ephemeral: true);
 				return;
 			}
 
-			// kicks and announcements can take longer than the 3 second reply window
+			// a ban or an announcement can take longer than the 3 second reply window
 			await command.DeferAsync();
-			string reply = await RunStaffCommand(command, actor);
+			string reply = await DiscordCommands.RunAsync(sub.Name, sub.Options, actor);
 			await command.FollowupAsync(reply, allowedMentions: AllowedMentions.None);
 		}
 		catch (Exception ex)
@@ -457,77 +427,6 @@ public class DiscordBot
 			{
 				await command.FollowupAsync("The command failed, check the service logs.", ephemeral: true).ConfigureAwait(false);
 			}
-		}
-	}
-
-	private static async Task<string> RunStaffCommand(SocketSlashCommand command, Database.ModerationActor actor)
-	{
-		switch (command.CommandName)
-		{
-			case "uptime":
-			{
-				string startTime = Program.g_LastStartTime.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + " UTC";
-				TimeSpan difference = DateTime.UtcNow.Subtract(Program.g_LastStartTime);
-				return $"The server was last started at {startTime} and the current uptime is Days: {difference.Days}, Hours: {difference.Hours}, Minutes: {difference.Minutes}";
-			}
-			case "peak":
-				return $"The highest player peak seen (since last server restart) is {GenOnlineService.WebSocketManager.g_PeakConnectionCount}";
-			case "whois":
-			{
-				string name = GetOption<string>(command, "name") ?? String.Empty;
-				SharedUserData? userDataFound = GenOnlineService.WebSocketManager.GetSharedDataForUser(name);
-				return userDataFound != null
-					? $"User {Database.DisplayNames.Format(userDataFound.m_strDisplayName, userDataFound.m_NameTag)} is user ID {userDataFound.m_UserID}."
-					: $"User {name} is not active on the server, or more than one active user has that name: use Name#tag.";
-			}
-			case "kick":
-			{
-				Int64 targetUserID = GetOption<Int64>(command, "user_id");
-				string reason = GetOption<string>(command, "reason") ?? String.Empty;
-
-				// a discord_admins entry has no account and keeps admin standing
-				bool bMayModerate = actor.UserID is Int64 actorUserID
-					? StaffRoles.CanModerate(actorUserID, targetUserID)
-					: StaffRoles.Outranks(StaffRoles.AdminRank, targetUserID);
-				if (!bMayModerate)
-				{
-					return "You cannot moderate a member of equal or higher staff rank.";
-				}
-
-				ModerationResult kickResult = await ModerationManager.KickUser(targetUserID, reason, actor);
-
-				return kickResult.Result switch
-				{
-					EModerationResult.ReasonTooLong => $"Kick reason must be {ModerationManager.MaximumReasonLength} characters or fewer.",
-					EModerationResult.TargetNotOnline => $"User {targetUserID} is not active on the server.",
-					_ => String.IsNullOrWhiteSpace(reason)
-						? $"User {targetUserID} ({kickResult.TargetDisplayName}) has been kicked from the server."
-						: $"User {targetUserID} ({kickResult.TargetDisplayName}) has been kicked from the server. Reason: {reason}"
-				};
-			}
-			case "rename":
-			{
-				Int64 targetUserID = GetOption<Int64>(command, "user_id");
-				string name = GetOption<string>(command, "name") ?? String.Empty;
-				string? reason = GetOption<string>(command, "reason");
-				GenOnlineService.Realtime.Result<GenOnlineService.Realtime.Empty> renamed = await ServiceLocator.Services.GetRequiredService<GenOnlineService.Names.PlayerNames>().RenameByStaffAsync(actor, targetUserID, name, reason);
-				return renamed.Ok
-					? $"User {targetUserID} is now named {name}."
-					: $"User {targetUserID} was not renamed: {renamed.Code}.";
-			}
-			case "announce":
-			{
-				string? message = GetOption<string>(command, "message");
-				using var scope = ServiceLocator.Services.CreateScope();
-				var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-				await using var db = await factory.CreateDbContextAsync();
-				(int deliveredTo, GenOnlineService.Realtime.Failure? failure) = await GenOnlineService.Rest.Announcements.SendAsync(db, actor, message);
-				return failure != null
-					? $"Announcement must be 1 to {GenOnlineService.Rest.Announcements.MaximumLength} characters."
-					: $"Announcement '{message!.Trim()}' was delivered to {deliveredTo} users";
-			}
-			default:
-				return "Unknown command.";
 		}
 	}
 
