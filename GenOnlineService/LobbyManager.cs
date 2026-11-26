@@ -2590,9 +2590,26 @@ public async Task FinalizeACChecks()
 
 		public async Task Tick()
 		{
+			// the list flush runs first and apart from the lobbies, so a slow or failing lobby tick cannot hold back the list updates
+			try
+			{
+				LobbyListPublisher.Flush(this);
+			}
+			catch (Exception ex)
+			{
+				_logger.LogError(ex, "Lobby list flush failed");
+			}
+
 			foreach (var kvPair in m_dictLobbies)
 			{
-				await kvPair.Value.Tick();
+				try
+				{
+					await kvPair.Value.Tick();
+				}
+				catch (Exception ex)
+				{
+					_logger.LogError(ex, "Tick of lobby {LobbyId} failed", kvPair.Key);
+				}
 			}
 
 			await DropUnclaimedRestoredMembersAsync();

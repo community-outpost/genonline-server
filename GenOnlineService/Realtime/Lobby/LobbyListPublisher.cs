@@ -106,15 +106,23 @@ namespace GenOnlineService.Realtime
 				{
 					foreach (Int64 lobbyID in dirty)
 					{
-						Lobby? lobby = lobbyManager.GetLobby(lobbyID);
-						if (lobby != null && RealtimeLobbies.IsListedFor(lobby, watcher.Session))
+						// the dirty marks are already taken, so one failing lobby must not drop the updates of the others
+						try
 						{
-							watcher.Visible.Add(lobbyID);
-							RealtimeOut.Fire(client.LobbyListUpsert(new LobbyListUpsertEvent { Lobby = RealtimeLobbies.SummaryOf(lobby, watcher.Session) }));
+							Lobby? lobby = lobbyManager.GetLobby(lobbyID);
+							if (lobby != null && RealtimeLobbies.IsListedFor(lobby, watcher.Session))
+							{
+								watcher.Visible.Add(lobbyID);
+								RealtimeOut.Fire(client.LobbyListUpsert(new LobbyListUpsertEvent { Lobby = RealtimeLobbies.SummaryOf(lobby, watcher.Session) }));
+							}
+							else if (watcher.Visible.Remove(lobbyID))
+							{
+								RealtimeOut.Fire(client.LobbyListRemove(new LobbyIdEvent { LobbyId = lobbyID }));
+							}
 						}
-						else if (watcher.Visible.Remove(lobbyID))
+						catch (Exception ex)
 						{
-							RealtimeOut.Fire(client.LobbyListRemove(new LobbyIdEvent { LobbyId = lobbyID }));
+							AppLog.For(typeof(LobbyListPublisher)).LogError(ex, "Publishing lobby {LobbyId} to a list watcher failed", lobbyID);
 						}
 					}
 				}
