@@ -131,6 +131,7 @@ namespace GenOnlineService.Realtime
 			{
 				return badName;
 			}
+			string lobbyName = request.Name.Trim();
 			if (request.Map == null) return Result.Invalid("map");
 			if (!IsValidText(request.Map.Name, MapNameMaxLength)) return Result.Invalid("map.name");
 			if (!IsValidText(request.Map.Path, MapPathMaxLength)) return Result.Invalid("map.path");
@@ -158,7 +159,7 @@ namespace GenOnlineService.Realtime
 			{
 				(string Name, int Tag) owner = await global::Database.DisplayNames.Get(db, UserID) ?? (String.Empty, 0);
 				LobbySettings settings = request.Settings;
-				lobbyID = await m_lobbyManager.CreateLobby(db, session, owner.Name, request.Name, request.Map.Name, request.Map.Path, request.Map.Official, request.MaxPlayers,
+				lobbyID = await m_lobbyManager.CreateLobby(db, session, owner.Name, lobbyName, request.Map.Name, request.Map.Path, request.Map.Official, request.MaxPlayers,
 					(UInt16)request.PreferredPort, settings.VanillaTeams, settings.TrackStats, (UInt32)settings.StartingCash, settings.LimitSuperweapons,
 					request.Password != null, request.Password ?? String.Empty, session.networkRoomID, settings.AllowObservers, (UInt16)settings.MaxCameraHeight,
 					GameBuild.Of(build), ELobbyType.CustomGame,
@@ -323,7 +324,7 @@ namespace GenOnlineService.Realtime
 				}
 				if (request.Name != null)
 				{
-					lobby.UpdateName(request.Name);
+					lobby.UpdateName(request.Name.Trim());
 				}
 				return null;
 			});
@@ -954,9 +955,17 @@ namespace GenOnlineService.Realtime
 
 		// the one check of a lobby name, on create and rename: length and text rules, then a blocked word is refused as in a display name
 		internal static Failure? LobbyNameFailure(string? name) =>
-			!IsValidText(name, LobbyNameMaxLength) ? Result.Invalid("name") : TextRules.TextChecks.LobbyNameRefusal(name!);
+			!IsValidLobbyName(name) ? Result.Invalid("name") : TextRules.TextChecks.LobbyNameRefusal(name!.Trim());
 
 		private static bool IsValidText(string? text, int maxLength) => text != null && text.Length <= maxLength && !text.Contains('\0');
+
+		// A lobby name is shown to others, so it has text after trimming and no control or bidirectional override characters
+		private static bool IsValidLobbyName(string? name)
+		{
+			string? trimmed = name?.Trim();
+			return IsValidText(trimmed, LobbyNameMaxLength) && trimmed!.Length > 0
+				&& !trimmed.Any(c => Char.IsControl(c) || (c >= '\u202A' && c <= '\u202E') || (c >= '\u2066' && c <= '\u2069'));
+		}
 
 		// side, color and start position are game ids, -1 means random
 		// Slot fields outside the game's own ranges are refused, the client indexes arrays with them; a null team clears it

@@ -24,8 +24,14 @@ namespace GenOnlineService.Tests
 
 		[Theory]
 		[InlineData("new name", null)]
-		[InlineData("", null)]
+		[InlineData("", ErrorCodes.InvalidArgument)]
+		[InlineData("   ", ErrorCodes.InvalidArgument)]
+		[InlineData("  padded  ", null)]
 		[InlineData("bad\0name", ErrorCodes.InvalidArgument)]
+		[InlineData("bad\nname", ErrorCodes.InvalidArgument)]
+		[InlineData("bad\u202Ename", ErrorCodes.InvalidArgument)]
+		[InlineData("bad\u2066name", ErrorCodes.InvalidArgument)]
+		[InlineData("bad\u2069name", ErrorCodes.InvalidArgument)]
 		public void NameCheckIsTheCreateCheck(string name, string? code)
 		{
 			Assert.Equal(code, RealtimeHub.LobbyNameFailure(name)?.Code);
