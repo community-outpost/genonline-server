@@ -283,7 +283,8 @@ namespace GenOnlineService.Realtime
 
 			// a rename is no game term, so it alone keeps the ready flags
 			bool changes = request.Map != null || request.Visibility != null
-				|| request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null || request.Settings?.MaxCameraHeight != null;
+				|| request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null || request.Settings?.MaxCameraHeight != null
+				|| request.Settings?.VanillaTeams != null || request.Settings?.AllowObservers != null;
 
 			return ChangeLobbyAsync(hostOnly: true, resetsReady: changes, async (lobby, member) =>
 			{
@@ -311,6 +312,15 @@ namespace GenOnlineService.Realtime
 				if (request.Settings?.MaxCameraHeight is int cameraHeight)
 				{
 					lobby.UpdateMaxCameraHeight((UInt16)cameraHeight);
+				}
+				// track_stats and the anticheat stay as the lobby was created
+				if (request.Settings?.VanillaTeams is bool vanillaTeams)
+				{
+					lobby.UpdateVanillaTeams(vanillaTeams);
+				}
+				if (request.Settings?.AllowObservers is bool allowObservers)
+				{
+					lobby.UpdateAllowObservers(allowObservers);
 				}
 				if (request.Visibility is LobbyVisibility newVisibility)
 				{

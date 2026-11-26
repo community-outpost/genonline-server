@@ -44,7 +44,8 @@ namespace GenOnlineService.Realtime
 		// The playlist sets the map, the starting cash and the superweapon limit of a quick match lobby, so no member changes them
 		public static Failure? RefuseQuickMatchSettings(Lobby lobby, UpdateLobbyRequest request)
 		{
-			if (lobby.LobbyType == ELobbyType.QuickMatch && (request.Map != null || request.Name != null || request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null))
+			if (lobby.LobbyType == ELobbyType.QuickMatch && (request.Map != null || request.Name != null || request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null
+				|| request.Settings?.VanillaTeams != null || request.Settings?.AllowObservers != null))
 			{
 				return Result.Fail(ErrorCodes.LobbyNotHost);
 			}
@@ -134,7 +135,7 @@ namespace GenOnlineService.Realtime
 				HostId = lobby.Owner,
 				Type = lobby.LobbyType == ELobbyType.QuickMatch ? LobbyType.QuickMatch : LobbyType.Custom,
 				State = StageOf(lobby.State),
-				Visibility = lobby.LobbyJoinability == ELobbyJoinability.FriendsOnly ? LobbyVisibility.Friends : LobbyVisibility.Public,
+				Visibility = VisibilityOf(lobby),
 				HasPassword = lobby.IsPassworded,
 				Map = new MapRef { Name = lobby.MapName, Path = lobby.MapPathWire, Official = lobby.IsMapOfficial },
 				Region = lobby.Region,
@@ -154,6 +155,8 @@ namespace GenOnlineService.Realtime
 			};
 		}
 
+		public static LobbyVisibility VisibilityOf(Lobby lobby) => lobby.LobbyJoinability == ELobbyJoinability.FriendsOnly ? LobbyVisibility.Friends : LobbyVisibility.Public;
+
 		// Without a viewer session (a REST caller with no hub connection) the latency estimate is 0
 		public static LobbySummary SummaryOf(Lobby lobby, UserSession? viewer)
 		{
@@ -166,6 +169,7 @@ namespace GenOnlineService.Realtime
 				Map = new LobbySummaryMap { Name = lobby.MapName, Official = lobby.IsMapOfficial, Path = lobby.MapPathWire },
 				Players = lobby.NumCurrentPlayers,
 				MaxPlayers = lobby.MaxPlayers,
+				Visibility = VisibilityOf(lobby),
 				HasPassword = lobby.IsPassworded,
 				Region = lobby.Region,
 				LatencyMs = viewer == null ? 0 : EstimateLatencyMs(lobby, viewer),
@@ -176,7 +180,8 @@ namespace GenOnlineService.Realtime
 					LimitSuperweapons = lobby.IsLimitSuperweapons,
 					VanillaTeams = lobby.IsVanillaTeamsOnly,
 					TrackStats = lobby.IsTrackingStats,
-					AllowObservers = lobby.AllowObservers
+					AllowObservers = lobby.AllowObservers,
+					MaxCameraHeight = lobby.MaximumCameraHeight
 				},
 				Build = new BuildIdentity { ExeCrc = lobby.ExeCRC, IniCrc = lobby.IniCRC },
 				CreatedAt = lobby.TimeCreated,

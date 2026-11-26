@@ -2212,13 +2212,34 @@ public async Task FinalizeACChecks()
 			}
 		}
 
+		// the lobby list shows the camera height too
 		public void UpdateMaxCameraHeight(UInt16 maxCamHeight)
 		{
 			if (maxCamHeight >= 210 && maxCamHeight <= 1000)
 			{
 				MaximumCameraHeight = maxCamHeight;
-				DirtyRetransmit();
+				DirtyRetransmitLobbyList();
 			}
+		}
+
+		public void UpdateVanillaTeams(bool bVanillaTeams)
+		{
+			IsVanillaTeamsOnly = bVanillaTeams;
+			DirtyRetransmitLobbyList();
+		}
+
+		// Closing the observer seat sends everyone on it to random, as a join does when the lobby has no observers
+		public void UpdateAllowObservers(bool bAllowObservers)
+		{
+			AllowObservers = bAllowObservers;
+			if (!bAllowObservers)
+			{
+				foreach (LobbyMember member in Members.Where(m => m.Side == ClientFeatures.ObserverSide))
+				{
+					member.SetSide(-1);
+				}
+			}
+			DirtyRetransmitLobbyList();
 		}
 
 		public void ResetReadyStates()

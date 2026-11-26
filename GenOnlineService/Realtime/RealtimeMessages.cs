@@ -150,6 +150,7 @@ namespace GenOnlineService.Realtime
 		public bool VanillaTeams { get; init; }
 		public bool TrackStats { get; init; }
 		public bool AllowObservers { get; init; }
+		public int MaxCameraHeight { get; init; }
 	}
 
 	public sealed record BuildIdentity
@@ -177,6 +178,7 @@ namespace GenOnlineService.Realtime
 		public LobbySummaryMap Map { get; init; } = new LobbySummaryMap();
 		public int Players { get; init; }
 		public int MaxPlayers { get; init; }
+		public LobbyVisibility Visibility { get; init; }
 		public bool HasPassword { get; init; }
 		public string Region { get; init; } = "";
 		public int LatencyMs { get; init; }
@@ -333,6 +335,10 @@ namespace GenOnlineService.Realtime
 		public int? StartingCash { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public bool? LimitSuperweapons { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public bool? VanillaTeams { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public bool? AllowObservers { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public int? MaxCameraHeight { get; init; }
 	}
