@@ -9,6 +9,24 @@ namespace GenOnlineService.Tests
 		private static string? Refusal(int? side = null, int? color = null, Optional<int?> team = default, int? startPosition = null, string prefix = "") =>
 			JsonSerializer.Serialize(RealtimeHub.SlotFieldFailure(side, color, team, startPosition, prefix)?.Params);
 
+		[Fact]
+		public void FreeFavoriteColorIsKeptForAJoiner() => Assert.Equal(3, Lobby.ColorForJoiner(3, [0, 1, -1]));
+
+		[Fact]
+		public void TakenFavoriteColorStartsTheJoinerOnRandom() => Assert.Equal(-1, Lobby.ColorForJoiner(0, [-1, 0]));
+
+		[Theory]
+		[InlineData(-1)]
+		[InlineData(-5)]
+		[InlineData(8)]
+		public void RandomOrInvalidFavoriteStartsTheJoinerOnRandom(int favorite) => Assert.Equal(-1, Lobby.ColorForJoiner(favorite, []));
+
+		[Fact]
+		public void RandomIsNeverTaken() => Assert.False(Lobby.IsColorTaken(-1, [-1, -1]));
+
+		[Fact]
+		public void ColorHeldByAnotherSlotIsTaken() => Assert.True(Lobby.IsColorTaken(2, [5, 2]));
+
 		[Theory]
 		[InlineData(-1)]
 		[InlineData(0)]

@@ -1234,6 +1234,10 @@ namespace GenOnlineService
 		// The slot ranges the game itself accepts (GameInfo.cpp ParseAsciiStringToGameInfo), the client indexes arrays with these
 		public const int MultiplayerColorCount = 8; // Zero Hour multiplayer.ini
 		public static bool IsValidColor(int color) => color >= -1 && color < MultiplayerColorCount;
+		// random never conflicts, a real colour belongs to one occupied slot at a time
+		public static bool IsColorTaken(int color, IEnumerable<int> otherColors) => color >= 0 && otherColors.Contains(color);
+		// a favourite that is invalid or already used by another player or AI starts the joiner on random
+		public static int ColorForJoiner(int favorite, IEnumerable<int> otherColors) => IsValidColor(favorite) && !IsColorTaken(favorite, otherColors) ? favorite : -1;
 		public static bool IsValidStartPosition(int startPosition) => startPosition >= -1 && startPosition < MaxLobbySize;
 		public static bool IsValidTeam(int team) => team >= -1 && team < MaxLobbySize / 2;
 		// random, the observer seat or one of the twelve playable factions (the Boss General is not offered)
@@ -1661,18 +1665,8 @@ public async Task FinalizeACChecks()
 					sideToUse = -1;
 				}
 
-				// if our preferred color is already in use, revert to random
-				int colorToUse = IsValidColor(lobbyPrefs.favorite_color) ? lobbyPrefs.favorite_color : -1;
-				foreach (var memberEntry in Members)
-				{
-					// NOTE: only occupied slots matter - empty/closed placeholder slots have Color 0, which would
-					// otherwise always force players who prefer color 0 onto a random color
-					if (memberEntry.IsHuman() && memberEntry.Color == lobbyPrefs.favorite_color)
-					{
-						colorToUse = -1;
-						break;
-					}
-				}
+				// only occupied slots count, empty and closed placeholders hold no colour of a player
+				int colorToUse = ColorForJoiner(lobbyPrefs.favorite_color, Members.Where(m => m.IsHuman() || m.IsAI()).Select(m => m.Color));
 
 				newMember = new LobbyMember(this, playerSession, playerSession.m_UserID, strDisplayName, strOriginalDisplayName, userPreferredPort, sideToUse, colorToUse, -1, EPlayerType.SLOT_PLAYER, slotIndex, bHasMap, nameTag);
 			}

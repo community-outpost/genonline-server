@@ -378,6 +378,11 @@ namespace GenOnlineService.Realtime
 				{
 					return Result.Invalid("side");
 				}
+				// a colour another player or AI holds is refused, so it never becomes the favourite either
+				if (request.Color is int wanted && Lobby.IsColorTaken(wanted, lobby.Members.Where(m => m != member && (m.IsHuman() || m.IsAI())).Select(m => m.Color)))
+				{
+					return Result.Invalid("color");
+				}
 				if (request.Side != null || request.Color != null)
 				{
 					await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
@@ -477,6 +482,14 @@ namespace GenOnlineService.Realtime
 					if (!lobby.AllowObservers || (target != null && target.IsAI()))
 					{
 						return Result.Invalid("slots.side");
+					}
+				}
+				foreach (SlotPatch patch in request.Slots.Where(p => p.Color >= 0))
+				{
+					LobbyMember? target = lobby.GetMemberFromSlot(patch.Index);
+					if (Lobby.IsColorTaken(patch.Color!.Value, lobby.Members.Where(m => m != target && (m.IsHuman() || m.IsAI())).Select(m => m.Color)))
+					{
+						return Result.Invalid("slots.color");
 					}
 				}
 				foreach (SlotPatch patch in request.Slots)
