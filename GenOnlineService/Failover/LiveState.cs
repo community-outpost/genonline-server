@@ -246,6 +246,7 @@ namespace GenOnlineService.Failover
 		public int StartPosition { get; init; }
 		public bool HasMap { get; init; }
 		public string Region { get; init; } = String.Empty;
+		public long JoinSequence { get; init; }
 	}
 
 	public sealed record LobbyStartLive

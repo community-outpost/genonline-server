@@ -165,6 +165,7 @@ namespace GenOnlineService
 					Color = member.Color,
 					StartPosition = member.StartingPosition,
 					HasMap = member.HasMap,
+					JoinSequence = member.JoinSequence,
 					Region = member.Region
 				}).ToList(),
 				EverMembers = m_EverMemberUserIDs.Keys.OrderBy(id => id).ToList(),
@@ -265,6 +266,7 @@ namespace GenOnlineService
 				members[slot.SlotIndex] = LobbyMember.FromLive(lobby, slot);
 			}
 			lobby.Members = members;
+			lobby.m_JoinCounter = members.Max(member => member.JoinSequence);
 
 			foreach (long userID in live.EverMembers ?? new())
 			{
@@ -469,6 +471,7 @@ namespace GenOnlineService
 			member.Team = slot.Team;
 			member.m_Ready = slot.Ready;
 			member.Region = slot.Region ?? "Unknown";
+			member.JoinSequence = slot.JoinSequence;
 			return member;
 		}
 	}

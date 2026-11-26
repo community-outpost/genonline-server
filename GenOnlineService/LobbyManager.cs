@@ -131,6 +131,8 @@ namespace GenOnlineService
 		// held.
 		private readonly SemaphoreSlim m_LobbyGate = new SemaphoreSlim(1, 1);
 
+		private long m_JoinCounter;
+
 #if DEBUG
 		// Debug-only reentrancy guard. AsyncLocal flows through the awaited async chain (and into
 		// fire-and-forget children too, since ExecutionContext is captured when they're created), so
@@ -1461,28 +1463,25 @@ public async Task FinalizeACChecks()
 		{
 			Int64 oldOwner = Owner;
 
-			foreach (LobbyMember member in Members)
+			// the human who joined earliest becomes the host
+			LobbyMember? member = Members.Where(candidate => candidate.IsHuman() && candidate.UserID != oldOwner).MinBy(candidate => candidate.JoinSequence);
+			if (member == null)
 			{
-				if (member.SlotState == EPlayerType.SLOT_PLAYER)
-				{
-					if (member.UserID != oldOwner)
-					{
-						UInt16 oldSlot = member.SlotIndex;
-
-						Owner = member.UserID;
-
-						member.UpdateSlotIndex(0);
-						var migrated = (LobbyMember[])Members.Clone();
-						migrated[0] = member;
-						migrated[oldSlot] = new LobbyMember(this, null, -1, String.Empty, String.Empty, 0, -1, -1, -1, EPlayerType.SLOT_OPEN, oldSlot, true);
-						Members = migrated;
-
-						member.SetReadyState(true);
-						DirtyRetransmitLobbyList();
-						break;
-					}
-				}
+				return;
 			}
+
+			UInt16 oldSlot = member.SlotIndex;
+
+			Owner = member.UserID;
+
+			member.UpdateSlotIndex(0);
+			var migrated = (LobbyMember[])Members.Clone();
+			migrated[0] = member;
+			migrated[oldSlot] = new LobbyMember(this, null, -1, String.Empty, String.Empty, 0, -1, -1, -1, EPlayerType.SLOT_OPEN, oldSlot, true);
+			Members = migrated;
+
+			member.SetReadyState(true);
+			DirtyRetransmitLobbyList();
 		}
 
 		private void CalculateNextProbeTime(bool bIsFirstProbe)
@@ -1701,6 +1700,7 @@ public async Task FinalizeACChecks()
 				newMember = new LobbyMember(this, playerSession, playerSession.m_UserID, strDisplayName, strOriginalDisplayName, userPreferredPort, sideToUse, -1, -1, EPlayerType.SLOT_PLAYER, slotIndex, bHasMap, nameTag);
 			}
 
+			newMember.JoinSequence = ++m_JoinCounter;
 			Members[slotIndex] = newMember;
 			ForgetConnectionsOf(playerSession.m_UserID);
 			++m_MembershipVersion;
@@ -2289,6 +2289,10 @@ public async Task FinalizeACChecks()
 		}
 
 		public UInt16 Port { get; private set; } = 0;
+
+		// The order in which members joined, the earliest present human inherits the host
+		[JsonIgnore]
+		public long JoinSequence { get; internal set; }
 
 		public void UpdateSlotIndex(UInt16 index)
 		{
