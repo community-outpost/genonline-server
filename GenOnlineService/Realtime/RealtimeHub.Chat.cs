@@ -98,7 +98,9 @@ namespace GenOnlineService.Realtime
 					}
 
 					store = db => Database.Chat.InsertChannelMessage(db, channelID, author, storedType, content, mentions);
-					mentionable = () => RealtimeAudience.AllSessions().Where(s => s.networkRoomID == channelID && RealtimeAudience.ConnectionOf(s) != null).Select(s => s.m_UserID);
+					// an invisible member is not in the channel list of the author, so a bare @name does not find them either
+					mentionable = () => RealtimeAudience.AllSessions().Where(s => s.networkRoomID == channelID && RealtimeAudience.ConnectionOf(s) != null
+						&& ChannelVisibleTo(author, s.m_UserID, RealtimePresence.StatusOf(s.m_UserID))).Select(s => s.m_UserID);
 					if (RealtimeFanout.IsShared)
 					{
 						long[] skipped = await BlockedEitherWayOfAsync(author);
