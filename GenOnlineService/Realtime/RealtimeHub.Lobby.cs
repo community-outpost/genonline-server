@@ -344,6 +344,10 @@ namespace GenOnlineService.Realtime
 
 			return ChangeLobbyAsync(hostOnly: true, resetsReady: true, (lobby, member) =>
 			{
+				if (RealtimeLobbies.RefuseQuickMatchPassword(lobby) is Failure locked)
+				{
+					return Task.FromResult<Failure?>(locked);
+				}
 				if (request.Password == null)
 				{
 					lobby.RemovePassword();

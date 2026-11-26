@@ -44,13 +44,17 @@ namespace GenOnlineService.Realtime
 		// The playlist sets the map, the starting cash and the superweapon limit of a quick match lobby, so no member changes them
 		public static Failure? RefuseQuickMatchSettings(Lobby lobby, UpdateLobbyRequest request)
 		{
-			if (lobby.LobbyType == ELobbyType.QuickMatch && (request.Map != null || request.Name != null || request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null
+			if (lobby.LobbyType == ELobbyType.QuickMatch && (request.Map != null || request.Name != null || request.Visibility != null || request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null
 				|| request.Settings?.VanillaTeams != null || request.Settings?.AllowObservers != null))
 			{
 				return Result.Fail(ErrorCodes.LobbyNotHost);
 			}
 			return null;
 		}
+
+		// The password of a quick match lobby is none, so nobody sets one
+		public static Failure? RefuseQuickMatchPassword(Lobby lobby) =>
+			lobby.LobbyType == ELobbyType.QuickMatch ? Result.Fail(ErrorCodes.LobbyNotHost) : null;
 
 		public static AnticheatQuickMatchReport QuickMatchRuleReportOf(Lobby lobby, Int64 userID, string method, IEnumerable<int?> sides, DateTime now)
 		{
