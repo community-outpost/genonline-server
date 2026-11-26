@@ -39,5 +39,15 @@ namespace GenOnlineService.Tests
 			Assert.Equal(ErrorCodes.LobbyNotHost, RealtimeLobbies.RefuseQuickMatchSettings(NewLobby(ELobbyType.QuickMatch), visibility)?.Code);
 			Assert.Null(RealtimeLobbies.RefuseQuickMatchSettings(NewLobby(), visibility));
 		}
+
+		[Fact]
+		public void OnlyGameTermsResetReadyFlagsAndThePendingStart()
+		{
+			Assert.False(RealtimeHub.ChangesGameTerms(new UpdateLobbyRequest { Visibility = LobbyVisibility.Friends }));
+			Assert.False(RealtimeHub.ChangesGameTerms(new UpdateLobbyRequest { Name = "new" }));
+			Assert.True(RealtimeHub.ChangesGameTerms(new UpdateLobbyRequest { Map = new UpdateLobbyMap { Name = "m", Path = "p", MaxPlayers = 2 } }));
+			Assert.True(RealtimeHub.ChangesGameTerms(new UpdateLobbyRequest { Settings = new UpdateLobbySettings { StartingCash = 5000 } }));
+			Assert.True(RealtimeHub.ChangesGameTerms(new UpdateLobbyRequest { Visibility = LobbyVisibility.Friends, Settings = new UpdateLobbySettings { AllowObservers = false } }));
+		}
 	}
 }

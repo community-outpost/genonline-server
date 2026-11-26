@@ -281,12 +281,7 @@ namespace GenOnlineService.Realtime
 			if (request.Visibility is LobbyVisibility visibility && !Enum.IsDefined(visibility)) return Invalid("visibility");
 			if (request.Name != null && LobbyNameFailure(request.Name) is Failure badName) return Task.FromResult<Result<Empty>>(badName);
 
-			// a rename is no game term, so it alone keeps the ready flags
-			bool changes = request.Map != null || request.Visibility != null
-				|| request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null || request.Settings?.MaxCameraHeight != null
-				|| request.Settings?.VanillaTeams != null || request.Settings?.AllowObservers != null;
-
-			return ChangeLobbyAsync(hostOnly: true, resetsReady: changes, async (lobby, member) =>
+			return ChangeLobbyAsync(hostOnly: true, resetsReady: ChangesGameTerms(request), async (lobby, member) =>
 			{
 				if (RealtimeLobbies.RefuseQuickMatchSettings(lobby, request) is Failure locked)
 				{
@@ -334,6 +329,11 @@ namespace GenOnlineService.Realtime
 			});
 		}
 
+		// a rename and the access settings are no game terms, so they keep the ready flags and a pending start
+		internal static bool ChangesGameTerms(UpdateLobbyRequest request) => request.Map != null
+			|| request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null || request.Settings?.MaxCameraHeight != null
+			|| request.Settings?.VanillaTeams != null || request.Settings?.AllowObservers != null;
+
 		public Task<Result<Empty>> SetLobbyPassword(SetLobbyPasswordRequest request)
 		{
 			if (RefuseOnMovingLobby() is Failure moving)
@@ -342,7 +342,8 @@ namespace GenOnlineService.Realtime
 			}
 			if (request.Password != null && !IsValidText(request.Password, LobbyPasswordMaxLength)) return Invalid("password");
 
-			return ChangeLobbyAsync(hostOnly: true, resetsReady: true, (lobby, member) =>
+			// a password is no game term, so it keeps the ready flags and a pending start
+			return ChangeLobbyAsync(hostOnly: true, resetsReady: false, (lobby, member) =>
 			{
 				if (RealtimeLobbies.RefuseQuickMatchPassword(lobby) is Failure locked)
 				{
@@ -920,7 +921,7 @@ namespace GenOnlineService.Realtime
 				Failure? changeFailure = await change(lobby, member);
 				if (changeFailure == null && resetsReady)
 				{
-					// every change except ready, has map, force ready and kick clears ready flags and a pending start
+					// a game term change clears ready flags and a pending start
 					lobby.ResetReadyStates();
 					lobby.CancelStartForSettingsChangeLocked();
 				}
