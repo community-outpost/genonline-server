@@ -100,6 +100,15 @@ namespace GenOnlineService.Portal.Client
 
 		public static string RosterType(string? roster) => Sentence(roster);
 
+		public static string ReporterBand(string? band) => Key(band) switch
+		{
+			"reliable" => "Reliable",
+			"mixed" => "Mixed",
+			"oftendismissed" => "Often dismissed",
+			"new" => "New reporter",
+			_ => band ?? ""
+		};
+
 		public static string EacKind(string? kind) => Key(kind) switch
 		{
 			"actionrequired" => "Action required",

@@ -1715,6 +1715,7 @@ namespace GenOnlineService.Portal.Client
 		public long? MatchId { get; init; }
 		public long? LobbyId { get; init; }
 		public PortalMember? Reporter { get; init; }
+		public PortalReporterScore? ReporterScore { get; init; }
 		public string? Category { get; init; }
 		public string? MessageId { get; init; }
 		public IReadOnlyList<PortalCaseMessage>? Conversation { get; init; }
@@ -1742,9 +1743,23 @@ namespace GenOnlineService.Portal.Client
 		public System.Text.Json.JsonElement? Facts { get; init; }
 	}
 
+	// Context for reviewers only, never shown to players
+	public sealed record PortalReporterScore
+	{
+		public int Upheld { get; init; }
+		public int Decided { get; init; }
+		public string Band { get; init; } = "";
+	}
+
+	public sealed record PortalReporterScoreResponse
+	{
+		public PortalReporterScore ReporterScore { get; init; } = new PortalReporterScore();
+	}
+
 	public sealed record PortalCaseEacWitness
 	{
 		public PortalMember Reporter { get; init; } = new PortalMember();
+		public PortalReporterScore ReporterScore { get; init; } = new PortalReporterScore();
 		public DateTime At { get; init; }
 		public int Action { get; init; }
 		public int ReasonCode { get; init; }

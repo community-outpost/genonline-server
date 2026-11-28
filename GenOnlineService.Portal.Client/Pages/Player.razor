@@ -457,6 +457,26 @@ else
                     }
                 </BbCardContent>
             </BbCard>
+            <BbCard Class="bb:mt-4" data-testid="player-reports-filed">
+                <BbCardHeader>
+                    <BbCardTitle As="h2">Reports filed</BbCardTitle>
+                    <BbCardDescription>How often the decided reports of this player ended in a sanction. It is context for reviewers and never changes the queue.</BbCardDescription>
+                </BbCardHeader>
+                <BbCardContent>
+                    @if (m_filed == null)
+                    {
+                        <span class="go-muted">Not loaded</span>
+                    }
+                    else
+                    {
+                        <ReporterScoreBadge Score="@m_filed" />
+                        @if (m_filed.Decided == 0)
+                        {
+                            <span class="go-muted">No decided reports yet</span>
+                        }
+                    }
+                </BbCardContent>
+            </BbCard>
             @if (m_eac.Count > 0)
             {
                 <BbCard Class="bb:mt-4" data-testid="player-eac">
@@ -1138,6 +1158,7 @@ else
         m_connections = null;
         m_connectionsError = null;
         m_cases = null;
+        m_filed = null;
         m_casesError = null;
         m_eac = [];
         m_epic = [];
@@ -1271,6 +1292,7 @@ else
     // the Cases tab loads on first open; the host audits that read
     private List<PortalCaseSummary>? m_cases;
     private string? m_casesError;
+    private PortalReporterScore? m_filed;
     private List<PortalCaseSignal> m_eac = [];
     private List<PortalCaseSignal> m_epic = [];
 
@@ -1283,6 +1305,7 @@ else
         PortalAnswer<PortalCase> answer = await Api.GetWaitingCaseAsync(Id);
         m_casesError = answer.Ok ? null : answer.Error;
         m_cases = (answer.Value?.Standing.PriorCases ?? []).ToList();
+        m_filed = (await Api.GetReporterScoreAsync(Id)).Value?.ReporterScore;
         m_eac = (answer.Value?.Signals ?? []).Where(signal => signal.Kind == "eac").ToList();
         m_epic = (answer.Value?.Signals ?? []).Where(signal => signal.Kind == "epic").ToList();
     }

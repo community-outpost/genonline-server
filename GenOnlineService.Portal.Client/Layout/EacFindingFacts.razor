@@ -11,7 +11,7 @@
             <li>
                 <dl class="go-case-facts">
                     <dt>Reported by</dt>
-                    <dd><BbLink Href="@PortalRoutes.PlayerPage(witness.Reporter.Id)">@witness.Reporter.FullName</BbLink> <When Value="@witness.At" /></dd>
+                    <dd><BbLink Href="@PortalRoutes.PlayerPage(witness.Reporter.Id)">@witness.Reporter.FullName</BbLink> <ReporterScoreBadge Score="@witness.ReporterScore" /> <When Value="@witness.At" /></dd>
                     @if (Signal.EacKind == "integrity_violation")
                     {
                         <dt>Violation</dt><dd>@PortalWords.EacViolation(witness.ViolationType) <span class="go-muted">(@witness.ViolationType)</span></dd>

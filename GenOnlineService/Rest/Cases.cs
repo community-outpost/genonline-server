@@ -108,6 +108,8 @@ namespace GenOnlineService.Rest
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public Member? Reporter { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public ReporterScoreView? ReporterScore { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public string? Category { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public string? MessageId { get; init; }
@@ -169,6 +171,7 @@ namespace GenOnlineService.Rest
 	public sealed record CaseEacWitness
 	{
 		public Member Reporter { get; init; } = new Member();
+		public ReporterScoreView ReporterScore { get; init; } = new ReporterScoreView();
 		public DateTime At { get; init; }
 		public int Action { get; init; }
 		public int ReasonCode { get; init; }
@@ -323,6 +326,8 @@ namespace GenOnlineService.Rest
 			people.UnionWith(witnesses.Values.SelectMany(list => list).Select(w => w.ReporterId));
 			people.UnionWith(history.Append(shown).Where(c => c != null).SelectMany(c => new[] { c!.ClaimedByID ?? 0, c.ClosedByID ?? 0 }).Where(id => id > 0));
 			Dictionary<long, (string Name, int Tag)> names = await Database.DisplayNames.GetBulk(db, people);
+			long[] reporterIDs = rows.Where(r => r.Report != null).Select(r => r.Report!.ReporterID).Concat(witnesses.Values.SelectMany(list => list).Select(w => w.ReporterId)).Distinct().ToArray();
+			Dictionary<long, Database.ReporterScore> scores = await Database.ReporterScores.For(db, reporterIDs, cancellationToken);
 
 			long[] ruleIDs = rows.Where(r => r.RuleMatch != null).Select(r => r.RuleMatch!.RuleID).Distinct().ToArray();
 			Dictionary<long, string> ruleNames = ruleIDs.Length == 0 ? [] : await db.AutomatedRules.AsNoTracking().Where(r => ruleIDs.Contains(r.ID)).ToDictionaryAsync(r => r.ID, r => r.Name, cancellationToken);
@@ -343,7 +348,7 @@ namespace GenOnlineService.Rest
 				Player = RealtimeMembers.Of(userID, names),
 				Standing = await StandingAsync(db, userID, history, names, cancellationToken),
 				Case = shown == null ? null : SummaryOf(shown, names),
-				Signals = rows.Select(r => SignalOf(r, evidence, names, ruleNames, witnesses)).ToArray(),
+				Signals = rows.Select(r => SignalOf(r, evidence, names, ruleNames, witnesses, scores)).ToArray(),
 				Matches = matches
 			};
 		}
@@ -381,7 +386,7 @@ namespace GenOnlineService.Rest
 		};
 
 		private static CaseSignal SignalOf(Database.CaseSignalRow row, Dictionary<long, Database.Chat.ReportEvidence> evidence, IReadOnlyDictionary<long, (string Name, int Tag)> names, IReadOnlyDictionary<long, string> ruleNames,
-			IReadOnlyDictionary<long, List<AnticheatEacWitness>> witnesses)
+			IReadOnlyDictionary<long, List<AnticheatEacWitness>> witnesses, IReadOnlyDictionary<long, Database.ReporterScore> scores)
 		{
 			CaseSignal signal = new CaseSignal { Kind = row.Kind, Id = row.ID, At = row.At, MatchId = row.MatchID, LobbyId = row.LobbyID };
 			if (row.Report is PlayerReport report)
@@ -397,6 +402,7 @@ namespace GenOnlineService.Rest
 				return signal with
 				{
 					Reporter = RealtimeMembers.Of(report.ReporterID, names),
+					ReporterScore = ReporterScoreView.Of(scores.GetValueOrDefault(report.ReporterID)),
 					Category = report.Category,
 					Reason = report.Reason,
 					MessageId = report.MessageID?.ToString(CultureInfo.InvariantCulture),
@@ -438,7 +444,7 @@ namespace GenOnlineService.Rest
 				SelfReported = row.SelfReported,
 				Witnesses = row.Kind == AntiCheatReviewKinds.Eac ? witnesses.GetValueOrDefault(row.ID, []).Select(w => new CaseEacWitness
 				{
-					Reporter = RealtimeMembers.Of(w.ReporterId, names), At = w.CreatedAt, Action = w.Action, ReasonCode = w.ReasonCode, ViolationType = w.ViolationType, Details = w.Details
+					Reporter = RealtimeMembers.Of(w.ReporterId, names), ReporterScore = ReporterScoreView.Of(scores.GetValueOrDefault(w.ReporterId)), At = w.CreatedAt, Action = w.Action, ReasonCode = w.ReasonCode, ViolationType = w.ViolationType, Details = w.Details
 				}).ToArray() : null,
 				EpicReferenceId = row.EpicReferenceId,
 				EpicAction = row.EpicAction,

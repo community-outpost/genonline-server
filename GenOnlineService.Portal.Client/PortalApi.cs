@@ -108,6 +108,8 @@ namespace GenOnlineService.Portal.Client
 		// The host writes an audit row for both reads, they show chat and anti-cheat evidence
 		public Task<PortalAnswer<PortalCase>> GetWaitingCaseAsync(long userID) => GetAsync<PortalCase>($"{PortalRoutes.AdminPlayers}/{userID}/case");
 
+		public Task<PortalAnswer<PortalReporterScoreResponse>> GetReporterScoreAsync(long userID) => GetAsync<PortalReporterScoreResponse>($"{PortalRoutes.AdminPlayers}/{userID}/reporter_score");
+
 		public Task<PortalAnswer<PortalCase>> GetDecidedCaseAsync(long caseID) => GetAsync<PortalCase>($"{PortalRoutes.Cases}/{caseID}");
 
 		public Task<PortalAnswer<PortalCaseSummary>> ClaimCaseAsync(long userID) => SendForAsync<PortalCaseSummary>(HttpMethod.Put, $"{PortalRoutes.AdminPlayers}/{userID}/case/claim", new { });

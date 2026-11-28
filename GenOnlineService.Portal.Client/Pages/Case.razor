@@ -157,6 +157,7 @@ else
                                         @if (signal.Reporter != null)
                                         {
                                             <BbLink Href="@PortalRoutes.PlayerPage(signal.Reporter.Id)">@signal.Reporter.FullName</BbLink>
+                                            <ReporterScoreBadge Score="@signal.ReporterScore" />
                                         }
                                         @if (!String.IsNullOrEmpty(signal.Reason))
                                         {

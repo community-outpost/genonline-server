@@ -1,0 +1,15 @@
+@* The band and the raw counts of a reporter, context for reviewers that never hides or reorders anything *@
+
+@if (Score != null)
+{
+    <BbBadge Variant="BadgeVariant.Outline" title="@Hint" data-testid="reporter-score">@PortalWords.ReporterBand(Score.Band)@Counts</BbBadge>
+}
+
+@code {
+    [Parameter]
+    public PortalReporterScore? Score { get; set; }
+
+    private string Counts => Score is { Decided: > 0 } score ? $" · {PortalText.Count(score.Upheld)} of {PortalText.Count(score.Decided)} upheld" : "";
+
+    private const string Hint = "Reports this player filed that staff decided: upheld when the case ended with a sanction that still stands, dismissed otherwise. Open reports do not count. Players never see this.";
+}
