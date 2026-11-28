@@ -32,6 +32,28 @@ namespace Database
 
 		private sealed record Seen(long UserID, DateTime First, DateTime Last, int? Events);
 
+		// At most two devices whose keyed hash starts with the prefix, a range read on the kind and hash index
+		public static async Task<List<(string Kind, byte[] Hash)>> ByHashPrefix(AppDbContext db, byte[] prefix, CancellationToken cancellationToken = default)
+		{
+			byte[] low = new byte[Device.ValueHmacLength];
+			byte[] high = Enumerable.Repeat((byte)0xFF, Device.ValueHmacLength).ToArray();
+			prefix.CopyTo(low, 0);
+			prefix.CopyTo(high, 0);
+			var found = new List<(string Kind, byte[] Hash)>();
+			foreach (string kind in new[] { IdentifierKinds.MachineGuid, IdentifierKinds.Mac, IdentifierKinds.VolumeSerial })
+			{
+				List<byte[]> hashes = await db.Devices
+					.FromSql($"SELECT * FROM devices WHERE kind = {kind} AND value_hmac >= {low} AND value_hmac <= {high}")
+					.AsNoTracking()
+					.Select(d => d.ValueHmac)
+					.Distinct()
+					.Take(2)
+					.ToListAsync(cancellationToken);
+				found.AddRange(hashes.Select(h => (kind, h)));
+			}
+			return found.DistinctBy(f => (f.Kind, Convert.ToHexString(f.Hash))).Take(2).ToList();
+		}
+
 		// Null when the range holds more sign-ins than one search reads
 		public static async Task<(List<IdentifierAccount> Accounts, bool HasNext)?> Find(AppDbContext db, IdentifierQuery query, int skip, int take, CancellationToken cancellationToken = default)
 		{

@@ -4,7 +4,7 @@
 
 <PageTitle>Investigate · Generals Online</PageTitle>
 
-<PageHeader Description="Find every account that used a MAC address, machine id, volume serial, IP address or range, or signed in from a country. Each search is in the audit log.">
+<PageHeader Description="Find every account that used a MAC address, machine id, volume serial, device fingerprint, IP address or range, or signed in from a country. Each search is in the audit log.">
     <Title>Investigate</Title>
 </PageHeader>
 
@@ -46,7 +46,7 @@ else
                 </Icon>
                 <ChildContent>
                     <BbAlertTitle>The search did not run</BbAlertTitle>
-                    <BbAlertDescription>@(m_error == "invalid_argument" ? "The value does not fit the identifier, the range is wider than allowed, or the page is past the last one a search shows." : PortalText.Error(m_error))</BbAlertDescription>
+                    <BbAlertDescription>@(m_error == "invalid_argument" ? (m_kind == "fingerprint" ? "Type the 8 hexadecimal characters of the fingerprint. If they already are, more than one device starts with them, so type more of the key." : "The value does not fit the identifier, the range is wider than allowed, or the page is past the last one a search shows.") : PortalText.Error(m_error))</BbAlertDescription>
                 </ChildContent>
             </BbAlert>
         }
@@ -61,12 +61,12 @@ else
                     <BbCardTitle As="h2" Class="go-title-value"><span>@LabelOf(found.Kind)</span>@if (found.Kind == "country")
                         {
                             <CountryFlag Country="@found.Value" />
-                        }<span class="bb:font-mono">@(Key != null ? found.Value[..8] : found.Value)</span></BbCardTitle>
+                        }<span class="bb:font-mono">@(DeviceKey != null ? found.Value[..8] : found.Value)</span></BbCardTitle>
                     <BbCardDescription>@if (found.Network?.Country is string networkCountry)
                         {
                             <CountryFlag Country="@networkCountry" />
                         }@Describe(found)</BbCardDescription>
-                    @if (Key != null)
+                    @if (DeviceKey != null)
                     {
                         @if (found.RawValue != null)
                         {
@@ -155,6 +155,9 @@ else
 
     private PortalSessionInfo Session => Api.Session!;
 
+    // the device key of the shown answer: from the player page link, or the device a fingerprint search found
+    private string? DeviceKey => Key ?? (m_found != null && m_found.Kind != m_kind ? m_found.Value : null);
+
     private int Page => Math.Max(PageNumber ?? 1, 1);
 
     private static string LabelOf(string kind) => PortalInvestigation.Kinds.FirstOrDefault(k => k.Kind == kind).Label ?? kind;
@@ -167,6 +170,10 @@ else
         if (Key != null)
         {
             parts.Add("The device of the player page, by its stored key.");
+        }
+        else if (DeviceKey != null)
+        {
+            parts.Add("The device with fingerprint " + Value + ".");
         }
         if (found.Vendor != null)
         {
@@ -209,11 +216,11 @@ else
 
     private async Task Reveal()
     {
-        if (Key == null)
+        if (DeviceKey is not string key || m_found == null)
         {
             return;
         }
-        PortalAnswer<PortalInvestigation> answer = await Api.InvestigateAsync(m_kind, null, Key, Page, PerPage, raw: true);
+        PortalAnswer<PortalInvestigation> answer = await Api.InvestigateAsync(m_found.Kind, null, key, Page, PerPage, raw: true);
         if (answer.Ok)
         {
             m_found = answer.Value;

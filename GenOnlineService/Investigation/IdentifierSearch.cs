@@ -31,8 +31,9 @@ namespace GenOnlineService.Investigation
 		public const string Ip = "ip";
 		public const string IpRange = "ip_range";
 		public const string Country = "country";
+		public const string Fingerprint = "fingerprint";
 
-		public static readonly IReadOnlyList<string> All = [Mac, MachineGuid, VolumeSerial, Ip, IpRange, Country];
+		public static readonly IReadOnlyList<string> All = [Mac, MachineGuid, VolumeSerial, Ip, IpRange, Country, Fingerprint];
 
 		public static bool IsDevice(string kind) => kind is Mac or MachineGuid or VolumeSerial;
 	}
@@ -46,6 +47,8 @@ namespace GenOnlineService.Investigation
 		public IPNetwork? Range { get; init; }
 		public string? StoredPrefix { get; init; }
 		public string? Country { get; init; }
+		// The leading bytes of a device keyed hash, the fingerprint staff see on the player page
+		public byte[]? HashPrefix { get; init; }
 	}
 
 	public static class IdentifierSearch
@@ -56,6 +59,7 @@ namespace GenOnlineService.Investigation
 		public const int MaximumCountryAccounts = 1000;
 		public const int MaximumValueLength = 128;
 		public const int KeyLength = Device.ValueHmacLength * 2;
+		public const int MinimumFingerprintLength = Database.StaffInspection.FingerprintBytes * 2;
 
 		private const string GuidMarker = "YY";
 
@@ -89,8 +93,19 @@ namespace GenOnlineService.Investigation
 				IdentifierKinds.VolumeSerial => VolumeSerial(text),
 				IdentifierKinds.Ip => Address(text),
 				IdentifierKinds.IpRange => Range(text),
+				IdentifierKinds.Fingerprint => Fingerprint(text),
 				_ => Country(text)
 			};
+		}
+
+		private static (IdentifierQuery?, Failure?) Fingerprint(string text)
+		{
+			if (text.Length < MinimumFingerprintLength || text.Length > KeyLength || text.Length % 2 != 0 || !text.All(Uri.IsHexDigit))
+			{
+				return (null, Result.Invalid("value"));
+			}
+			string value = text.ToLowerInvariant();
+			return (new IdentifierQuery { Kind = IdentifierKinds.Fingerprint, Value = value, HashPrefix = Convert.FromHexString(value) }, null);
 		}
 
 		private static byte[]? HashOfKey(string key)

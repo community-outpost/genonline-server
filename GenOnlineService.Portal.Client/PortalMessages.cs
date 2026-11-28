@@ -626,6 +626,7 @@ namespace GenOnlineService.Portal.Client
 			("mac", "MAC address", "AA:BB:CC:DD:EE:FF, with colons, dashes or nothing"),
 			("machine_guid", "Machine id", "The Windows machine GUID"),
 			("volume_serial", "Volume serial", "1234-ABCD, as the vol command shows it"),
+			("fingerprint", "Device fingerprint", "The fingerprint the player page shows, or more of the key"),
 			("ip", "IP address", "IPv4 or IPv6"),
 			("ip_range", "IP range", "CIDR, at most a /16 for IPv4 and a /48 for IPv6"),
 			("country", "Country", "Two letter code, such as NL")

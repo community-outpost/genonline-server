@@ -44,6 +44,25 @@ namespace GenOnlineService.Rest
 			}
 
 			await using AppDbContext db = await dbFactory.CreateDbContextAsync(cancellationToken);
+			string? fingerprint = null;
+			if (query.Kind == IdentifierKinds.Fingerprint)
+			{
+				// the answer names the device kind and its whole key, as a key search of the player page does
+				List<(string Kind, byte[] Hash)> devices = await Database.IdentifierAccounts.ByHashPrefix(db, query.HashPrefix!, cancellationToken);
+				if (devices.Count > 1)
+				{
+					return (Result.Fail(ErrorCodes.InvalidArgument, new { Field = "value", Ambiguous = true }), false);
+				}
+				if (devices.Count == 0)
+				{
+					await Database.Moderation.AddAuditEntry(db, actor, ModerationActions.InvestigateSearch, AuditTargetKinds.Investigation, null, null,
+						new { kind = query.Kind, value = query.Value, page = page.Page, results = 0 });
+					return (Result.Success(new PortalInvestigation { Kind = query.Kind, Value = query.Value }), false);
+				}
+				fingerprint = query.Value;
+				query = new IdentifierQuery { Kind = devices[0].Kind, Value = Database.StaffInspection.KeyOf(devices[0].Hash), Hashes = [devices[0].Hash] };
+			}
+
 			(List<Database.IdentifierAccount> Accounts, bool HasNext)? found = await Database.IdentifierAccounts.Find(db, query, page.Skip, page.PerPage, cancellationToken);
 			if (found == null)
 			{
@@ -51,7 +70,9 @@ namespace GenOnlineService.Rest
 			}
 
 			await Database.Moderation.AddAuditEntry(db, actor, ModerationActions.InvestigateSearch, AuditTargetKinds.Investigation, null, null,
-				new { kind = query.Kind, value = query.Value, page = page.Page, results = found.Value.Accounts.Count });
+				fingerprint == null
+					? new { kind = query.Kind, value = query.Value, page = page.Page, results = found.Value.Accounts.Count }
+					: (object)new { kind = query.Kind, value = query.Value, fingerprint, page = page.Page, results = found.Value.Accounts.Count });
 
 			string? rawValue = null;
 			if (raw)
@@ -99,7 +120,7 @@ namespace GenOnlineService.Rest
 		// with a key also reveals the value the client sent, players.inspect being an admin and owner permission
 		[AllowSignInCookie]
 		[Authorize(Policy = PermissionPolicies.Prefix + Permissions.PlayersInspect)]
-		[EndpointSummary("Finds every account that used a MAC address, machine id, volume serial, IP address, IP range or country.")]
+		[EndpointSummary("Finds every account that used a MAC address, machine id, volume serial, device fingerprint, IP address, IP range or country.")]
 		[ProducesResponseType<PortalInvestigation>(StatusCodes.Status200OK)]
 		[HttpGet("~/api/v1/admin/investigate")]
 		public async Task<IActionResult> Search()
