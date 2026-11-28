@@ -52,14 +52,19 @@ they investigate a player, and every such view is recorded.</p>
 <p>We store the chat messages you send in channels, lobbies, direct messages and groups, with who sent them, to whom and when,
 so that they can be delivered and so that reports can be dealt with. Messages are deleted 30 days after they were sent; a job
 removes them every hour.</p>
+<p>The game also sends us the lines of the in-game chat of a match, with the match, who wrote each line, its scope (everyone,
+allies or only the writer) and who it was shown to, so that reports about a match can be dealt with. They are stored like the
+other chat and deleted after the same 30 days. Staff who hold the permission can read the log of a public channel, a lobby or a
+match, and every such read is recorded in the staff log. They cannot read direct or group messages this way.</p>
 
 <h3>Reports, sanctions and the staff log</h3>
 <ul>
 <li>A report stores who reported whom, why, and the evidence: the reported message with up to 10 messages before and after it,
-or the reported player's last 10 messages that the reporter could see, including direct messages to the reporter. A report is
+or the reported player's last 10 messages that the reporter could see, including direct messages to the reporter, and, for a
+match, up to 10 of their in-game chat lines of that match that the reporter could see. A report is
 kept until staff close it, and deleted 30 days after that.</li>
 <li>Sanctions (kicks, mutes and bans) store the reason, who gave them, when, and when they end or were lifted.</li>
-<li>Every staff action, such as a sanction, a name reset, viewing a report or looking up a message, is recorded in a staff log
+<li>Every staff action, such as a sanction, a name reset, viewing a report, looking up a message or reading a chat log, is recorded in a staff log
 with its reason.</li>
 </ul>
 <p>We keep a sanction until two years after it ends, so that repeated abuse can be recognised, and the staff log for two
