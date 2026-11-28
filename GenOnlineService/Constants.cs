@@ -104,7 +104,7 @@ namespace GenOnlineService
 			(string Name, int Tag) name = await Database.DisplayNames.Get(_db, ownerID) ?? (String.Empty, 0);
 			string strDisplayName = name.Name;
 			// strCountry may be the lobby fallback; the record holds only a country GeoIP knows
-			await Database.Users.UpdateLastLoginData(_db, ownerID, ipAddr, client_id, Realtime.GeoLocation.KnownCountry(ipAddr), bIsReconnect);
+			long? sessionEventID = await Database.Users.UpdateLastLoginData(_db, ownerID, ipAddr, client_id, Realtime.GeoLocation.KnownCountry(ipAddr), bIsReconnect, sessionType, authorizationID);
 
 			// if we have cache data, that means its a reconnect, noraml connections go through login flows which reset cache data
 			UserSession? userCacheData = WebSocketManager.GetSessionFromUser(ownerID, sessionType);
@@ -188,6 +188,11 @@ namespace GenOnlineService
 
 			// the sign-in is recorded before the connection is published, so a revocation can always find it
 			userCacheData.AuthorizationID = authorizationID;
+			// a reconnect keeps the start event of the session, the refresh event only fills a start that was not written
+			if (!bIsReconnect || userCacheData.SessionEventID == null)
+			{
+				userCacheData.SessionEventID = sessionEventID;
+			}
 
 			// a connection of the same user and session type replaces the previous one, which is told why
 			if (m_dictWebsockets[sessionType].TryRemove(ownerID, out RealtimeConnection? supersededSess) && supersededSess != null)
@@ -916,6 +921,9 @@ namespace GenOnlineService
 		}
 
 		public string? AuthorizationID { get; set; }
+
+		// The session event that started this session, null when it was not written or the session was restored after a failover
+		public long? SessionEventID { get; set; }
 
 		public async Task<RealtimeConnection?> CloseWebsocket(string closeCode, bool allowReconnect)
 		{

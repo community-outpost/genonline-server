@@ -34,6 +34,8 @@ public class GameSessionRow
 	public Int64? ExeCrc { get; set; }
 	public Int64? IniCrc { get; set; }
 	public int AnticheatID { get; set; }
+	// The machine the sign-in of this registration sent, null when it sent no identifier or the machine is removed
+	public Int64? MachineID { get; set; }
 }
 
 public class GameSessionRowConfiguration : IEntityTypeConfiguration<GameSessionRow>
@@ -54,6 +56,8 @@ public class GameSessionRowConfiguration : IEntityTypeConfiguration<GameSessionR
 		builder.Property(e => e.ExeCrc).HasColumnName("exe_crc");
 		builder.Property(e => e.IniCrc).HasColumnName("ini_crc");
 		builder.Property(e => e.AnticheatID).HasColumnName("anticheat_id");
+		builder.Property(e => e.MachineID).HasColumnName("machine_id");
+		builder.HasOne<Machine>().WithMany().HasForeignKey(e => e.MachineID).OnDelete(DeleteBehavior.SetNull);
 
 		// a sign-in that is pruned takes its registration with it
 		builder.HasOne<OpenIddictEntityFrameworkCoreAuthorization>().WithMany().HasForeignKey(e => e.AuthorizationID).OnDelete(DeleteBehavior.Cascade);
@@ -107,6 +111,17 @@ namespace Database
 					.SetProperty(r => r.AnticheatID, registration.AnticheatID));
 			}
 		}
+
+		// Keyed by the authorization, so a registration of a newer sign-in is never given the machine of an older one
+		public static Task SetMachine(AppDbContext db, Int64 userID, EUserSessionType sessionType, string authorizationID, Int64? machineID) =>
+			db.GameSessions.Where(r => r.UserID == userID && r.SessionType == (int)sessionType && r.AuthorizationID == authorizationID)
+				.ExecuteUpdateAsync(s => s.SetProperty(r => r.MachineID, machineID));
+
+		public static Task<Int64?> MachineOf(AppDbContext db, Int64 userID, EUserSessionType sessionType, string authorizationID) =>
+			db.GameSessions.AsNoTracking()
+				.Where(r => r.UserID == userID && r.SessionType == (int)sessionType && r.AuthorizationID == authorizationID)
+				.Select(r => r.MachineID)
+				.FirstOrDefaultAsync();
 
 		public static Task Delete(AppDbContext db, Int64 userID, EUserSessionType sessionType) =>
 			db.GameSessions.Where(r => r.UserID == userID && r.SessionType == (int)sessionType).ExecuteDeleteAsync();

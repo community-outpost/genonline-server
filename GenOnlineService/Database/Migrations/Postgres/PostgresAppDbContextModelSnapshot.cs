@@ -1071,6 +1071,10 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("bigint")
                         .HasColumnName("ini_crc");
 
+                    b.Property<long?>("MachineID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("machine_id");
+
                     b.Property<DateTime>("RegisteredAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("registered_at");
@@ -1079,6 +1083,8 @@ namespace GenOnlineService.Migrations.Postgres
 
                     b.HasIndex("AuthorizationID")
                         .HasDatabaseName("ix_game_sessions_authorization_id");
+
+                    b.HasIndex("MachineID");
 
                     b.ToTable("game_sessions", (string)null);
                 });
@@ -2170,6 +2176,10 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("character varying(16)")
                         .HasColumnName("result");
 
+                    b.Property<long?>("SessionEventId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("session_event_id");
+
                     b.Property<int?>("Side")
                         .HasColumnType("integer")
                         .HasColumnName("side");
@@ -2183,6 +2193,9 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnName("user_id");
 
                     b.HasKey("MatchId", "Slot");
+
+                    b.HasIndex("SessionEventId")
+                        .HasDatabaseName("ix_match_players_session_event_id");
 
                     b.HasIndex("UserId", "MatchId")
                         .HasDatabaseName("ix_match_players_user_match");
@@ -3125,6 +3138,10 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("character varying(16)")
                         .HasColumnName("kind");
 
+                    b.Property<long?>("MachineID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("machine_id");
+
                     b.Property<string>("Result")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -3139,6 +3156,9 @@ namespace GenOnlineService.Migrations.Postgres
 
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_session_events_created_at");
+
+                    b.HasIndex("MachineID")
+                        .HasDatabaseName("ix_session_events_machine_id");
 
                     b.HasIndex("Ip", "UserID")
                         .HasDatabaseName("ix_session_events_ip_user");
@@ -3580,6 +3600,11 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasForeignKey("AuthorizationID")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("Machine", null)
+                        .WithMany()
+                        .HasForeignKey("MachineID")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("GenOnlineService.Playlists.PlaylistMapRow", b =>
@@ -3625,6 +3650,11 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasForeignKey("MatchId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("SessionEvent", null)
+                        .WithMany()
+                        .HasForeignKey("SessionEventId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("MatchPublication", b =>
@@ -3678,6 +3708,14 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasForeignKey("ServiceAccountID")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SessionEvent", b =>
+                {
+                    b.HasOne("Machine", null)
+                        .WithMany()
+                        .HasForeignKey("MachineID")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("StoredRolePermission", b =>

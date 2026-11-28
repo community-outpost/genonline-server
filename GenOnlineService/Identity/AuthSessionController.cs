@@ -104,9 +104,10 @@ namespace GenOnlineService.Identity
 			string ipAddress = IPHelpers.NormalizeIP(HttpContext.Connection.RemoteIpAddress?.ToString());
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
 
+			long? machineID = null;
 			if (sessionType == EUserSessionType.GameClient)
 			{
-				await Database.UserDevices.RegisterUserDevice(db, userID, body.MachineGuid ?? "NONE", body.MacAddress ?? "NONE", body.VolumeSerial ?? "NONE", ipAddress);
+				machineID = await Database.UserDevices.RegisterUserDevice(db, userID, body.MachineGuid ?? "NONE", body.MacAddress ?? "NONE", body.VolumeSerial ?? "NONE", ipAddress);
 			}
 
 			(string Name, int Tag) name = await Database.DisplayNames.Get(db, userID) ?? (String.Empty, 0);
@@ -114,6 +115,10 @@ namespace GenOnlineService.Identity
 			await SessionHelpers.SetUsedLoggedIn(userID, sessionType);
 			await WebSocketManager.ClearDataFromUser(userID, sessionType);
 			await GameSessions.RegisterAsync(db, userID, sessionType, new GameSessionRegistration(authorizationID, client.ClientID, client.Game, DateTime.UtcNow, body.ExeCrc, body.IniCrc, body.AnticheatID ?? -1));
+			if (sessionType == EUserSessionType.GameClient)
+			{
+				await Database.GameSessionStore.SetMachine(db, userID, sessionType, authorizationID, machineID);
+			}
 			AppMetrics.RecordAuthentication("session", client.ClientID, "success");
 			GenOnlineService.Rules.RuleRunner.Raise(GenOnlineService.Rules.RuleEvent.Of(GenOnlineService.Rules.RuleTriggers.GameSession, userID, ipAddress, (GenOnlineService.Rules.RuleEventFields.Client, client.ClientID)));
 

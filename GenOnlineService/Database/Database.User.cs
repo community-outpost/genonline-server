@@ -504,7 +504,8 @@ namespace Database
 			return new EloData(EloConfig.BaseRating, EloConfig.BaseRating, 0);
 		}
 
-		public static async Task UpdateLastLoginData(AppDbContext db, long userId, string ipAddr, string client, string? country, bool isReconnect)
+		// Returns the id of the session event, null when it was not written
+		public static async Task<long?> UpdateLastLoginData(AppDbContext db, long userId, string ipAddr, string client, string? country, bool isReconnect, EUserSessionType? sessionType = null, string? authorizationID = null)
 		{
 			try
 			{
@@ -514,11 +515,15 @@ namespace Database
 					.Where(u => u.ID == userId)
 					.ExecuteUpdateAsync(setters => setters.SetProperty(u => u.LastSignInAt, now));
 
-				await SessionEvents.Record(db, userId, isReconnect ? SessionEventKinds.Refresh : SessionEventKinds.Start, SessionEventResults.Ok, client, ipAddr, country);
+				long? machineID = sessionType == EUserSessionType.GameClient && authorizationID != null
+					? await GameSessionStore.MachineOf(db, userId, EUserSessionType.GameClient, authorizationID)
+					: null;
+				return await SessionEvents.Record(db, userId, isReconnect ? SessionEventKinds.Refresh : SessionEventKinds.Start, SessionEventResults.Ok, client, ipAddr, country, machineID);
 			}
 			catch (Exception ex)
 			{
 				s_log.LogError(ex, "UpdateLastLoginData failed");
+				return null;
 			}
 		}
 

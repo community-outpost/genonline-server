@@ -88,6 +88,8 @@ public class SessionEvent
 {
 	public Int64 ID { get; set; }
 	public Int64 UserID { get; set; }
+	// The machine of the game client session this event started or refreshed, null for other events and after the machine is removed
+	public Int64? MachineID { get; set; }
 	public string Kind { get; set; } = String.Empty;
 	public string Result { get; set; } = String.Empty;
 	public string Client { get; set; } = String.Empty;
@@ -174,9 +176,12 @@ public class SessionEventConfiguration : IEntityTypeConfiguration<SessionEvent>
 		builder.HasIndex(e => new { e.Ip, e.UserID }).HasDatabaseName("ix_session_events_ip_user");
 
 		builder.HasIndex(e => new { e.Country, e.UserID, e.CreatedAt }).HasDatabaseName("ix_session_events_country_user");
+		builder.HasIndex(e => e.MachineID).HasDatabaseName("ix_session_events_machine_id");
+		builder.HasOne<Machine>().WithMany().HasForeignKey(e => e.MachineID).OnDelete(DeleteBehavior.SetNull);
 
 		builder.Property(e => e.ID).HasColumnName("id").ValueGeneratedOnAdd();
 		builder.Property(e => e.UserID).HasColumnName("user_id");
+		builder.Property(e => e.MachineID).HasColumnName("machine_id");
 		builder.Property(e => e.Kind).HasColumnName("kind").HasMaxLength(16);
 		builder.Property(e => e.Result).HasColumnName("result").HasMaxLength(32);
 		builder.Property(e => e.Client).HasColumnName("client").HasMaxLength(32);
@@ -294,7 +299,8 @@ namespace Database
 	{
 		private static readonly ILogger s_log = AppLog.For(typeof(UserDevices));
 
-		public static async Task RegisterUserDevice(AppDbContext db, long userId, string hwid_0, string hwid_1, string hwid_2, string ipAddr)
+		// Returns the machine of the sign-in, null when it has none or the registration failed
+		public static async Task<long?> RegisterUserDevice(AppDbContext db, long userId, string hwid_0, string hwid_1, string hwid_2, string ipAddr)
 		{
 			try
 			{
@@ -323,11 +329,12 @@ namespace Database
 				{
 					await Touch(db, userId, kind, value, raw);
 				}
-				await Machines.SignIn(db, userId, seen.Select(s => (s.Kind, s.Value)).ToList(), ipAddr);
+				return await Machines.SignIn(db, userId, seen.Select(s => (s.Kind, s.Value)).ToList(), ipAddr);
 			}
 			catch (Exception ex)
 			{
 				s_log.LogError(ex, "RegisterUserDevice failed");
+				return null;
 			}
 		}
 
@@ -366,12 +373,13 @@ namespace Database
 
 	public static class Machines
 	{
-		// Finds or adds the machine of the identifiers a sign-in sent, after their device rows, and counts the sign-in on its address
-		public static async Task SignIn(AppDbContext db, long userId, IReadOnlyList<(string Kind, byte[] Value)> seen, string ipAddr)
+		// Finds or adds the machine of the identifiers a sign-in sent, after their device rows, counts the sign-in on its address and
+		// returns the machine, null when the sign-in sent no identifier
+		public static async Task<long?> SignIn(AppDbContext db, long userId, IReadOnlyList<(string Kind, byte[] Value)> seen, string ipAddr)
 		{
 			if (seen.Count == 0)
 			{
-				return;
+				return null;
 			}
 
 			List<byte[]> hashes = seen.Select(s => s.Value).ToList();
@@ -384,7 +392,7 @@ namespace Database
 			long? guid = IdOf(DeviceKinds.MachineGuid), mac = IdOf(DeviceKinds.Mac), volume = IdOf(DeviceKinds.VolumeSerial);
 			if (guid == null && mac == null && volume == null)
 			{
-				return;
+				return null;
 			}
 
 			DateTime now = DateTime.UtcNow;
@@ -397,14 +405,14 @@ namespace Database
 				machineID = await IdOfMachine(db, userId, key, now);
 				if (machineID == null)
 				{
-					return;
+					return null;
 				}
 			}
 
 			string ip = TextSanitizer.Clean(ipAddr ?? "", 45);
 			if (ip.Length == 0)
 			{
-				return;
+				return machineID;
 			}
 			int updated = await db.MachineAddresses
 				.Where(a => a.MachineID == machineID && a.Ip == ip)
@@ -414,6 +422,7 @@ namespace Database
 				db.MachineAddresses.Add(new MachineAddress { MachineID = machineID.Value, Ip = ip, FirstSeenAt = now, LastSeenAt = now, SignIns = 1 });
 				await AddOnce(db);
 			}
+			return machineID;
 		}
 
 		private static async Task<long?> IdOfMachine(AppDbContext db, long userId, string key, DateTime now)
@@ -445,11 +454,13 @@ namespace Database
 
 	public static class SessionEvents
 	{
-		public static async Task Record(AppDbContext db, long userId, string kind, string result, string client, string ipAddr, string? country)
+		// Returns the id of the event row
+		public static async Task<long> Record(AppDbContext db, long userId, string kind, string result, string client, string ipAddr, string? country, long? machineID = null)
 		{
-			db.SessionEvents.Add(new SessionEvent
+			var row = new SessionEvent
 			{
 				UserID = userId,
+				MachineID = machineID,
 				Kind = kind,
 				Result = result,
 				Client = TextSanitizer.Clean(client, 32),
@@ -457,11 +468,13 @@ namespace Database
 				Ip = TextSanitizer.Clean(ipAddr, 45),
 				Country = country is { Length: 2 } ? country.ToUpperInvariant() : null,
 				CreatedAt = DateTime.UtcNow
-			});
+			};
+			db.SessionEvents.Add(row);
 
 			try
 			{
 				await db.SaveChangesAsync();
+				return row.ID;
 			}
 			finally
 			{
@@ -476,8 +489,15 @@ namespace Database
 
 	public sealed record InspectedMachineAddress(string Ip, DateTime FirstSeenAt, DateTime LastSeenAt, int SignIns);
 
-	// The device keys of one machine, with every address it signed in from, latest first
-	public sealed record InspectedMachine(IReadOnlyList<string> Keys, DateTime FirstSeenAt, DateTime LastSeenAt, IReadOnlyList<InspectedMachineAddress> Addresses);
+	public sealed record MachineMatch(long MatchID, DateTime StartedAt);
+
+	// The device keys of one machine, with every address it signed in from, latest first, and the latest matches the account played on it
+	public sealed record InspectedMachine(IReadOnlyList<string> Keys, DateTime FirstSeenAt, DateTime LastSeenAt, IReadOnlyList<InspectedMachineAddress> Addresses, IReadOnlyList<MachineMatch> Matches);
+
+	public sealed record MatchSessionDevice(string Kind, string Fingerprint, string Key);
+
+	// The device and address of the game session that played a match slot
+	public sealed record MatchSession(IReadOnlyList<MatchSessionDevice> Devices, string Ip, string? Country);
 
 	public sealed record InspectedAddress(string Ip, string? Country, DateTime FirstSeenAt, DateTime LastSeenAt, int Events);
 
@@ -497,6 +517,7 @@ namespace Database
 	{
 		public const int MaximumRows = 100;
 		public const int MaximumDuplicates = 50;
+		public const int MaximumMachineMatches = 5;
 		public const int FingerprintBytes = 4;
 
 		public static string FingerprintOf(byte[] valueHmac) => Convert.ToHexString(valueHmac, 0, Math.Min(FingerprintBytes, valueHmac.Length)).ToLowerInvariant();
@@ -532,12 +553,51 @@ namespace Database
 			Dictionary<long, string> keys = (await db.Devices.AsNoTracking().Where(d => deviceIDs.Contains(d.ID)).Select(d => new { d.ID, d.ValueHmac }).ToListAsync(cancellationToken))
 				.ToDictionary(d => d.ID, d => KeyOf(d.ValueHmac));
 
+			// the matches of the account only, newest first, so a machine with more than the cap of them shows the latest
+			var played = await (
+				from p in db.MatchPlayers.AsNoTracking()
+				where p.UserId == userID && p.SessionEventId != null
+				join e in db.SessionEvents.AsNoTracking() on p.SessionEventId!.Value equals e.ID
+				where e.MachineID != null && ids.Contains(e.MachineID.Value)
+				join m in db.Matches.AsNoTracking() on p.MatchId equals m.Id
+				orderby m.StartedAt descending, m.Id descending
+				select new { MachineID = e.MachineID!.Value, MatchID = m.Id, m.StartedAt })
+				.Take(MaximumRows * MaximumMachineMatches)
+				.ToListAsync(cancellationToken);
+			ILookup<long, MachineMatch> matches = played.ToLookup(p => p.MachineID, p => new MachineMatch(p.MatchID, p.StartedAt));
+
 			return machines.Select(m => new InspectedMachine(
 				new[] { m.MachineGuidID, m.MacID, m.VolumeSerialID }.OfType<long>().Where(keys.ContainsKey).Select(id => keys[id]).ToList(),
 				m.FirstSeenAt,
 				m.LastSeenAt,
-				addresses[m.ID].OrderByDescending(a => a.LastSeenAt).Take(MaximumRows).Select(a => new InspectedMachineAddress(a.Ip, a.FirstSeenAt, a.LastSeenAt, a.SignIns)).ToList()))
+				addresses[m.ID].OrderByDescending(a => a.LastSeenAt).Take(MaximumRows).Select(a => new InspectedMachineAddress(a.Ip, a.FirstSeenAt, a.LastSeenAt, a.SignIns)).ToList(),
+				matches[m.ID].Take(MaximumMachineMatches).ToList()))
 				.ToList();
+		}
+
+		// The session of every human slot of a match by user id, none for a slot whose event was purged or never recorded
+		public static async Task<Dictionary<long, MatchSession>> GetMatchSessions(AppDbContext db, long matchID, CancellationToken cancellationToken = default)
+		{
+			var rows = await (
+				from p in db.MatchPlayers.AsNoTracking()
+				where p.MatchId == matchID && p.UserId != null && p.SessionEventId != null
+				join e in db.SessionEvents.AsNoTracking() on p.SessionEventId!.Value equals e.ID
+				select new { UserID = p.UserId!.Value, e.Ip, e.Country, e.MachineID })
+				.ToListAsync(cancellationToken);
+			List<long> machineIDs = rows.Select(r => r.MachineID).OfType<long>().Distinct().ToList();
+			Dictionary<long, Machine> machines = await db.Machines.AsNoTracking().Where(m => machineIDs.Contains(m.ID)).ToDictionaryAsync(m => m.ID, cancellationToken);
+			List<long> deviceIDs = machines.Values.SelectMany(m => new[] { m.MachineGuidID, m.MacID, m.VolumeSerialID }).OfType<long>().Distinct().ToList();
+			Dictionary<long, Device> devices = await db.Devices.AsNoTracking().Where(d => deviceIDs.Contains(d.ID)).ToDictionaryAsync(d => d.ID, cancellationToken);
+
+			return rows.GroupBy(r => r.UserID).ToDictionary(g => g.Key, g =>
+			{
+				var row = g.First();
+				IReadOnlyList<MatchSessionDevice> found = row.MachineID is long id && machines.TryGetValue(id, out Machine? machine)
+					? new[] { machine.MachineGuidID, machine.MacID, machine.VolumeSerialID }.OfType<long>().Where(devices.ContainsKey)
+						.Select(d => new MatchSessionDevice(devices[d].Kind, FingerprintOf(devices[d].ValueHmac), KeyOf(devices[d].ValueHmac))).ToList()
+					: [];
+				return new MatchSession(found, row.Ip, row.Country);
+			});
 		}
 
 		public static async Task<List<InspectedAddress>> GetAddresses(AppDbContext db, long userID, CancellationToken cancellationToken = default)

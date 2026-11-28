@@ -85,6 +85,9 @@ public class MatchPlayer
 
 	// A copy of matches.finished_at so a player's history pages on one index
 	public DateTime? FinishedAt { get; set; }
+
+	// The session start event of the game session that played this slot, null for a slot without one and after the event is purged
+	public long? SessionEventId { get; set; }
 }
 
 public sealed class MatchPlayerDetails
@@ -243,6 +246,8 @@ public class MatchPlayerConfiguration : IEntityTypeConfiguration<MatchPlayer>
 		entity.HasKey(e => new { e.MatchId, e.Slot });
 		entity.HasIndex(e => new { e.UserId, e.MatchId }).HasDatabaseName("ix_match_players_user_match");
 		entity.HasIndex(e => new { e.UserId, e.FinishedAt, e.MatchId }).HasDatabaseName("ix_match_players_user_finished");
+		entity.HasIndex(e => e.SessionEventId).HasDatabaseName("ix_match_players_session_event_id");
+		entity.HasOne<SessionEvent>().WithMany().HasForeignKey(e => e.SessionEventId).OnDelete(DeleteBehavior.SetNull);
 
 		entity.Property(e => e.MatchId).HasColumnName("match_id");
 		entity.Property(e => e.Slot).HasColumnName("slot");
@@ -253,6 +258,7 @@ public class MatchPlayerConfiguration : IEntityTypeConfiguration<MatchPlayer>
 		entity.Property(e => e.Result).HasColumnName("result").HasMaxLength(16);
 		entity.Property(e => e.Details).HasColumnName("details");
 		entity.Property(e => e.FinishedAt).HasColumnName("finished_at");
+		entity.Property(e => e.SessionEventId).HasColumnName("session_event_id");
 	}
 }
 
@@ -685,6 +691,18 @@ namespace Database
 
 				Dictionary<int, int> playersPerTeam = new();
 
+				// an event the retention already purged would fail the whole insert
+				Dictionary<long, long> startedEvents = new();
+				foreach (var member in lobby.Members.Where(m => m.UserID > 0))
+				{
+					if (GenOnlineService.WebSocketManager.GetSessionFromUser(member.UserID, EUserSessionType.GameClient)?.SessionEventID is long eventID)
+					{
+						startedEvents[member.UserID] = eventID;
+					}
+				}
+				List<long> eventIDs = startedEvents.Values.ToList();
+				HashSet<long> existingEvents = (await db.SessionEvents.AsNoTracking().Where(e => eventIDs.Contains(e.ID)).Select(e => e.ID).ToListAsync()).ToHashSet();
+
 				foreach (var member in lobby.Members)
 				{
 					if (member.SlotState == EPlayerType.SLOT_OPEN ||
@@ -705,7 +723,8 @@ namespace Database
 						Team = (short)member.Team,
 						Side = member.Side,
 						Color = member.Color,
-						Details = WriteDetails(details)
+						Details = WriteDetails(details),
+						SessionEventId = startedEvents.TryGetValue(member.UserID, out long started) && existingEvents.Contains(started) ? started : null
 					});
 
 					// Observers still have PLAYERTEMPLATE_RANDOM (-2) at match start and are not active players
