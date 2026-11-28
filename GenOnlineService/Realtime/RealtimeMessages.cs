@@ -513,6 +513,12 @@ namespace GenOnlineService.Realtime
 		public IReadOnlyList<string> Features { get; init; } = [];
 	}
 
+	// The chat filter list changed, a client that uses it fetches GET /api/v1/chat/filter again
+	public sealed record ChatFilterUpdateEvent
+	{
+		public string Revision { get; init; } = "";
+	}
+
 	public sealed record ReadyEvent
 	{
 		public int ProtocolVersion { get; init; }
@@ -520,6 +526,7 @@ namespace GenOnlineService.Realtime
 		public Member User { get; init; } = new Member();
 		public IReadOnlyList<string> Permissions { get; init; } = [];
 		public IReadOnlyList<string> Features { get; init; } = [];
+		public string ChatFilterRevision { get; init; } = "";
 		public IReadOnlyDictionary<string, BadgeDefinition> Badges { get; init; } = new Dictionary<string, BadgeDefinition>();
 		public IReadOnlyList<ChannelInfo> Channels { get; init; } = [];
 		public Limits Limits { get; init; } = new Limits();

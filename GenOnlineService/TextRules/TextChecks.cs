@@ -34,8 +34,13 @@ namespace GenOnlineService.TextRules
 		private readonly TextMatcher m_arabizi = new();
 		private readonly List<TextTermInfo> m_literals = [];
 
+		private readonly Lazy<ChatFilterList> m_chatFilter;
+		private readonly Lazy<byte[]> m_chatFilterJson;
+
 		public TextRuleSet(IEnumerable<TextTermInfo> terms, IEnumerable<TextTermInfo> exceptions, TextRuleWorkflows workflows, string revision)
 		{
+			m_chatFilter = new Lazy<ChatFilterList>(() => ChatFilterList.Of(this));
+			m_chatFilterJson = new Lazy<byte[]>(() => ChatFilter.ToJson());
 			Terms = terms.ToList();
 			Exceptions = exceptions.ToList();
 			Workflows = workflows;
@@ -78,6 +83,8 @@ namespace GenOnlineService.TextRules
 		public IReadOnlyList<TextTermInfo> Exceptions { get; }
 		public TextRuleWorkflows Workflows { get; }
 		public string Revision { get; }
+		public ChatFilterList ChatFilter => m_chatFilter.Value;
+		public byte[] ChatFilterJson => m_chatFilterJson.Value;
 
 		public TextCheck Check(string kind, string text)
 		{
@@ -392,7 +399,12 @@ namespace GenOnlineService.TextRules
 					definitions[row.Kind] = definition;
 				}
 
+				string filterBefore = Current.ChatFilter.Revision;
 				s_current = new TextRuleSet(terms.Select(Info), exceptions.Select(Info), new TextRuleWorkflows(definitions), revision);
+				if (s_current.ChatFilter.Revision != filterBefore)
+				{
+					ChatFilterList.Publish(s_current.ChatFilter.Revision);
+				}
 			}
 			finally
 			{

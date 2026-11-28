@@ -84,6 +84,26 @@ namespace GenOnlineService.TextRules
 
 		public static readonly IReadOnlyList<string> ArabicPrefixes = ["\u0627\u0644", "\u0648\u0627\u0644", "\u0628\u0627\u0644", "\u0641\u0627\u0644", "\u0644\u0644", "\u0648", "\u0641", "\u064A\u0627"];
 
+		// The replacements Fold applies after lower-casing, for the client filter list
+		public static IReadOnlyDictionary<string, string> FoldTable()
+		{
+			var table = new SortedDictionary<string, string>(StringComparer.Ordinal);
+			foreach ((char from, char to) in s_lookAlikes.Concat(s_arabic))
+			{
+				table[from.ToString()] = to.ToString();
+			}
+			for (int digit = 0; digit < 10; digit++)
+			{
+				table[((char)('٠' + digit)).ToString()] = digit.ToString(CultureInfo.InvariantCulture);
+				table[((char)('۰' + digit)).ToString()] = digit.ToString(CultureInfo.InvariantCulture);
+			}
+			return table;
+		}
+
+		public static IReadOnlyDictionary<string, string> LeetTable() => s_leet.OrderBy(p => p.Key).ToDictionary(p => p.Key.ToString(), p => p.Value.ToString());
+
+		public static IReadOnlyDictionary<string, string> LeetAlternativeTable() => new Dictionary<string, string> { ["1"] = "l" };
+
 		private static bool IsWordChar(char c) => Char.IsLetterOrDigit(c) || s_leet.ContainsKey(c);
 
 		private static bool IsArabic(char c) => c is >= '\u0600' and <= '\u06FF';

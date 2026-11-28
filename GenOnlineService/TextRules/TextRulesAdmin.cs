@@ -37,7 +37,8 @@ namespace GenOnlineService.TextRules
 			{
 				return null;
 			}
-			return text;
+			// a term that folds to nothing or to stray spaces would make clients drop the whole filter list
+			return ChatFilterList.IsClean(ChatFilterList.ExportText(text, TextMatchModes.Word)) ? text : null;
 		}
 
 		public static async Task<List<TextRuleTerm>> Terms(AppDbContext db, string? query, string? language, string? category, string? severity)
