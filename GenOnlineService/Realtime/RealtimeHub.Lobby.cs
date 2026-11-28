@@ -772,6 +772,18 @@ namespace GenOnlineService.Realtime
 			return lobby.RequestSignallingAsync(source.UserID, target.UserID, request.FailedAttempt, Clients.Caller);
 		}
 
+		// The transport the caller's link to the target won on, the next race of the pair lists it first
+		public Task ReportPeerTransport(ReportPeerTransportRequest request)
+		{
+			if (RequireAccess(ESessionAccessType.Gameplay) != null || !ConnectionOrder.IsTransportName(request.Transport)
+				|| !TryGetPeers(request.TargetUserId, out Lobby? lobby, out LobbyMember? source, out LobbyMember? target))
+			{
+				return Task.CompletedTask;
+			}
+
+			return lobby.ReportPeerTransportAsync(source.UserID, target.UserID, request.Transport);
+		}
+
 		public Task Signal(RelayRequest request)
 		{
 			if (RequireAccess(ESessionAccessType.Gameplay) == null && request.Payload != null && TryGetPeers(request.To, out _, out _, out LobbyMember? target))

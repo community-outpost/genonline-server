@@ -705,6 +705,11 @@ namespace GenOnlineService
 	{
 		internal static Int64 ReconnectGracePeriodMS => Get("reconnect_grace_period_ms", 30000);
 
+		// the game waits 60 seconds for a silent player before it disconnects them, so a match grace below that drops a player the game still waits for
+		internal static Int64 InGameReconnectGracePeriodMS => Math.Max(Get("ingame_reconnect_grace_period_ms", 60000), ReconnectGracePeriodMS);
+
+		internal static Int64 ReconnectGracePeriodFor(ELobbyState? lobbyState) => lobbyState == ELobbyState.INGAME ? InGameReconnectGracePeriodMS : ReconnectGracePeriodMS;
+
 		private static Int64 Get(string key, Int64 defaultValue)
 		{
 			Int64 value = Program.g_Config?.GetSection("Core").GetValue(key, defaultValue) ?? defaultValue;
@@ -930,7 +935,8 @@ namespace GenOnlineService
 			// Core:reconnect_grace_period_ms; defaults to 30 seconds, unchanged from before this
 			// was configurable (the old comment here said "5 minutes", which was wrong - 30000 is
 			// milliseconds, i.e. 30 seconds).
-			return Environment.TickCount64 - m_timeAbandoned >= UserSessionSettings.ReconnectGracePeriodMS;
+			ELobbyState? lobbyState = currentLobbyID == -1 ? null : ServiceLocator.Services?.GetService<LobbyManager>()?.GetLobby(currentLobbyID)?.State;
+			return Environment.TickCount64 - m_timeAbandoned >= UserSessionSettings.ReconnectGracePeriodFor(lobbyState);
 		}
 
 		public string GetFullCountryName()

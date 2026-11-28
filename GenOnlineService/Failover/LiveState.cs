@@ -276,8 +276,10 @@ namespace GenOnlineService.Failover
 	{
 		public long Low { get; init; }
 		public long High { get; init; }
+		// 0 when the pair has a winner and no connection order yet, attempts start at 1
 		public int Attempt { get; init; }
 		public int Step { get; init; }
+		public string? Winner { get; init; }
 	}
 
 	public sealed record LobbyCountsLive

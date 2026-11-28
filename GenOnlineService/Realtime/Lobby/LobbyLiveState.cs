@@ -191,7 +191,7 @@ namespace GenOnlineService
 					Pending = PendingFullMeshConnectivityChecks
 				},
 				ReportedConnections = m_ReportedConnections.Keys.OrderBy(pair => pair.Reporter).ThenBy(pair => pair.Peer).Select(pair => new[] { pair.Reporter, pair.Peer }).ToList(),
-				PeerPairs = m_PeerPairs.All().OrderBy(pair => pair.Low).ThenBy(pair => pair.High).Select(pair => new PeerPairLive { Low = pair.Low, High = pair.High, Attempt = pair.State.Attempt, Step = pair.State.Step }).ToList(),
+				PeerPairs = m_PeerPairs.All().OrderBy(pair => pair.Low).ThenBy(pair => pair.High).Select(pair => new PeerPairLive { Low = pair.Low, High = pair.High, Attempt = pair.State?.Attempt ?? 0, Step = pair.State?.Step ?? 0, Winner = pair.Winner }).ToList(),
 				AtStart = m_cachedAtStart_numHumans < 0 ? null : new LobbyCountsLive { Humans = m_cachedAtStart_numHumans, Ai = m_cachedAtStart_numAI, Open = m_cachedAtStart_numOpen, Closed = m_cachedAtStart_numClosed },
 				AbandonedInGame = TimePlayerAbandonedIngame.OrderBy(entry => entry.Key).ToDictionary(entry => Id(entry.Key), entry => entry.Value),
 				ReportedOutcomes = ReportedOutcomes.OrderBy(entry => entry.Key).ToDictionary(entry => Id(entry.Key), entry => entry.Value),
@@ -307,7 +307,7 @@ namespace GenOnlineService
 			}
 			foreach (PeerPairLive pair in live.PeerPairs ?? new())
 			{
-				lobby.m_PeerPairs.Restore(pair.Low, pair.High, new PeerPairState(pair.Attempt, pair.Step));
+				lobby.m_PeerPairs.Restore(pair.Low, pair.High, pair.Attempt > 0 ? new PeerPairState(pair.Attempt, pair.Step) : null, ConnectionOrder.IsTransportName(pair.Winner) ? pair.Winner : null);
 			}
 
 			if (live.AtStart != null)

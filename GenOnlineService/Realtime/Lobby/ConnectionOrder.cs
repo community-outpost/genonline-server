@@ -20,16 +20,27 @@ namespace GenOnlineService.Realtime
 {
 	public readonly record struct PeerPairState(int Attempt, int Step);
 
-	public readonly record struct PeerStepValues(int Attempt, string Transport, bool Relay, int TimeoutS);
+	public readonly record struct PeerCandidate(string Transport, bool Relay);
 
-	// The connection order of a pair: direct GNS, then a plugin transport both members share, then GNS over TURN
+	// Transport and Relay are those of the first candidate
+	public readonly record struct PeerStepValues(int Attempt, IReadOnlyList<PeerCandidate> Candidates, int TimeoutS)
+	{
+		public string Transport => Candidates[0].Transport;
+		public bool Relay => Candidates[0].Relay;
+	}
+
+	// The connection order of a pair: direct GNS raced against a plugin transport both members share, or direct GNS alone
+	// when they share none, then GNS over TURN alone
 	public static class ConnectionOrder
 	{
 		public const string Gns = "gns";
 
 		public const int DirectStep = 1;
-		public const int PluginStep = 2;
+		public const int RaceStep = 2;
 		public const int RelayStep = 3;
+
+		// A plain RequestSignalling this soon after a restart of the pair is ignored, so both members asking at once restart once
+		public const long RequestDebounceMs = 2000;
 
 		// A transport name is 1 to 32 characters of a-z, 0-9 and _, and at most 8 plugin names of one list count
 		public const int MaxTransportNameLength = 32;
@@ -73,11 +84,9 @@ namespace GenOnlineService.Realtime
 			return a.Where(name => b.Contains(name, StringComparer.Ordinal) && supported.Contains(name, StringComparer.Ordinal)).Order(StringComparer.Ordinal).FirstOrDefault();
 		}
 
-		public static int Settle(int step, bool shared) => step == PluginStep && !shared ? RelayStep : step;
+		public static int Settle(int step, bool shared) => step == RelayStep ? RelayStep : shared ? RaceStep : DirectStep;
 
-		public static int Next(int step, bool shared) => step == DirectStep && shared ? PluginStep : RelayStep;
-
-		// A restart counts one more attempt and moves to the next step only when it advances
+		// A restart counts one more attempt and moves to the TURN step only when it advances
 		public static PeerPairState Restart(PeerPairState? current, bool advance, bool shared)
 		{
 			if (current is not PeerPairState state)
@@ -86,7 +95,7 @@ namespace GenOnlineService.Realtime
 			}
 
 			int step = Settle(state.Step, shared);
-			return new PeerPairState(state.Attempt + 1, advance ? Next(step, shared) : step);
+			return new PeerPairState(state.Attempt + 1, advance ? RelayStep : step);
 		}
 
 		// A RequestSignalling advances on the current attempt, restarts the same step without one, and ignores any other attempt
@@ -105,14 +114,16 @@ namespace GenOnlineService.Realtime
 			return failedAttempt.Value == state.Attempt ? Restart(state, true, shared) : null;
 		}
 
-		// shared is null when the pair cannot use step 2
-		public static PeerStepValues ValuesOf(PeerPairState state, string? shared)
+		// shared is null when the pair cannot race a plugin transport, the race lists the transport that won last first
+		public static PeerStepValues ValuesOf(PeerPairState state, string? shared, string? winner)
 		{
+			PeerCandidate direct = new PeerCandidate(Gns, false);
 			return Settle(state.Step, shared != null) switch
 			{
-				DirectStep => new PeerStepValues(state.Attempt, Gns, false, 6),
-				PluginStep => new PeerStepValues(state.Attempt, shared!, false, 10),
-				_ => new PeerStepValues(state.Attempt, Gns, true, 0),
+				DirectStep => new PeerStepValues(state.Attempt, [direct], 6),
+				RaceStep when winner == shared => new PeerStepValues(state.Attempt, [new PeerCandidate(shared!, false), direct], 10),
+				RaceStep => new PeerStepValues(state.Attempt, [direct, new PeerCandidate(shared!, false)], 10),
+				_ => new PeerStepValues(state.Attempt, [new PeerCandidate(Gns, true)], 0),
 			};
 		}
 	}
@@ -121,6 +132,8 @@ namespace GenOnlineService.Realtime
 	public sealed class PeerPairs
 	{
 		private readonly Dictionary<(long Low, long High), PeerPairState> m_pairs = new();
+		private readonly Dictionary<(long Low, long High), long> m_restartedAtMs = new();
+		private readonly Dictionary<(long Low, long High), string> m_winners = new();
 
 		private static (long Low, long High) Key(long userA, long userB) => (Math.Min(userA, userB), Math.Max(userA, userB));
 
@@ -135,25 +148,36 @@ namespace GenOnlineService.Realtime
 			return state;
 		}
 
-		public PeerPairState Restart(long userA, long userB, bool advance, bool shared)
+		public PeerPairState Restart(long userA, long userB, bool advance, bool shared, long nowMs)
 		{
 			(long Low, long High) key = Key(userA, userB);
 			PeerPairState next = ConnectionOrder.Restart(m_pairs.TryGetValue(key, out PeerPairState state) ? state : null, advance, shared);
 			m_pairs[key] = next;
+			m_restartedAtMs[key] = nowMs;
 			return next;
 		}
 
 		// Null when the report changes nothing
-		public PeerPairState? Request(long userA, long userB, int? failedAttempt, bool shared)
+		public PeerPairState? Request(long userA, long userB, int? failedAttempt, bool shared, long nowMs)
 		{
 			(long Low, long High) key = Key(userA, userB);
+			if (failedAttempt == null && m_restartedAtMs.TryGetValue(key, out long restartedAtMs) && nowMs - restartedAtMs < ConnectionOrder.RequestDebounceMs)
+			{
+				return null;
+			}
 			PeerPairState? next = ConnectionOrder.OnRequest(m_pairs.TryGetValue(key, out PeerPairState state) ? state : null, failedAttempt, shared);
 			if (next is PeerPairState restarted)
 			{
 				m_pairs[key] = restarted;
+				m_restartedAtMs[key] = nowMs;
 			}
 			return next;
 		}
+
+		// The transport a member reported its link to the other member on, the next race lists it first
+		public void SetWinner(long userA, long userB, string transport) => m_winners[Key(userA, userB)] = transport;
+
+		public string? Winner(long userA, long userB) => m_winners.TryGetValue(Key(userA, userB), out string? transport) ? transport : null;
 
 		// Stores the step the pair is sent on, so a pair that fell back to step 3 stays there
 		public PeerPairState Settle(long userA, long userB, bool shared)
@@ -168,16 +192,29 @@ namespace GenOnlineService.Realtime
 			return state;
 		}
 
-		public IEnumerable<(long Low, long High, PeerPairState State)> All() => m_pairs.Select(entry => (entry.Key.Low, entry.Key.High, entry.Value)).ToList();
+		public IEnumerable<(long Low, long High, PeerPairState? State, string? Winner)> All() =>
+			m_pairs.Keys.Union(m_winners.Keys).Select(key => (key.Low, key.High, m_pairs.TryGetValue(key, out PeerPairState state) ? state : (PeerPairState?)null, Winner(key.Low, key.High))).ToList();
 
-		public void Restore(long userA, long userB, PeerPairState state) => m_pairs[Key(userA, userB)] = state;
+		public void Restore(long userA, long userB, PeerPairState? state, string? winner)
+		{
+			if (state is PeerPairState restored)
+			{
+				m_pairs[Key(userA, userB)] = restored;
+			}
+			if (winner != null)
+			{
+				SetWinner(userA, userB, winner);
+			}
+		}
 
 		// A member who leaves or joins starts each of its pairs over
 		public void Forget(long userID)
 		{
-			foreach ((long Low, long High) key in m_pairs.Keys.Where(key => key.Low == userID || key.High == userID).ToList())
+			foreach ((long Low, long High) key in m_pairs.Keys.Concat(m_restartedAtMs.Keys).Concat(m_winners.Keys).Where(key => key.Low == userID || key.High == userID).ToList())
 			{
 				m_pairs.Remove(key);
+				m_restartedAtMs.Remove(key);
+				m_winners.Remove(key);
 			}
 		}
 	}

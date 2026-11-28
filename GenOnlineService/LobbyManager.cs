@@ -651,7 +651,7 @@ namespace GenOnlineService
 		{
 			IReadOnlyList<string>? transportsA = TransportsOf(a);
 			IReadOnlyList<string>? transportsB = TransportsOf(b);
-			m_PeerPairs.Restart(a.UserID, b.UserID, advance, ConnectionOrder.SharedTransport(transportsA, transportsB, LinkedAccountProviderNames()) != null);
+			m_PeerPairs.Restart(a.UserID, b.UserID, advance, ConnectionOrder.SharedTransport(transportsA, transportsB, LinkedAccountProviderNames()) != null, NowMs);
 			MarkLiveDirty();
 			PeerStepValues values = PairValuesLocked(a, b, transportsA, transportsB);
 			SendStartSignallingToMember(a, b, values);
@@ -669,7 +669,7 @@ namespace GenOnlineService
 
 			IReadOnlyList<string>? transportsSource = TransportsOf(source);
 			IReadOnlyList<string>? transportsTarget = TransportsOf(target);
-			if (m_PeerPairs.Request(sourceUserID, targetUserID, failedAttempt, ConnectionOrder.SharedTransport(transportsSource, transportsTarget, LinkedAccountProviderNames()) != null) == null)
+			if (m_PeerPairs.Request(sourceUserID, targetUserID, failedAttempt, ConnectionOrder.SharedTransport(transportsSource, transportsTarget, LinkedAccountProviderNames()) != null, NowMs) == null)
 			{
 				return Task.CompletedTask;
 			}
@@ -679,6 +679,20 @@ namespace GenOnlineService
 			ForgetConnection(sourceUserID, targetUserID);
 			RealtimeOut.Fire(caller.StartSignalling(StartSignallingFor(target, values)));
 			RealtimeOut.Fire(RealtimeOut.UserGame(targetUserID).StartSignalling(StartSignallingFor(source, values)));
+			return Task.CompletedTask;
+		});
+
+		private long NowMs => Clock.GetUtcNow().ToUnixTimeMilliseconds();
+
+		internal Task ReportPeerTransportAsync(Int64 sourceUserID, Int64 targetUserID, string transport) => RunExclusiveAsync(() =>
+		{
+			if (sourceUserID != targetUserID && GetMemberFromUserID(sourceUserID) != null && GetMemberFromUserID(targetUserID) != null)
+			{
+				m_PeerPairs.SetWinner(sourceUserID, targetUserID, transport);
+				// a winner report follows a RequestSignalling that forgot the pair, so it records the caller's link again
+				m_ReportedConnections[(sourceUserID, targetUserID)] = 0;
+				MarkLiveDirty();
+			}
 			return Task.CompletedTask;
 		});
 
@@ -725,12 +739,16 @@ namespace GenOnlineService
 			}
 		}
 
+		// a match keeps its peer links across a hub reconnect, so its unconnected pairs restart like those of a lobby
+		internal static bool ResignalsAfterReconnect(ELobbyState state) =>
+			state == ELobbyState.GAME_SETUP || state == ELobbyState.COUNTDOWN || state == ELobbyState.INGAME;
+
 		internal Task ResendSignallingAfterReconnectAsync(Int64 userID) => RunExclusiveAsync(() =>
 		{
 			LobbyMember? member = GetMemberFromUserID(userID);
 			bool returning = member != null && IsReturningFromHandoverLocked(member);
 			m_HandoverReturning.Remove(userID);
-			if (member == null || (State != ELobbyState.GAME_SETUP && State != ELobbyState.COUNTDOWN))
+			if (member == null || !ResignalsAfterReconnect(State))
 			{
 				EndHandoverSignallingIfDoneLocked();
 				return Task.CompletedTask;
@@ -844,7 +862,7 @@ namespace GenOnlineService
 					LobbyMember? low = GetMemberFromUserID(pair.Item1);
 					LobbyMember? high = GetMemberFromUserID(pair.Item2);
 					bool here = Volatile.Read(ref m_LiveRemoved) == 0 && !IsMovingAway;
-					if (here && low != null && high != null && (State == ELobbyState.GAME_SETUP || State == ELobbyState.COUNTDOWN) && !IsPairConnected(pair.Item1, pair.Item2))
+					if (here && low != null && high != null && ResignalsAfterReconnect(State) && !IsPairConnected(pair.Item1, pair.Item2))
 					{
 						s_log.LogDebug("Lobby {LobbyId}: re-signalling {SourceUserId} <-> {TargetUserId} after the handover grace", LobbyID, pair.Item1, pair.Item2);
 						RestartPairLocked(low, high, false);
@@ -896,7 +914,7 @@ namespace GenOnlineService
 
 			// a plugin transport reaches a peer by its middleware id, so without both ids this send uses the next step and the stored step stays
 			bool idsKnown = !String.IsNullOrEmpty(a.MiddlewareUserID) && !String.IsNullOrEmpty(b.MiddlewareUserID);
-			return ConnectionOrder.ValuesOf(state, idsKnown ? shared : null);
+			return ConnectionOrder.ValuesOf(state, idsKnown ? shared : null, m_PeerPairs.Winner(a.UserID, b.UserID));
 		}
 
 		private PeerStepValues PairValuesLocked(LobbyMember a, LobbyMember b) => PairValuesLocked(a, b, TransportsOf(a), TransportsOf(b));
@@ -912,6 +930,7 @@ namespace GenOnlineService
 				Attempt = values.Attempt,
 				Transport = values.Transport,
 				Relay = values.Relay,
+				Candidates = values.Candidates.Select(candidate => new SignallingCandidate { Transport = candidate.Transport, Relay = candidate.Relay }).ToList(),
 				TimeoutS = values.TimeoutS
 			};
 		}

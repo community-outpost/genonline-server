@@ -449,6 +449,12 @@ namespace GenOnlineService.Realtime
 		public int? FailedAttempt { get; init; }
 	}
 
+	public sealed record ReportPeerTransportRequest
+	{
+		public long TargetUserId { get; init; }
+		public string Transport { get; init; } = "";
+	}
+
 	public sealed record SetPeerTransportsRequest
 	{
 		public IReadOnlyList<string> Transports { get; init; } = [];
@@ -810,7 +816,14 @@ namespace GenOnlineService.Realtime
 		public int Attempt { get; init; }
 		public string Transport { get; init; } = "";
 		public bool Relay { get; init; }
+		public IReadOnlyList<SignallingCandidate> Candidates { get; init; } = [];
 		public int TimeoutS { get; init; }
+	}
+
+	public sealed record SignallingCandidate
+	{
+		public string Transport { get; init; } = "";
+		public bool Relay { get; init; }
 	}
 
 	public sealed record DisconnectPeerEvent
