@@ -281,6 +281,68 @@ public class PlaylistSnapshotTests : IDisposable
 	}
 }
 
+public class QuickMatchOfficialMapTests
+{
+	[Fact]
+	public void ACustomPlaylistMapIsNotOfficialAndKeepsItsNameAndPath()
+	{
+		MapRef map = PlaylistMapRefs.Of(new PlaylistMap("[RANK] Snowy Drought ZH v5 (2)", "[RANK] Snowy Drought ZH v5", true, 2));
+
+		Assert.Equal(new MapRef { Name = "[RANK] Snowy Drought ZH v5 (2)", Path = "[RANK] Snowy Drought ZH v5.map", Official = false }, map);
+	}
+
+	[Fact]
+	public void ARetailPlaylistMapIsOfficial()
+	{
+		MapRef map = PlaylistMapRefs.Of(new PlaylistMap("Defcon6 (6)", "Defcon6", false, 6));
+
+		Assert.Equal(new MapRef { Name = "Defcon6 (6)", Path = "Defcon6.map", Official = true }, map);
+	}
+
+	private static Lobby QuickMatchLobby(MapRef map) => Lobby.FromLive(new LobbyLive
+	{
+		Id = 10,
+		Owner = 1,
+		Name = "Quickmatch Lobby",
+		State = (int)ELobbyState.GAME_SETUP,
+		Type = (int)ELobbyType.QuickMatch,
+		MapName = map.Name,
+		MapPath = map.Path,
+		MapOfficial = map.Official,
+		Slots = Enumerable.Range(0, Lobby.MaxLobbySize).Select(index => new LobbyMemberLive
+		{
+			SlotIndex = index,
+			SlotState = (int)(index < 2 ? EPlayerType.SLOT_PLAYER : EPlayerType.SLOT_OPEN),
+			UserId = index < 2 ? index + 1 : -1
+		}).ToList()
+	});
+
+	// the lobby state, the lobby summary and the copy the other servers get all read the lobby, and the match found event reads the same fields
+	[Fact]
+	public void ACustomMapReachesEveryMessageAsNotOfficial()
+	{
+		MapRef custom = PlaylistMapRefs.Of(new PlaylistMap("Arena (2)", "Arena", true, 2));
+		Lobby lobby = QuickMatchLobby(custom);
+
+		Assert.False(lobby.IsMapOfficial);
+		Assert.Equal(custom, RealtimeLobbies.StateOf(lobby).Map);
+		LobbySummaryMap summary = RealtimeLobbies.SummaryOf(lobby, null).Map;
+		Assert.Equal(("Arena (2)", "Arena.map", false), (summary.Name, summary.Path, summary.Official));
+		Assert.False(lobby.CaptureLiveLocked().MapOfficial);
+	}
+
+	[Fact]
+	public void ARetailMapReachesEveryMessageAsOfficial()
+	{
+		MapRef retail = PlaylistMapRefs.Of(new PlaylistMap("Defcon6 (6)", "Defcon6", false, 6));
+		Lobby lobby = QuickMatchLobby(retail);
+
+		Assert.True(lobby.IsMapOfficial);
+		Assert.Equal(retail, RealtimeLobbies.StateOf(lobby).Map);
+		Assert.True(RealtimeLobbies.SummaryOf(lobby, null).Map.Official);
+	}
+}
+
 // Runs against a real database when GENONLINE_PROBE_POSTGRES, GENONLINE_PROBE_MARIADB or GENONLINE_PROBE_MYSQL names a server
 [Collection(PlaylistCatalogCollection.Name)]
 public class PlaylistStoreProbeTests

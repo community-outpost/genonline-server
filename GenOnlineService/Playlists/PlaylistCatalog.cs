@@ -196,4 +196,10 @@ namespace GenOnlineService.Playlists
 			return PlaylistSnapshot.ChangedIds(before, next);
 		}
 	}
+
+	public static class PlaylistMapRefs
+	{
+		// A custom map is one the players download, so only a retail map is official
+		public static MapRef Of(PlaylistMap map) => new() { Name = map.Name, Path = map.Path + ".map", Official = !map.Custom };
+	}
 }

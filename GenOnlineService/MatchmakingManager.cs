@@ -483,8 +483,9 @@ static partial class MatchmakingManager
 				var hostData = GenOnlineService.WebSocketManager.GetSharedDataForUser(host.m_UserID);
 				if (hostData == null) throw new InvalidOperationException("QuickMatch host session disappeared.");
 				if (!IsFormationCurrent()) throw new InvalidOperationException("QuickMatch formation changed.");
-				m_LobbyID = await lobbyManager.CreateLobby(db, host, hostData.m_strDisplayName, "Quickmatch Lobby", formation.Map.Name, formation.Map.Path + ".map",
-					true, formation.Players.Length, 12345, false, true, 10000, false, false, String.Empty, -5, false, Constants.g_DefaultCameraMaxHeight,
+				MapRef quickMap = GenOnlineService.Playlists.PlaylistMapRefs.Of(formation.Map);
+				m_LobbyID = await lobbyManager.CreateLobby(db, host, hostData.m_strDisplayName, "Quickmatch Lobby", quickMap.Name, quickMap.Path,
+					quickMap.Official, formation.Players.Length, 12345, false, true, 10000, false, false, String.Empty, -5, false, Constants.g_DefaultCameraMaxHeight,
 					Build, ELobbyType.QuickMatch);
 				var lobby = lobbyManager.GetLobby(m_LobbyID) ?? throw new InvalidOperationException("QuickMatch lobby creation failed.");
 				lobby.SetQuickMatchPlaylist(playlist.PlaylistID, playlist.AllowArmySelection);
