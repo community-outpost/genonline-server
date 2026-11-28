@@ -999,6 +999,7 @@ namespace Database
 						players.Written++;
 					}
 
+					MatchHistory.FillFinish(match);
 					_importedMatches.Add(id);
 					Write(matches, match);
 					_writer?.MaybeFlush();

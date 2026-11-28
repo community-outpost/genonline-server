@@ -110,4 +110,61 @@ public class MatchHistorySchemaTests
 		Assert.False(running.Desynced);
 		Assert.All(await db.MatchPlayers.Where(p => p.MatchId == 2).ToListAsync(), p => Assert.Null(p.FinishedAt));
 	}
+
+	[Fact]
+	public void FillingAFinishedMatchStoresWhatFinishingStores()
+	{
+		DateTime finishedAt = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+		Match finished = new Match { FinishedAt = finishedAt, Players = [
+			new MatchPlayer { Slot = 0, Team = 0, Side = 1 },
+			new MatchPlayer { Slot = 1, Team = 0, Side = 2, Details = "{\"desynced\":true}" },
+			new MatchPlayer { Slot = 2, Team = 1, Side = 3 }] };
+		Database.MatchHistory.FillFinish(finished);
+		Assert.Equal((short)2, finished.TeamSize);
+		Assert.True(finished.Desynced);
+		Assert.All(finished.Players, p => Assert.Equal(finishedAt, p.FinishedAt));
+
+		Match running = new Match { Players = [new MatchPlayer { Slot = 0, Team = 0, Side = 1, Details = "{\"desynced\":true}" }] };
+		Database.MatchHistory.FillFinish(running);
+		Assert.Null(running.TeamSize);
+		Assert.True(running.Desynced);
+		Assert.Null(running.Players[0].FinishedAt);
+	}
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task TheCatchUpFillsMatchesFinishedWithoutTheFieldsAndFindsNothingTheSecondTime(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider);
+		if (probe == null) return;
+		await using (AppDbContext db = probe.Open())
+		{
+			DateTime started = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
+			// match 1 finished as an older release finishes, match 2 still runs, match 3 finished with the fields already set
+			db.Matches.Add(new Match { Id = 1, Name = "a", MapName = "Map", RosterType = "2v1", StartedAt = started, FinishedAt = started.AddMinutes(30) });
+			db.Matches.Add(new Match { Id = 2, Name = "b", MapName = "Map", RosterType = "1v1", StartedAt = started });
+			db.MatchPlayers.AddRange(
+				new MatchPlayer { MatchId = 1, Slot = 0, UserId = 5, Team = 0, Side = 1, Details = "{\"desynced\":true}" },
+				new MatchPlayer { MatchId = 1, Slot = 1, UserId = 6, Team = 0, Side = 2 },
+				new MatchPlayer { MatchId = 1, Slot = 2, UserId = 7, Team = 1, Side = 3 },
+				new MatchPlayer { MatchId = 2, Slot = 0, UserId = 5, Team = -1, Side = 1 });
+			MatchSeed.Add(db, 3, started.AddMinutes(40), teamSize: 4, players: new SeedPlayer(5));
+			await db.SaveChangesAsync();
+		}
+
+		await using (AppDbContext db = probe.Open())
+		{
+			Assert.Equal(1, await Database.MatchHistory.CatchUpFinishedMatches(db, batchSize: 1));
+			Assert.Equal(0, await Database.MatchHistory.CatchUpFinishedMatches(db));
+
+			Match finished = await db.Matches.SingleAsync(m => m.Id == 1);
+			Assert.Equal((short)2, finished.TeamSize);
+			Assert.True(finished.Desynced);
+			Assert.All(await db.MatchPlayers.Where(p => p.MatchId == 1).ToListAsync(), p => Assert.Equal(finished.FinishedAt, p.FinishedAt));
+			Assert.Null((await db.Matches.SingleAsync(m => m.Id == 2)).TeamSize);
+			Assert.Null((await db.MatchPlayers.SingleAsync(p => p.MatchId == 2)).FinishedAt);
+			Assert.Equal((short)4, (await db.Matches.SingleAsync(m => m.Id == 3)).TeamSize);
+			Assert.Equal(new long[] { 3, 1 }, (await Database.MatchHistory.GetMatchFeed(db, new MatchFeedQuery(new MatchFeedFilter { Players = [5] }, MatchFeedSort.FinishedAt, true, 10))).Matches.Select(m => m.match_id).ToArray());
+		}
+	}
 }

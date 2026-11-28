@@ -1659,6 +1659,23 @@ namespace GenOnlineService
 				});
 			}
 
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					await using AppDbContext db = await app.Services.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync(stopping);
+					int filled = await Database.MatchHistory.CatchUpFinishedMatches(db, cancellationToken: stopping);
+					if (filled > 0)
+					{
+						app.Logger.LogInformation("Match history catch up filled {MatchCount} finished matches", filled);
+					}
+				}
+				catch (Exception ex) when (!GenOnlineService.Service.SelfRestartingTimer.IsShutdownFault(ex, stopping))
+				{
+					app.Logger.LogWarning(ex, "Match history catch up failed");
+				}
+			});
+
 			{
 				GenOnlineService.Service.SelfRestartingTimer.Start(TimeSpan.FromHours(1).TotalMilliseconds, stopping, app.Logger, "Retention purge timer failed", async () =>
 				{

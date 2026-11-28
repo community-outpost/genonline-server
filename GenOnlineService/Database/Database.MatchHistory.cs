@@ -560,6 +560,57 @@ namespace Database
 			return sizes.Length == 0 ? null : (short)sizes.Max();
 		}
 
+		// The import and the catch up store from the players what FinishMatch stores, a desync counting before the finish too
+		internal static void FillFinish(Match match)
+		{
+			match.Desynced = match.Desynced || match.Players.Any(p => ReadDetails(p.Details).desynced);
+			if (match.FinishedAt == null)
+			{
+				return;
+			}
+			match.TeamSize = TeamSizeOf(match.Players);
+			foreach (MatchPlayer player in match.Players)
+			{
+				player.FinishedAt = match.FinishedAt;
+			}
+		}
+
+		// Matches an older release finished during a deploy carry no player finish time, so the per player feed misses them until this fills them
+		public static async Task<int> CatchUpFinishedMatches(AppDbContext db, int batchSize = 500, CancellationToken cancellationToken = default)
+		{
+			int filled = 0;
+			long after = long.MinValue;
+			while (true)
+			{
+				List<long> ids = await db.Matches.AsNoTracking()
+					.Where(m => m.Id > after && m.FinishedAt != null && db.MatchPlayers.Any(p => p.MatchId == m.Id && p.FinishedAt == null))
+					.OrderBy(m => m.Id)
+					.Select(m => m.Id)
+					.Take(batchSize)
+					.ToListAsync(cancellationToken);
+				if (ids.Count == 0)
+				{
+					return filled;
+				}
+				after = ids[^1];
+
+				List<Match> matches = await db.Matches.AsNoTracking().Include(m => m.Players).Where(m => ids.Contains(m.Id)).ToListAsync(cancellationToken);
+				foreach (Match match in matches)
+				{
+					FillFinish(match);
+					long id = match.Id;
+					short? teamSize = match.TeamSize;
+					bool desynced = match.Desynced;
+					DateTime finished = match.FinishedAt!.Value;
+					await db.Matches.Where(m => m.Id == id)
+						.ExecuteUpdateAsync(s => s.SetProperty(m => m.TeamSize, teamSize).SetProperty(m => m.Desynced, m => m.Desynced || desynced), cancellationToken);
+					await db.MatchPlayers.Where(p => p.MatchId == id && p.FinishedAt == null)
+						.ExecuteUpdateAsync(s => s.SetProperty(p => p.FinishedAt, finished), cancellationToken);
+					filled++;
+				}
+			}
+		}
+
 		private static string ComputeRosterType(Dictionary<int, int> playersPerTeam)
 		{
 			int noTeamCount = playersPerTeam.GetValueOrDefault(-1, 0);
