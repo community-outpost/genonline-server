@@ -28,11 +28,11 @@ public static class MatchSeed
 	public static readonly DateTime Origin = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc);
 
 	public static void Add(AppDbContext db, long id, DateTime finished, string map = "Tournament Desert", ELobbyType type = ELobbyType.CustomGame, bool rated = true,
-		short teamSize = 1, bool desynced = false, int durationS = 600, params SeedPlayer[] players)
+		short teamSize = 1, bool desynced = false, int durationS = 600, string? game = null, params SeedPlayer[] players)
 	{
 		db.Matches.Add(new Match
 		{
-			Id = id, Name = "m" + id, MapName = map, LobbyType = type, TrackStats = rated, TeamSize = teamSize, Desynced = desynced, RosterType = "1v1",
+			Id = id, Name = "m" + id, MapName = map, LobbyType = type, TrackStats = rated, TeamSize = teamSize, Desynced = desynced, RosterType = "1v1", Game = game,
 			StartedAt = finished.AddSeconds(-durationS), FinishedAt = finished
 		});
 		short slot = 0;

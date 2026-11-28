@@ -757,6 +757,7 @@ namespace GenOnlineService.Portal.Client
 		public string Name { get; init; } = "";
 		public string Type { get; init; } = "";
 		public string RosterType { get; init; } = "";
+		public string? Game { get; init; }
 		public PortalMatchMap Map { get; init; } = new PortalMatchMap();
 		public PortalMatchBuild Build { get; init; } = new PortalMatchBuild();
 		public DateTime StartedAt { get; init; }

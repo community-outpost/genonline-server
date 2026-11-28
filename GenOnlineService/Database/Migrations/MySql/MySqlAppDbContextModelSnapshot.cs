@@ -1741,6 +1741,11 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("datetime(6)")
                         .HasColumnName("finished_at");
 
+                    b.Property<string>("Game")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("game");
+
                     b.Property<long>("IniCrc")
                         .HasColumnType("bigint")
                         .HasColumnName("ini_crc");

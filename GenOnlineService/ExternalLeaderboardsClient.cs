@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 
@@ -135,7 +136,7 @@ namespace GenOnlineService
             GetExternalLeaderboardsPostConfig(out string postUrl, out string postToken);
 
             // The external ingest endpoint must deduplicate repeated submissions by match_id.
-            string payloadJson = JsonSerializer.Serialize(matchEntry);
+            string payloadJson = PayloadOf(matchEntry);
 
             string responseBody = string.Empty;
             HttpClient client = g_LeaderboardsClient.Value;
@@ -166,6 +167,14 @@ namespace GenOnlineService
             }
 
             return responseBody;
+        }
+
+        // The external leaderboard does not take a game yet
+        internal static string PayloadOf(MatchHistory_Entry matchEntry)
+        {
+            JsonObject payload = JsonSerializer.SerializeToNode(matchEntry)!.AsObject();
+            payload.Remove("game");
+            return payload.ToJsonString();
         }
 
         public static async Task<EloData?> GetEloFromApi(long playerId)

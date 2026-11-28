@@ -53,6 +53,10 @@ public class Match
 	public bool TrackStats { get; set; }
 	public bool AllowObservers { get; set; }
 	public ushort MaxCamHeight { get; set; }
+
+	// zerohour or generals from the client build, null for matches stored before the game was recorded
+	public string? Game { get; set; }
+
 	public uint ExeCrc { get; set; }
 	public uint IniCrc { get; set; }
 	public DateTime StartedAt { get; set; }
@@ -217,6 +221,7 @@ public class MatchConfiguration : IEntityTypeConfiguration<Match>
 		entity.Property(e => e.TrackStats).HasColumnName("track_stats");
 		entity.Property(e => e.AllowObservers).HasColumnName("allow_observers");
 		entity.Property(e => e.MaxCamHeight).HasColumnName("max_cam_height");
+		entity.Property(e => e.Game).HasColumnName("game").HasMaxLength(16);
 		entity.Property(e => e.ExeCrc).HasColumnName("exe_crc");
 		entity.Property(e => e.IniCrc).HasColumnName("ini_crc");
 		entity.Property(e => e.StartedAt).HasColumnName("started_at");
@@ -445,7 +450,10 @@ namespace Database
 				match.MaxCamHeight,
 				match.ExeCrc,
 				match.IniCrc
-			);
+			)
+			{
+				game = match.Game
+			};
 
 			foreach (MatchPlayer player in players.OrderBy(p => p.Slot))
 			{
@@ -637,6 +645,8 @@ namespace Database
 			return string.Join("v", groups);
 		}
 
+		public static string? StoredGameOf(string game) => game is ClientGames.ZeroHour or ClientGames.Generals ? game : null;
+
 		// The id comes from the match id generator (MatchIds.cs), 0 means no match history was written
 		public static async Task<ulong> CreatePlaceholderMatchHistory(
 			AppDbContext db,
@@ -665,6 +675,7 @@ namespace Database
 					TrackStats = lobby.IsTrackingStats,
 					AllowObservers = lobby.AllowObservers,
 					MaxCamHeight = lobby.MaximumCameraHeight,
+					Game = StoredGameOf(lobby.Game),
 					ExeCrc = lobby.ExeCRC,
 					IniCrc = lobby.IniCRC
 				};

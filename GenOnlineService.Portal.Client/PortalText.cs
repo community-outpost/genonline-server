@@ -89,6 +89,13 @@ namespace GenOnlineService.Portal.Client
 			_ => "unknown"
 		};
 
+		public static string Game(string game) => game switch
+		{
+			"zerohour" => "Zero Hour",
+			"generals" => "Generals",
+			_ => game
+		};
+
 		public static string MatchFlag(string flag) => flag switch
 		{
 			"no_result" => "no result",

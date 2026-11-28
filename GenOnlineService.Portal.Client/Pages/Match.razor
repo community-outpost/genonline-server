@@ -59,6 +59,10 @@ else
     PortalMatch match = m_match;
     <div class="bb:flex bb:flex-wrap bb:items-center bb:gap-2">
         <BbBadge Variant="BadgeVariant.Soft">@PortalText.MatchType(match.Type)</BbBadge>
+        @if (match.Game is string game)
+        {
+            <BbBadge Variant="BadgeVariant.Outline" data-testid="match-game">@PortalText.Game(game)</BbBadge>
+        }
         @if (match.RosterType.Length > 0)
         {
             <BbBadge Variant="BadgeVariant.Outline">@match.RosterType</BbBadge>

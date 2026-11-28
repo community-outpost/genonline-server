@@ -1738,6 +1738,11 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("finished_at");
 
+                    b.Property<string>("Game")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("game");
+
                     b.Property<long>("IniCrc")
                         .HasColumnType("bigint")
                         .HasColumnName("ini_crc");

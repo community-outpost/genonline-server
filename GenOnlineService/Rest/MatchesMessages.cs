@@ -75,6 +75,11 @@ namespace GenOnlineService.Rest
 		public string Name { get; init; } = "";
 		public LobbyType Type { get; init; }
 		public string RosterType { get; init; } = "";
+
+		// zerohour or generals, left out for a match stored before the game was recorded
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Game { get; init; }
+
 		public MapRef Map { get; init; } = new MapRef();
 		public LobbySettings Settings { get; init; } = new LobbySettings();
 		public BuildIdentity Build { get; init; } = new BuildIdentity();
@@ -95,6 +100,7 @@ namespace GenOnlineService.Rest
 				Name = entry.lobby_name,
 				Type = entry.lobby_type == ELobbyType.QuickMatch ? LobbyType.QuickMatch : LobbyType.Custom,
 				RosterType = entry.match_roster_type,
+				Game = entry.game,
 				Map = new MapRef { Name = entry.map_name, Path = entry.map_path, Official = entry.is_official_map },
 				Settings = new LobbySettings
 				{

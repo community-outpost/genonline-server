@@ -84,6 +84,9 @@ namespace GenOnlineService
 		public UInt32 exe_crc { get; set; } = 0;
 		public UInt32 ini_crc { get; set; } = 0;
 
+		[System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+		public string? game { get; set; }
+
 		public List<MatchdataMemberModel?> members { get; private set; } = new();
 	}
 }
