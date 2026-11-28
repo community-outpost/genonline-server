@@ -1165,9 +1165,10 @@ namespace Database
 			}
 
 			List<Func<MatchFeedRow, bool>> residuals = new();
-			if (filter.Map is string residualMap && lead != nameof(filter.Map))
+			// MySQL collations compare case and accent insensitive, so the map always checks again as exact ordinal text
+			if (filter.Map is string residualMap)
 			{
-				residuals.Add(r => r.MapName == residualMap);
+				residuals.Add(r => String.Equals(r.MapName, residualMap, StringComparison.Ordinal));
 			}
 			if (filter.TeamSize is short residualTeamSize && lead != nameof(filter.TeamSize))
 			{

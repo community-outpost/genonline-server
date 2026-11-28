@@ -189,6 +189,25 @@ public class MatchFeedTests
 
 	[ProbeTheory]
 	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task TheMapFilterComparesExactOrdinalTextOnEveryPath(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider);
+		if (probe == null) return;
+		await using AppDbContext db = probe.Open();
+		MatchSeed.Add(db, 1, MatchSeed.Origin.AddMinutes(1), map: "Alpine Assault", players: new SeedPlayer(5));
+		MatchSeed.Add(db, 2, MatchSeed.Origin.AddMinutes(2), map: "alpine assault", players: new SeedPlayer(5));
+		MatchSeed.Add(db, 3, MatchSeed.Origin.AddMinutes(3), map: "Alpine Assault ", players: new SeedPlayer(5));
+		await db.SaveChangesAsync();
+
+		async Task<long[]> Of(MatchFeedFilter filter) => Ids(await Database.MatchHistory.GetMatchFeed(db, Newest(20, filter)));
+		Assert.Equal(new long[] { 1 }, await Of(new MatchFeedFilter { Map = "Alpine Assault" }));
+		Assert.Equal(new long[] { 1 }, await Of(new MatchFeedFilter { Map = "Alpine Assault", Rated = true }));
+		Assert.Equal(new long[] { 1 }, await Of(new MatchFeedFilter { Map = "Alpine Assault", Players = [5] }));
+		Assert.Equal(new long[] { 2 }, await Of(new MatchFeedFilter { Map = "alpine assault" }));
+	}
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
 	public async Task AUserHoldingTwoSlotsSeesTheMatchOnce(string provider)
 	{
 		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider);

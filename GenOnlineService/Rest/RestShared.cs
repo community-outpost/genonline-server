@@ -76,6 +76,11 @@ namespace GenOnlineService.Rest
 			[RestCodes.LinkedAccountInUse] = StatusCodes.Status409Conflict,
 			[RestCodes.LinkedAccountLocked] = StatusCodes.Status409Conflict,
 			[RestCodes.Conflict] = StatusCodes.Status409Conflict,
+			[MatchFeedCodes.InvalidCursor] = StatusCodes.Status400BadRequest,
+			[MatchFeedCodes.InvalidParameter] = StatusCodes.Status400BadRequest,
+			[MatchFeedCodes.UnknownParameter] = StatusCodes.Status400BadRequest,
+			[MatchFeedCodes.MixedPaging] = StatusCodes.Status400BadRequest,
+			[MatchFeedCodes.FilterRequiresPlayer] = StatusCodes.Status400BadRequest,
 			[RestCodes.MethodNotAllowed] = StatusCodes.Status405MethodNotAllowed,
 			[RestCodes.AppealExists] = StatusCodes.Status409Conflict,
 			[RestCodes.AppealDecided] = StatusCodes.Status409Conflict,
@@ -176,6 +181,25 @@ namespace GenOnlineService.Rest
 			if (nextValue != null)
 			{
 				context.Response.Headers["Link"] = $"<{LinkTo(context.Request, parameter, nextValue.Value.ToString(CultureInfo.InvariantCulture))}>; rel=\"next\"";
+			}
+		}
+
+		// A cursor page links each way with only its cursor and per_page, since the cursor carries the sort and the filters
+		public static void WriteCursorLinks(HttpContext context, string? next, string? prev, int perPage)
+		{
+			HttpRequest request = context.Request;
+			List<string> links = new();
+			foreach ((string? cursor, string rel) in new[] { (next, "next"), (prev, "prev") })
+			{
+				if (cursor != null)
+				{
+					Dictionary<string, string?> query = new() { ["cursor"] = cursor, ["per_page"] = perPage.ToString(CultureInfo.InvariantCulture) };
+					links.Add($"<{Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(request.PathBase + request.Path, query)}>; rel=\"{rel}\"");
+				}
+			}
+			if (links.Count > 0)
+			{
+				context.Response.Headers["Link"] = String.Join(", ", links);
 			}
 		}
 

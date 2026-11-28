@@ -47,6 +47,20 @@ namespace GenOnlineService.OpenApi
 				};
 			}
 
+			IEnumerable<ApiQueryParameterAttribute> queryParameters = metadata.OfType<ApiFeedParametersAttribute>().SelectMany(_ => ApiFeedParametersAttribute.Parameters)
+				.Concat(metadata.OfType<ApiQueryParameterAttribute>());
+			foreach (ApiQueryParameterAttribute parameter in queryParameters)
+			{
+				operation.Parameters ??= new List<IOpenApiParameter>();
+				operation.Parameters.Add(QueryParameter(parameter));
+			}
+			if (metadata.OfType<ApiFeedParametersAttribute>().Any() && operation.Responses?.TryGetValue("200", out IOpenApiResponse? page) == true && page is OpenApiResponse ok)
+			{
+				ok.Headers ??= new Dictionary<string, IOpenApiHeader>();
+				ok.Headers["Link"] = new OpenApiHeader { Description = "rel=\"next\" and rel=\"prev\" as `?cursor=...&per_page=n`, or the legacy `after_id` or `before_id` link.", Schema = new OpenApiSchema { Type = JsonSchemaType.String } };
+				ok.Headers["Deprecation"] = new OpenApiHeader { Description = "`true` when the call used a legacy parameter.", Schema = new OpenApiSchema { Type = JsonSchemaType.String } };
+			}
+
 			OpenApiSchemaReference error = await ErrorAsync(context, document, cancellationToken);
 			operation.Responses ??= new OpenApiResponses();
 			operation.Responses.TryAdd("default", ErrorResponse(error, "A failure: the status and the error code say which."));
@@ -78,6 +92,27 @@ namespace GenOnlineService.OpenApi
 			operation.Security = security;
 
 			Describe(operation, callers.Describe(context.Description.HttpMethod));
+		}
+
+		private static OpenApiParameter QueryParameter(ApiQueryParameterAttribute parameter)
+		{
+			OpenApiSchema schema = new OpenApiSchema
+			{
+				Type = parameter.Type switch { "integer" => JsonSchemaType.Integer, "boolean" => JsonSchemaType.Boolean, _ => JsonSchemaType.String },
+				Format = parameter.Format,
+				Minimum = parameter.Minimum == long.MinValue ? null : parameter.Minimum.ToString(System.Globalization.CultureInfo.InvariantCulture),
+				Maximum = parameter.Maximum == long.MinValue ? null : parameter.Maximum.ToString(System.Globalization.CultureInfo.InvariantCulture),
+				Enum = parameter.Enum?.Select(value => (System.Text.Json.Nodes.JsonNode)System.Text.Json.Nodes.JsonValue.Create(value)!).ToList()
+			};
+			return new OpenApiParameter
+			{
+				Name = parameter.Name,
+				In = ParameterLocation.Query,
+				Description = parameter.Description,
+				Deprecated = parameter.Deprecated,
+				Explode = parameter.Explode,
+				Schema = parameter.Explode ? new OpenApiSchema { Type = JsonSchemaType.Array, Items = schema, MaxItems = GenOnlineService.Rest.MatchFeedArgs.MaxPlayers } : schema
+			};
 		}
 
 		private static OpenApiSecurityRequirement Requirement(OpenApiDocument document, string scheme)

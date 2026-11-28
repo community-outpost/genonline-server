@@ -161,8 +161,18 @@ namespace GenOnlineService.Rest
 	}
 
 	[ApiFixture("get-matches.response")]
+	// The cursors and partial are left out of a legacy page, a cursor is left out where no page lies that way
 	public sealed record MatchListResponse
 	{
 		public IReadOnlyList<MatchResponse> Matches { get; init; } = [];
+
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? NextCursor { get; init; }
+
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? PrevCursor { get; init; }
+
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+		public bool Partial { get; init; }
 	}
 }

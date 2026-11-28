@@ -26,10 +26,7 @@ using System.Globalization;
 
 namespace GenOnlineService.Rest
 {
-	public readonly record struct MatchListArgs(long? AfterID, DateTime? Since, int PerPage)
-	{
-		public bool Newest => AfterID == null && Since == null;
-	}
+	public readonly record struct MatchListArgs(long? AfterID, DateTime? Since, int PerPage);
 
 	public static class MatchArgs
 	{
@@ -81,15 +78,38 @@ namespace GenOnlineService.Rest
 			m_authorization = authorization;
 		}
 
-		// Keyset paged finished matches. With after_id or since: matches with an id above after_id that finished at or after since,
-		// lowest id first, and a Link rel=next with after_id=<last id> when the page is full. With neither: the newest page,
-		// highest id first and without a Link; a reader continues forward with after_id=<highest id of that page>.
+		private const string FeedDescription =
+			"Pages by cursor: follow `next_cursor` or `prev_cursor` (also sent as `Link` rel=\"next\" and rel=\"prev\"), sending only `cursor` and `per_page` with it. "
+			+ "The cursor carries the sort and the filters. No total is counted. `partial: true` means the page stopped at its scan budget before it filled: keep following `next_cursor`.\n\n"
+			+ "`sort=id` allows only `player` and `order` and walks every finished match once, as a full crawl. `finished_after` with `order=asc` is the incremental feed.\n\n"
+			+ "A 400 names its reason: `invalid_cursor`, `invalid_parameter` (`params.parameter`), `unknown_parameter`, `mixed_paging` (a legacy parameter with a new one) "
+			+ "or `filter_requires_player` (`faction` or `result` without `player`). A legacy parameter answers with `Deprecation: true`.";
+
+		private static readonly string[] s_legacyList = ["after_id", "since"];
+		private static readonly string[] s_legacyOfPlayer = ["before_id"];
+
+		// The legacy after_id and since keep their rows: matches with an id above after_id that finished at or after since, lowest id
+		// first, and a Link rel=next with after_id=<last id> when the page is full
 		[Authorize(Policy = PermissionPolicies.Prefix + Permissions.MatchHistoryRead)]
-		[EndpointSummary("Lists finished matches.")]
+		[EndpointSummary("Lists finished matches, newest finished first.")]
+		[EndpointDescription(FeedDescription)]
 		[ProducesResponseType<MatchListResponse>(StatusCodes.Status200OK)]
+		[ApiFeedParameters]
+		[ApiQueryParameter("after_id", "integer", "Legacy: matches with a higher id, lowest id first. Use `sort=id&order=asc` instead.", Deprecated = true)]
+		[ApiQueryParameter("since", "string", "Legacy: matches finished at or after this time, lowest id first. Use `finished_after` with `order=asc` instead.", Format = "date-time", Deprecated = true)]
 		[HttpGet("~/api/v1/matches")]
 		public async Task<IActionResult> List()
 		{
+			(bool legacy, Failure? classified) = MatchFeedArgs.Classify(Request.Query, s_legacyList);
+			if (classified != null)
+			{
+				return RestResults.Fail(classified.Value);
+			}
+			if (!legacy)
+			{
+				return await Feed(null);
+			}
+
 			(MatchListArgs args, Failure? failure) = MatchArgs.Read(Request.Query);
 			if (failure != null)
 			{
@@ -99,21 +119,34 @@ namespace GenOnlineService.Rest
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(HttpContext.RequestAborted);
 			List<MatchHistory_Entry> entries = await Database.MatchHistory.GetMatchesPage(db, args.AfterID, args.Since, args.PerPage, HttpContext.RequestAborted);
 
-			if (!args.Newest && entries.Count == args.PerPage)
+			if (entries.Count == args.PerPage)
 			{
 				Paging.WriteKeysetNext(HttpContext, "after_id", entries[^1].match_id);
 			}
+			Response.Headers["Deprecation"] = "true";
 			IReadOnlyDictionary<long, int> tags = await TagsOf(db, entries.SelectMany(MatchResponse.UserIdsOf));
 			return RestResults.Ok(new MatchListResponse { Matches = entries.Select(entry => MatchResponse.Of(entry, tags)).ToArray() });
 		}
 
 		[Authorize(Policy = PermissionPolicies.Prefix + Permissions.MatchHistoryRead)]
-		[EndpointSummary("Lists the finished matches of one player, newest first.")]
-		[EndpointDescription("before_id continues the list; a Link rel=next with before_id=<last id> is sent when the page is full.")]
+		[EndpointSummary("Lists the finished matches of one player, newest finished first.")]
+		[EndpointDescription(FeedDescription + "\n\nThe player of the path is the first player, `player` adds up to 3 more.")]
 		[ProducesResponseType<MatchListResponse>(StatusCodes.Status200OK)]
+		[ApiFeedParameters]
+		[ApiQueryParameter("before_id", "integer", "Legacy: matches with a lower id, highest id first. Use `sort=id` instead.", Deprecated = true)]
 		[HttpGet("~/api/v1/players/{userID:long}/matches")]
 		public async Task<IActionResult> OfPlayer(long userID)
 		{
+			(bool legacy, Failure? classified) = MatchFeedArgs.Classify(Request.Query, s_legacyOfPlayer);
+			if (classified != null)
+			{
+				return RestResults.Fail(classified.Value);
+			}
+			if (!legacy)
+			{
+				return await Feed(userID);
+			}
+
 			long? beforeID = null;
 			if (Request.Query.TryGetValue("before_id", out var beforeText))
 			{
@@ -140,8 +173,39 @@ namespace GenOnlineService.Rest
 			{
 				Paging.WriteKeysetNext(HttpContext, "before_id", entries[^1].match_id);
 			}
+			Response.Headers["Deprecation"] = "true";
 			IReadOnlyDictionary<long, int> tags = await TagsOf(db, entries.SelectMany(MatchResponse.UserIdsOf));
 			return RestResults.Ok(new MatchListResponse { Matches = entries.Select(entry => MatchResponse.Of(entry, tags)).ToArray() });
+		}
+
+		private async Task<IActionResult> Feed(long? player)
+		{
+			(MatchFeedRequest? request, Failure? failure) = MatchFeedArgs.Read(Request.Query, player);
+			if (failure != null)
+			{
+				return RestResults.Fail(failure.Value);
+			}
+
+			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(HttpContext.RequestAborted);
+			if (player is long userID && !await Database.Users.Exists(db, userID))
+			{
+				return RestResults.NotFound("user");
+			}
+
+			MatchFeedQuery query = request!.Query;
+			MatchFeedPage page = await Database.MatchHistory.GetMatchFeed(db, query, HttpContext.RequestAborted);
+			string? next = page.Next is MatchFeedKey after ? MatchFeedArgs.Encode(query, after, false) : null;
+			string? prev = request.HadCursor && page.Prev is MatchFeedKey before ? MatchFeedArgs.Encode(query, before, true) : null;
+			Paging.WriteCursorLinks(HttpContext, next, prev, query.PerPage);
+
+			IReadOnlyDictionary<long, int> tags = await TagsOf(db, page.Matches.SelectMany(MatchResponse.UserIdsOf));
+			return RestResults.Ok(new MatchListResponse
+			{
+				Matches = page.Matches.Select(entry => MatchResponse.Of(entry, tags)).ToArray(),
+				NextCursor = next,
+				PrevCursor = prev,
+				Partial = page.Partial
+			});
 		}
 
 		// One match, finished or running: match_history.read, or any staff permission through the sign-in cookie, so the
