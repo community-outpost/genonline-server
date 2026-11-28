@@ -54,6 +54,9 @@ namespace GenOnlineService.Realtime
 		public IReadOnlyList<string> Badges { get; init; } = [];
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public ClientType? Client { get; init; }
+		// Never invisible: an invisible user is only in their own list, where it is left out
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public PresenceStatus? Status { get; init; }
 	}
 
 	// a tombstone has only id, channel_id, created_at and deleted

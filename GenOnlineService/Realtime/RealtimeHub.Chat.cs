@@ -401,6 +401,19 @@ namespace GenOnlineService.Realtime
 		}
 
 		// Going invisible removes the user from the lists of the others and coming back adds them again, their own connections keep their list
+		private static async Task AnnounceChannelStatusAsync(Int64 userID)
+		{
+			foreach (UserSession session in WebSocketManager.GetAllDataFromUser(userID))
+			{
+				if (session.networkRoomID < 0 || RealtimeAudience.ConnectionOf(session) == null)
+				{
+					continue;
+				}
+
+				await RealtimeOut.Group(RealtimeGroups.Channel(session.networkRoomID)).MemberUpdate(new MemberUpdateEvent { Member = RealtimeMembers.Of(session) });
+			}
+		}
+
 		private static async Task AnnounceChannelVisibilityAsync(Int64 userID, bool visible)
 		{
 			List<string> own = new();

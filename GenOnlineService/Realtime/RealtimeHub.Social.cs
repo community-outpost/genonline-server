@@ -50,13 +50,26 @@ namespace GenOnlineService.Realtime
 
 			PresenceStatus previous = user.PresenceStatus;
 			user.PresenceStatus = status;
-			if ((previous == PresenceStatus.Invisible) != (status == PresenceStatus.Invisible))
+			switch (ChannelChangeOf(previous, status))
 			{
-				await AnnounceChannelVisibilityAsync(user.m_UserID, visible: status != PresenceStatus.Invisible);
+				case ChannelChange.Visibility:
+					await AnnounceChannelVisibilityAsync(user.m_UserID, visible: status != PresenceStatus.Invisible);
+					break;
+				case ChannelChange.Status:
+					await AnnounceChannelStatusAsync(user.m_UserID);
+					break;
 			}
 			PublishPresence(user.m_UserID);
 			return Result.Success();
 		}
+
+		public enum ChannelChange { None, Visibility, Status }
+
+		// Becoming or leaving invisible removes or adds the member, any other change of a visible status updates it
+		internal static ChannelChange ChannelChangeOf(PresenceStatus previous, PresenceStatus status) =>
+			(previous == PresenceStatus.Invisible) != (status == PresenceStatus.Invisible) ? ChannelChange.Visibility
+			: previous != status && status != PresenceStatus.Invisible ? ChannelChange.Status
+			: ChannelChange.None;
 
 		internal static void PublishPresence(Int64 userID)
 		{

@@ -141,7 +141,13 @@ namespace GenOnlineService.Realtime
 		public static Member Of(Int64 userID, IReadOnlyDictionary<long, (string Name, int Tag)> names) =>
 			names.TryGetValue(userID, out (string Name, int Tag) stored) ? Of(userID, stored.Name, null, stored.Tag) : Of(userID);
 
-		public static Member Of(UserSession session) => Of(session.m_UserID, null, ClientOf(session.GetSessionType()));
+		public static Member Of(UserSession session) => Of(session.m_UserID, null, ClientOf(session.GetSessionType())) with { Status = VisibleStatusOf(session.m_UserID) };
+
+		public static PresenceStatus? VisibleStatusOf(Int64 userID)
+		{
+			PresenceStatus? status = WebSocketManager.GetSharedDataForUser(userID)?.PresenceStatus;
+			return status == PresenceStatus.Invisible ? null : status;
+		}
 	}
 
 	// Every role with a tag or a colour shows a badge of its own name, so a role edited in the portal reaches the game
