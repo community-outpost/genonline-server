@@ -74,6 +74,8 @@ namespace GenOnlineService.Rest
 					? new { kind = query.Kind, value = query.Value, page = page.Page, results = found.Value.Accounts.Count }
 					: (object)new { kind = query.Kind, value = query.Value, fingerprint, page = page.Page, results = found.Value.Accounts.Count });
 
+			List<Database.IdentifierMatch> matches = await Database.IdentifierAccounts.MatchesOf(db, query, cancellationToken);
+
 			string? rawValue = null;
 			if (raw)
 			{
@@ -100,7 +102,8 @@ namespace GenOnlineService.Rest
 					FirstSeenAt = a.FirstSeenAt,
 					LastSeenAt = a.LastSeenAt,
 					Events = a.Events
-				}).ToList()
+				}).ToList(),
+				Matches = matches.Select(m => new PortalInvestigationMatch { MatchId = m.MatchID, StartedAt = m.StartedAt, PlayerId = m.UserID, Name = m.Name, Tag = PlayerTags.Of(m.NameTag) }).ToList()
 			}), found.Value.HasNext);
 		}
 	}

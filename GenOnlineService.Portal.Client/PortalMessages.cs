@@ -591,6 +591,13 @@ namespace GenOnlineService.Portal.Client
 		public DateTime FirstSeenAt { get; init; }
 		public DateTime LastSeenAt { get; init; }
 		public IReadOnlyList<PortalMachineAddress> Addresses { get; init; } = [];
+		public IReadOnlyList<PortalMachineMatch> Matches { get; init; } = [];
+	}
+
+	public sealed record PortalMachineMatch
+	{
+		public long Id { get; init; }
+		public DateTime StartedAt { get; init; }
 	}
 
 	public sealed record PortalMachineAddress
@@ -638,6 +645,18 @@ namespace GenOnlineService.Portal.Client
 		public string FullName => Tag == null ? Name : Name + "#" + Tag;
 	}
 
+	public sealed record PortalInvestigationMatch
+	{
+		public long MatchId { get; init; }
+		public DateTime StartedAt { get; init; }
+		public long PlayerId { get; init; }
+		public string Name { get; init; } = "";
+		public string? Tag { get; init; }
+
+		[JsonIgnore]
+		public string FullName => Tag == null ? Name : Name + "#" + Tag;
+	}
+
 	public sealed record PortalInvestigation
 	{
 		public static readonly IReadOnlyList<(string Kind, string Label, string Hint)> Kinds =
@@ -659,6 +678,7 @@ namespace GenOnlineService.Portal.Client
 		public PortalAddressFacts? Network { get; init; }
 		public string? RawValue { get; init; }
 		public IReadOnlyList<PortalInvestigationAccount> Accounts { get; init; } = [];
+		public IReadOnlyList<PortalInvestigationMatch> Matches { get; init; } = [];
 
 		[JsonIgnore]
 		public bool HasNext { get; init; }
@@ -753,6 +773,20 @@ namespace GenOnlineService.Portal.Client
 		public string? Status { get; init; }
 	}
 
+	public sealed record PortalMatchDevice
+	{
+		public string Kind { get; init; } = "";
+		public string Fingerprint { get; init; } = "";
+		public string Key { get; init; } = "";
+	}
+
+	public sealed record PortalMatchSession
+	{
+		public IReadOnlyList<PortalMatchDevice> Devices { get; init; } = [];
+		public string Ip { get; init; } = "";
+		public string? Country { get; init; }
+	}
+
 	public sealed record PortalMatchSlot
 	{
 		public string State { get; init; } = "";
@@ -765,6 +799,7 @@ namespace GenOnlineService.Portal.Client
 		public bool Desynced { get; init; }
 		public long? DurationS { get; init; }
 		public IReadOnlyList<PortalMatchFile> Files { get; init; } = [];
+		public PortalMatchSession? Session { get; init; }
 
 		[JsonIgnore]
 		public string FullName => Tag == null ? Name : Name + "#" + Tag;

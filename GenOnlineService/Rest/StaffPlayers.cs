@@ -96,7 +96,7 @@ namespace GenOnlineService.Rest
 		public const int MinSearchLength = 2;
 		public const int MaxSearchLength = User.UsernameMaxLength;
 
-		private static readonly TimeSpan s_inspectionAuditWindow = TimeSpan.FromHours(1);
+		internal static readonly TimeSpan InspectionAuditWindow = TimeSpan.FromHours(1);
 
 		private static readonly Dictionary<string, string> s_profileUrls = new(StringComparer.Ordinal)
 		{
@@ -387,7 +387,7 @@ namespace GenOnlineService.Rest
 				return Result.NotFound("user");
 			}
 
-			await Database.Moderation.LogInspection(db, actor, userID, DateTime.UtcNow, s_inspectionAuditWindow);
+			await Database.Moderation.LogInspection(db, actor, userID, DateTime.UtcNow, InspectionAuditWindow);
 
 			List<UserIdentity> identities = await db.Identities.AsNoTracking().Where(i => i.UserID == userID).OrderBy(i => i.Provider).ToListAsync(cancellationToken);
 			Database.LastSession? last = await Database.StaffInspection.GetLastSession(db, userID, cancellationToken);
@@ -438,7 +438,8 @@ namespace GenOnlineService.Rest
 						FirstSeenAt = a.FirstSeenAt,
 						LastSeenAt = a.LastSeenAt,
 						SignIns = a.SignIns
-					}).ToList()
+					}).ToList(),
+					Matches = m.Matches.Select(x => new PortalMachineMatch { Id = x.MatchID, StartedAt = x.StartedAt }).ToList()
 				}).ToList(),
 				Addresses = addresses.Select(a =>
 				{

@@ -41,6 +41,22 @@ namespace GenOnlineService.Rest
 		public MatchFileStatus? Status { get; init; }
 	}
 
+	public sealed record MatchSlotDevice
+	{
+		public string Kind { get; init; } = "";
+		public string Fingerprint { get; init; } = "";
+		public string Key { get; init; } = "";
+	}
+
+	// The device and address of the game session that played a slot, only for a caller with players.inspect
+	public sealed record MatchSlotSession
+	{
+		public IReadOnlyList<MatchSlotDevice> Devices { get; init; } = [];
+		public string Ip { get; init; } = "";
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Country { get; init; }
+	}
+
 	// One of the 8 slots of a match in slot order; user_id is null for open, closed and AI slots and for removed accounts.
 	// name is the one the player had in the match, tag is the account's current tag
 	public sealed record MatchSlot
@@ -65,6 +81,9 @@ namespace GenOnlineService.Rest
 		public int UnitsLost { get; init; }
 		public int TotalMoney { get; init; }
 		public IReadOnlyList<MatchFile> Files { get; init; } = [];
+		// Left out without players.inspect, and for a slot whose session event is not stored (older than 90 days or never recorded)
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public MatchSlotSession? Session { get; init; }
 	}
 
 	[ApiFixture("get-matches-item.response")]

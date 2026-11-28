@@ -157,4 +157,12 @@ public class MatchSessionTests
 		InspectedMachine machine = Assert.Single(await StaffInspection.GetMachines(db, first));
 		Assert.Equal(matchID, Assert.Single(machine.Matches).MatchID);
 	}
+
+	[Fact]
+	public void ASlotWithoutASessionLeavesTheSessionOutOfTheJson()
+	{
+		string json = JsonSerializer.Serialize(new MatchSlot());
+		Assert.DoesNotContain("session", json, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("\"session\":", JsonSerializer.Serialize(new MatchSlot { Session = new MatchSlotSession { Ip = Address } }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+	}
 }

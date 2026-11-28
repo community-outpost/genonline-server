@@ -125,6 +125,36 @@ else
                     }
                 </BbCardContent>
             </BbCard>
+
+            @if (found.Kind != "country")
+            {
+                <BbCard>
+                    <BbCardHeader>
+                        <BbCardTitle As="h2">Matches</BbCardTitle>
+                        <BbCardDescription>The latest @MatchCap matches played in a game session with this @(found.Kind is "ip" or "ip_range" ? "address" : "device"), within the 90 days the sessions are kept.</BbCardDescription>
+                    </BbCardHeader>
+                    <BbCardContent>
+                        <BbDataTable TData="PortalInvestigationMatch" Data="@found.Matches" ShowToolbar="false" ShowPagination="false" AriaLabel="Matches">
+                            <Columns>
+                                <BbDataTableColumn TData="PortalInvestigationMatch" TValue="long" Property="@(m => m.MatchId)" Header="Match">
+                                    <CellTemplate Context="match">
+                                        <BbLink Href="@PortalRoutes.MatchPage(match.MatchId)" data-testid="investigate-match">@match.MatchId</BbLink>
+                                    </CellTemplate>
+                                </BbDataTableColumn>
+                                <BbDataTableColumn TData="PortalInvestigationMatch" TValue="string" Property="@(m => PortalText.Date(m.StartedAt))" Header="Started" />
+                                <BbDataTableColumn TData="PortalInvestigationMatch" TValue="string" Property="@(m => m.FullName)" Header="Player">
+                                    <CellTemplate Context="match">
+                                        <BbLink Href="@PortalRoutes.PlayerPage(match.PlayerId)">@match.FullName</BbLink>
+                                    </CellTemplate>
+                                </BbDataTableColumn>
+                            </Columns>
+                            <EmptyTemplate>
+                                <BbEmpty Size="EmptySize.Small" Title="No match" Description="No stored match was played in a session with it." />
+                            </EmptyTemplate>
+                        </BbDataTable>
+                    </BbCardContent>
+                </BbCard>
+            }
         }
     </div>
 }
@@ -132,6 +162,8 @@ else
 @code {
     private const string DefaultKind = "mac";
     private const int PerPage = 50;
+    // the service caps the matches of an identifier at the same number
+    private const int MatchCap = 50;
 
     [SupplyParameterFromQuery(Name = "kind")]
     public string? Kind { get; set; }

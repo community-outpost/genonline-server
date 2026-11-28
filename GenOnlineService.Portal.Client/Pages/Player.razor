@@ -786,6 +786,17 @@ else
                                             <BbDataTableColumn TData="PortalMachineAddress" TValue="int" Property="@(a => a.SignIns)" Header="Sign-ins" />
                                         </Columns>
                                     </BbDataTable>
+                                    @if (machine.Matches.Count > 0)
+                                    {
+                                        <p class="bb:text-sm" data-testid="device-matches">
+                                            <span class="go-muted">Latest matches on this device</span>
+                                            @foreach (PortalMachineMatch played in machine.Matches)
+                                            {
+                                                <BbLink Href="@PortalRoutes.MatchPage(played.Id)"><span class="bb:font-mono">@played.Id</span></BbLink>
+                                                <span class="go-muted"><When Value="@played.StartedAt" /></span>
+                                            }
+                                        </p>
+                                    }
                                 </section>
                             }
                             @if (Ungrouped(inspection).Count > 0)

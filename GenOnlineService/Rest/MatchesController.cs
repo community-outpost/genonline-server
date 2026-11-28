@@ -17,6 +17,7 @@
 */
 
 using GenOnlineService.Api;
+using GenOnlineService.Investigation;
 using GenOnlineService.OpenApi;
 using GenOnlineService.Realtime;
 using Microsoft.AspNetCore.Authorization;
@@ -226,7 +227,49 @@ namespace GenOnlineService.Rest
 
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(HttpContext.RequestAborted);
 			MatchHistory_Entry? entry = await Database.MatchHistory.LoadMatchHistoryEntryAsync(db, matchID, HttpContext.RequestAborted);
-			return entry == null ? RestResults.NotFound("match") : RestResults.Ok(MatchResponse.Of(entry, await TagsOf(db, MatchResponse.UserIdsOf(entry))));
+			if (entry == null)
+			{
+				return RestResults.NotFound("match");
+			}
+
+			MatchResponse response = MatchResponse.Of(entry, await TagsOf(db, MatchResponse.UserIdsOf(entry)));
+			if ((await m_authorization.AuthorizeAsync(User, PermissionPolicies.For(Permissions.PlayersInspect))).Succeeded)
+			{
+				response = await WithSessions(db, response);
+			}
+			return RestResults.Ok(response);
+		}
+
+		// Reads personal data of the players, so each one is an inspection of that player in the audit log, as on the player page
+		private async Task<MatchResponse> WithSessions(AppDbContext db, MatchResponse response)
+		{
+			Dictionary<long, Database.MatchSession> sessions = await Database.StaffInspection.GetMatchSessions(db, response.Id, HttpContext.RequestAborted);
+			if (sessions.Count == 0)
+			{
+				return response;
+			}
+
+			Database.ModerationActor actor = CallerActors.Of(User);
+			StaffEnrichment enrichment = StaffEnrichment.Of(HttpContext.RequestServices);
+			foreach (long userID in sessions.Keys)
+			{
+				await Database.Moderation.LogInspection(db, actor, userID, DateTime.UtcNow, StaffPlayerActions.InspectionAuditWindow);
+			}
+
+			return response with
+			{
+				Slots = response.Slots.Select(slot => slot.UserId is long userID && sessions.TryGetValue(userID, out Database.MatchSession? session)
+					? slot with
+					{
+						Session = new MatchSlotSession
+						{
+							Devices = session.Devices.Select(d => new MatchSlotDevice { Kind = d.Kind, Fingerprint = d.Fingerprint, Key = d.Key }).ToList(),
+							Ip = session.Ip,
+							Country = session.Country ?? enrichment.Addresses.Lookup(session.Ip)?.Country
+						}
+					}
+					: slot).ToArray()
+			};
 		}
 
 		private static async Task<IReadOnlyDictionary<long, int>> TagsOf(AppDbContext db, IEnumerable<long> userIDs)

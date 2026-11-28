@@ -88,7 +88,7 @@ else
     <BbCard>
         <BbCardHeader>
             <BbCardTitle As="h2">Players</BbCardTitle>
-            <BbCardDescription>The name is the one the player had in the match. Replay and screenshot files open in a new tab once their upload has arrived.</BbCardDescription>
+            <BbCardDescription>The name is the one the player had in the match. The session is the device and address of the game session that played the slot. Replay and screenshot files open in a new tab once their upload has arrived.</BbCardDescription>
         </BbCardHeader>
         <BbCardContent>
             <BbDataTable TData="PortalMatchSlot" Data="@Played(match).ToList()" ShowToolbar="false" ShowPagination="false" AriaLabel="Players of the match">
@@ -121,6 +121,41 @@ else
                         </CellTemplate>
                     </BbDataTableColumn>
                     <BbDataTableColumn TData="PortalMatchSlot" TValue="string" Property="@(s => PortalText.Duration(s.DurationS))" Header="Played" />
+                    @if (Api.Session!.Can(PortalPermissions.PlayersInspect))
+                    {
+                        <BbDataTableColumn TData="PortalMatchSlot" TValue="string" Property="@(s => s.Session?.Ip ?? "")" Header="Session">
+                            <CellTemplate Context="slot">
+                                @if (slot.Session is PortalMatchSession session)
+                                {
+                                    foreach (PortalMatchDevice device in session.Devices)
+                                    {
+                                        <div class="bb:text-xs" data-testid="match-device">
+                                            <span class="go-muted">@PortalInvestigation.LabelOf(device.Kind)</span>
+                                            <BbLink Href="@PortalRoutes.InvestigateDevice(device.Kind, device.Key)"><span class="bb:font-mono">@device.Fingerprint</span></BbLink>
+                                        </div>
+                                    }
+                                    if (session.Devices.Count == 0)
+                                    {
+                                        <div class="bb:text-xs go-muted">No device recorded</div>
+                                    }
+                                    <div class="bb:text-xs" data-testid="match-address">
+                                        @if (session.Ip.Length > 0)
+                                        {
+                                            <BbLink Href="@PortalRoutes.InvestigateOf("ip", session.Ip)"><span class="bb:font-mono">@session.Ip</span></BbLink>
+                                        }
+                                        @if (session.Country != null)
+                                        {
+                                            <CountryFlag Country="@session.Country" /><BbLink Href="@PortalRoutes.InvestigateOf("country", session.Country)">@session.Country</BbLink>
+                                        }
+                                    </div>
+                                }
+                                else if (slot.UserId != null)
+                                {
+                                    <span class="bb:text-xs go-muted" data-testid="match-no-session">@NoSession(match)</span>
+                                }
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                    }
                     <BbDataTableColumn TData="PortalMatchSlot" TValue="int" Property="@(s => s.Files.Count)" Header="Files">
                         <CellTemplate Context="slot">
                             @foreach (PortalMatchFile file in slot.Files)
@@ -170,6 +205,11 @@ else
         m_match = answer.Value;
         m_error = answer.Ok ? null : answer.Error;
     }
+
+    // The session events go after 90 days, a younger match without one was played before they were linked or without a stored session
+    private static string NoSession(PortalMatch match) => match.StartedAt < DateTime.UtcNow.AddDays(-90)
+        ? "The session details were removed after 90 days."
+        : "No session details were recorded for this player.";
 
     // open and closed slots held nobody
     private static IEnumerable<PortalMatchSlot> Played(PortalMatch match) => match.Slots.Where(s => s.State != "open" && s.State != "closed");
