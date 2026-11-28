@@ -2922,6 +2922,11 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("integer")
                         .HasColumnName("position");
 
+                    b.Property<string>("Tag")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("tag");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");

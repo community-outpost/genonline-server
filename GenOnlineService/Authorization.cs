@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using GenOnlineService.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
@@ -168,6 +169,7 @@ namespace GenOnlineService
 		public static async Task Reload(AppDbContext db)
 		{
 			// the definitions go first, so the user maps below are built with the roles as they are now
+			RoleCatalog previousCatalog = s_catalog;
 			s_catalog = await Database.StoredRoles.LoadCatalogAsync(db);
 			List<UserRole> rows = await Database.Moderation.GetAllRoles(db);
 
@@ -193,6 +195,7 @@ namespace GenOnlineService
 
 			// every role source writes user_roles, so this swap is the one place a feature list changes
 			ClientFeatures.PublishChanges(previousRoles, s_rolesByUser);
+			RealtimeBadges.PublishChanges(previousCatalog, s_catalog);
 		}
 	}
 

@@ -58,6 +58,7 @@ namespace GenOnlineService.Rest
 			Name = role.Name,
 			DisplayName = role.DisplayName,
 			Color = role.Color,
+			Tag = role.Tag,
 			Description = role.Description,
 			Position = role.Position,
 			BuiltIn = role.BuiltIn,
@@ -165,7 +166,7 @@ namespace GenOnlineService.Rest
 				return body.Above != null ? RestResults.Fail(RestCodes.RolePositionTaken, new { Above = body.Above }) : RestResults.Invalid("position");
 			}
 
-			var wanted = new RoleChange(name, Clean(body.DisplayName) ?? name, Clean(body.Color), Clean(body.Description), position.Value, permissions);
+			var wanted = new RoleChange(name, Clean(body.DisplayName) ?? name, Clean(body.Color), Clean(body.Description), position.Value, permissions, Clean(body.Tag));
 			Failure? failure = RoleDefinitionRules.CheckCreate(catalog, callerPosition, held, wanted);
 			if (failure != null)
 			{
@@ -182,7 +183,7 @@ namespace GenOnlineService.Rest
 			return RestResults.Created(Describe(after.Roles[name], callerPosition, new Dictionary<string, int>()));
 		}
 
-		[EndpointSummary("Changes a role. Name never changes, an empty color or description clears it, and position or above moves a custom role.")]
+		[EndpointSummary("Changes a role. Name never changes, an empty color, tag or description clears it, and position or above moves a custom role.")]
 		[ProducesResponseType<RoleResponse>(StatusCodes.Status200OK)]
 		[HttpPatch("~/api/v1/roles/{name}")]
 		[AllowSignInCookie]
@@ -228,7 +229,8 @@ namespace GenOnlineService.Rest
 				body.Color == null ? existing.Color : Clean(body.Color),
 				body.Description == null ? existing.Description : Clean(body.Description),
 				position.Value,
-				permissions);
+				permissions,
+				body.Tag == null ? existing.Tag : Clean(body.Tag));
 			if (body.Name != null && !String.Equals(body.Name.Trim(), existing.Name, StringComparison.OrdinalIgnoreCase))
 			{
 				return RestResults.Invalid("name");
@@ -240,7 +242,7 @@ namespace GenOnlineService.Rest
 				return RestResults.Fail(failure.Value);
 			}
 
-			if (wanted.DisplayName == existing.DisplayName && wanted.Color == existing.Color && wanted.Description == existing.Description
+			if (wanted.DisplayName == existing.DisplayName && wanted.Color == existing.Color && wanted.Tag == existing.Tag && wanted.Description == existing.Description
 				&& wanted.Position == existing.Position && wanted.Permissions.SetEquals(existing.Permissions))
 			{
 				return RestResults.Ok(Describe(existing, callerPosition, await Database.StoredRoles.MemberCountsAsync(db)));

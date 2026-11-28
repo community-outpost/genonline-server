@@ -28,6 +28,7 @@ public class StoredRole
 	public string DisplayName { get; set; } = String.Empty;
 
 	public string? Color { get; set; }
+	public string? Tag { get; set; }
 	public string? Description { get; set; }
 
 	// A higher position outranks a lower one, and no two roles share one
@@ -59,6 +60,7 @@ public class StoredRoleConfiguration : IEntityTypeConfiguration<StoredRole>
 		builder.Property(e => e.Name).HasColumnName("name").HasMaxLength(RoleCatalog.NameMaxLength);
 		builder.Property(e => e.DisplayName).HasColumnName("display_name").HasMaxLength(RoleCatalog.DisplayNameMaxLength);
 		builder.Property(e => e.Color).HasColumnName("color").HasMaxLength(7);
+		builder.Property(e => e.Tag).HasColumnName("tag").HasMaxLength(RoleCatalog.TagMaxLength);
 		builder.Property(e => e.Description).HasColumnName("description").HasMaxLength(RoleCatalog.DescriptionMaxLength);
 		builder.Property(e => e.Position).HasColumnName("position");
 		builder.Property(e => e.BuiltIn).HasColumnName("built_in");
@@ -98,7 +100,7 @@ namespace Database
 			List<StoredRolePermission> permissions = await db.StoredRolePermissions.AsNoTracking().ToListAsync(cancellationToken);
 			ILookup<string, string> byRole = permissions.ToLookup(p => p.Role, p => p.Permission, StringComparer.Ordinal);
 			return RoleCatalog.From(roles.Select(r => new RoleDefinition(r.Name, r.DisplayName, r.Color, r.Description, r.Position, r.BuiltIn,
-				new HashSet<string>(byRole[r.Name], StringComparer.Ordinal))));
+				new HashSet<string>(byRole[r.Name], StringComparer.Ordinal), r.Tag)));
 		}
 
 		public static async Task<Dictionary<string, int>> MemberCountsAsync(AppDbContext db, CancellationToken cancellationToken = default)
@@ -114,6 +116,7 @@ namespace Database
 				Name = role.Name,
 				DisplayName = role.DisplayName,
 				Color = role.Color,
+				Tag = role.Tag,
 				Description = role.Description,
 				Position = role.Position,
 				BuiltIn = false,
@@ -123,7 +126,7 @@ namespace Database
 			});
 			db.StoredRolePermissions.AddRange(role.Permissions.Select(p => new StoredRolePermission { Role = role.Name, Permission = p }));
 			db.AuditLog.Add(Database.Moderation.Entry(actor, ModerationActions.RoleCreate, AuditTargetKinds.Role, null, null,
-				new { role = role.Name, display_name = role.DisplayName, position = role.Position, permissions = role.Permissions.Order(StringComparer.Ordinal).ToArray() }, now));
+				new { role = role.Name, display_name = role.DisplayName, color = role.Color, tag = role.Tag, position = role.Position, permissions = role.Permissions.Order(StringComparer.Ordinal).ToArray() }, now));
 			return await SaveOrConflictAsync(db, cancellationToken);
 		}
 
@@ -145,6 +148,7 @@ namespace Database
 
 			row.DisplayName = wanted.DisplayName;
 			row.Color = wanted.Color;
+			row.Tag = wanted.Tag;
 			row.Description = wanted.Description;
 			row.Position = wanted.Position;
 			row.UpdatedAt = now;
@@ -155,6 +159,7 @@ namespace Database
 				role = before.Name,
 				display_name = wanted.DisplayName != before.DisplayName ? wanted.DisplayName : null,
 				color_changed = wanted.Color != before.Color,
+				tag_changed = wanted.Tag != before.Tag,
 				description_changed = wanted.Description != before.Description,
 				position = wanted.Position != before.Position ? wanted.Position : (int?)null,
 				added,
@@ -206,6 +211,7 @@ namespace Database
 					Name = builtIn.Name,
 					DisplayName = builtIn.DisplayName,
 					Color = builtIn.Color,
+					Tag = builtIn.Tag,
 					Description = builtIn.Description,
 					Position = builtIn.Position,
 					BuiltIn = true,

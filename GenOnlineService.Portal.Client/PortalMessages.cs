@@ -447,6 +447,7 @@ namespace GenOnlineService.Portal.Client
 		public string Name { get; init; } = "";
 		public string DisplayName { get; init; } = "";
 		public string? Color { get; init; }
+		public string? Tag { get; init; }
 		public string? Description { get; init; }
 		public int Position { get; init; }
 		public bool BuiltIn { get; init; }
@@ -498,12 +499,13 @@ namespace GenOnlineService.Portal.Client
 		public IReadOnlyList<PortalRoleMember> Members { get; init; } = [];
 	}
 
-	// A new role takes every field, a change only the fields to change; "" clears the color or the description
+	// A new role takes every field, a change only the fields to change; "" clears the color, the tag or the description
 	public sealed record PortalRoleWrite
 	{
 		public string? Name { get; init; }
 		public string? DisplayName { get; init; }
 		public string? Color { get; init; }
+		public string? Tag { get; init; }
 		public string? Description { get; init; }
 		public int? Position { get; init; }
 

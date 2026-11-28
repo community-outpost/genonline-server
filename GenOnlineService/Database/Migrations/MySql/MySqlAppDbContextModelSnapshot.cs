@@ -2926,6 +2926,11 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("int")
                         .HasColumnName("position");
 
+                    b.Property<string>("Tag")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("tag");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("updated_at");

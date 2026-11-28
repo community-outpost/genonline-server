@@ -30,6 +30,8 @@ namespace GenOnlineService.Portal.Client
 
 		public static bool IsValidColor(string? color) => color != null && System.Text.RegularExpressions.Regex.IsMatch(color, "^#[0-9a-fA-F]{6}$");
 
+		public static bool IsValidTag(string? tag) => String.IsNullOrWhiteSpace(tag) || (tag.Trim().Length <= 16 && !tag.Any(c => Char.IsControl(c) || c == '[' || c == ']'));
+
 		public static string ColorOf(string? color) => IsValidColor(color?.Trim()) ? color!.Trim() : NeutralColor;
 
 		public static IReadOnlyList<(string Area, IReadOnlyList<PortalPermissionEntry> Permissions)> ByArea(IEnumerable<PortalPermissionEntry> permissions) =>

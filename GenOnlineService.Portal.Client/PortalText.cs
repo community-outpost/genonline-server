@@ -169,6 +169,7 @@ namespace GenOnlineService.Portal.Client
 			"name" => "The name needs 2 to 32 lowercase letters, digits or underscores, starting with a letter.",
 			"display_name" => "The display name is empty or too long.",
 			"color" => "The color must look like #rrggbb.",
+			"tag" => "The name tag has at most 16 characters and no square brackets.",
 			"description" => "The description is too long.",
 			"position" => "That place is not allowed for a role.",
 			"permissions" => "A permission is not known or cannot go on a role.",

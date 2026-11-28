@@ -38,6 +38,9 @@ namespace GenOnlineService.Rest
 		public string Name { get; init; } = "";
 		public string DisplayName { get; init; } = "";
 		public string? Color { get; init; }
+
+		// The name prefix the game shows in brackets before the player name
+		public string? Tag { get; init; }
 		public string? Description { get; init; }
 		public int Position { get; init; }
 		public bool BuiltIn { get; init; }
@@ -56,13 +59,14 @@ namespace GenOnlineService.Rest
 		public IReadOnlyList<RoleResponse> Roles { get; init; } = [];
 	}
 
-	// Create takes every field. Update takes the fields to change: Name cannot change, "" clears Color and Description, and Position
+	// Create takes every field. Update takes the fields to change: Name cannot change, "" clears Color, Tag and Description, and Position
 	// or Above (the role to sit directly above) moves a custom role.
 	public sealed record RoleWriteRequest
 	{
 		public string? Name { get; init; }
 		public string? DisplayName { get; init; }
 		public string? Color { get; init; }
+		public string? Tag { get; init; }
 		public string? Description { get; init; }
 		public int? Position { get; init; }
 		public string? Above { get; init; }

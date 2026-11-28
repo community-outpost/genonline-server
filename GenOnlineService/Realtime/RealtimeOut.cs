@@ -144,56 +144,47 @@ namespace GenOnlineService.Realtime
 		public static Member Of(UserSession session) => Of(session.m_UserID, null, ClientOf(session.GetSessionType()));
 	}
 
-	// Badge definitions come from Realtime:badges in configuration, each staff role shows the badge of the same id
+	// Every role with a tag or a colour shows a badge of its own name, so a role edited in the portal reaches the game
 	public static class RealtimeBadges
 	{
-		private static readonly Dictionary<string, BadgeDefinition> s_defaults = new(StringComparer.Ordinal)
+		private static readonly ILogger s_log = AppLog.For(typeof(RealtimeBadges));
+
+		public static IReadOnlyDictionary<string, BadgeDefinition> Definitions(RoleCatalog catalog) =>
+			catalog.Assignable
+				.Where(r => !String.IsNullOrEmpty(r.Tag) || !String.IsNullOrEmpty(r.Color))
+				.ToDictionary(r => r.Name, r => new BadgeDefinition { Text = r.Tag ?? "", Color = r.Color ?? "" }, StringComparer.Ordinal);
+
+		public static IReadOnlyList<string> For(Int64 userID) => ForRoles(StaffRoles.RolesOf(userID), StaffRoles.Catalog);
+
+		// The game takes the tag and the colour from the first listed badge that has one, so the highest position goes first
+		public static IReadOnlyList<string> ForRoles(IEnumerable<string> roles, RoleCatalog catalog)
 		{
-			[StaffRoles.Admin] = new BadgeDefinition { Text = "★★GO STAFF★★", Color = "#f5c542" },
-			[StaffRoles.Moderator] = new BadgeDefinition { Text = "MOD", Color = "#4aa3ff" },
-		};
-
-		private static readonly string[] s_priority = { StaffRoles.Owner, StaffRoles.Admin, StaffRoles.Moderator };
-
-		public static IReadOnlyDictionary<string, BadgeDefinition> Definitions
-		{
-			get
-			{
-				IConfigurationSection? section = Program.g_Config?.GetSection("Realtime:badges");
-				if (section == null || !section.GetChildren().Any())
-				{
-					return s_defaults;
-				}
-
-				Dictionary<string, BadgeDefinition> result = new(StringComparer.Ordinal);
-				foreach (IConfigurationSection badge in section.GetChildren())
-				{
-					result[badge.Key] = new BadgeDefinition { Text = badge["text"] ?? badge.Key, Color = badge["color"] ?? "#ffffff" };
-				}
-				return result;
-			}
+			IReadOnlyDictionary<string, BadgeDefinition> definitions = Definitions(catalog);
+			return roles.Distinct(StringComparer.Ordinal).Where(definitions.ContainsKey).OrderByDescending(r => catalog.Roles[r].Position).ToArray();
 		}
 
-		public static IReadOnlyList<string> For(Int64 userID)
+		// Each copy sends only to its own connections, and one failed send never stops the rest
+		public static void PublishChanges(RoleCatalog before, RoleCatalog after)
 		{
-			IReadOnlyCollection<string> roles = StaffRoles.RolesOf(userID);
-			if (roles.Count == 0)
+			IReadOnlyDictionary<string, BadgeDefinition> next = Definitions(after);
+			IReadOnlyDictionary<string, BadgeDefinition> old = Definitions(before);
+			if (old.Count == next.Count && old.All(b => next.TryGetValue(b.Key, out BadgeDefinition? d) && d == b.Value))
 			{
-				return Array.Empty<string>();
+				return;
 			}
 
-			return ForRoles(roles, Definitions);
-		}
-
-		// An owner shows the admin badge unless an owner badge is defined, so clients that only know the admin badge show one
-		public static IReadOnlyList<string> ForRoles(IReadOnlyCollection<string> roles, IReadOnlyDictionary<string, BadgeDefinition> definitions)
-		{
-			HashSet<string> shown = new(roles, StringComparer.Ordinal);
-			if (shown.Contains(StaffRoles.Owner) && !definitions.ContainsKey(StaffRoles.Owner))
+			BadgesUpdateEvent update = new BadgesUpdateEvent { Badges = next };
+			foreach (UserSession session in RealtimeAudience.AllSessions().ToList())
 			{
-				shown.Add(StaffRoles.Admin);
+				try
+				{
+					RealtimeOut.Fire(RealtimeOut.Session(session).BadgesUpdate(update));
+				}
+				catch (Exception ex)
+				{
+					s_log.LogWarning(ex, "BadgesUpdate for user {UserID} failed", session.m_UserID);
+				}
 			}
-			return s_priority.Where(r => shown.Contains(r) && definitions.ContainsKey(r)).ToArray();
 		}
 	}
 }

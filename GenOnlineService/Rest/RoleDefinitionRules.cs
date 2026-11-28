@@ -20,7 +20,7 @@ using GenOnlineService.Realtime;
 
 namespace GenOnlineService.Rest
 {
-	public sealed record RoleChange(string Name, string DisplayName, string? Color, string? Description, int Position, IReadOnlySet<string> Permissions);
+	public sealed record RoleChange(string Name, string DisplayName, string? Color, string? Description, int Position, IReadOnlySet<string> Permissions, string? Tag = null);
 
 	// The hierarchy rules of editing roles, as in Discord: a caller manages only roles below their own highest role, puts a role only
 	// below it, and adds or removes only permissions they hold themselves. Owner is never editable, and built-in roles stay.
@@ -30,6 +30,7 @@ namespace GenOnlineService.Rest
 		{
 			if (String.IsNullOrWhiteSpace(wanted.DisplayName) || wanted.DisplayName.Length > RoleCatalog.DisplayNameMaxLength) return Result.Invalid("display_name");
 			if (wanted.Color != null && !RoleCatalog.IsValidColor(wanted.Color)) return Result.Invalid("color");
+			if (!String.IsNullOrEmpty(wanted.Tag) && !RoleCatalog.IsValidTag(wanted.Tag)) return Result.Invalid("tag");
 			if (wanted.Description != null && wanted.Description.Length > RoleCatalog.DescriptionMaxLength) return Result.Invalid("description");
 			return null;
 		}

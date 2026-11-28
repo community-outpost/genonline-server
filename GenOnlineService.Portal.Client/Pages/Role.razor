@@ -112,6 +112,18 @@ else
                         }
                     </div>
                     <div class="bb:space-y-2">
+                        <BbLabel For="role-tag">Name tag</BbLabel>
+                        <div class="bb:flex bb:items-center bb:gap-2">
+                            <BbInput Id="role-tag" @bind-Value="m_tag" UpdateTiming="UpdateTiming.Immediate" Disabled="@ReadOnly" Placeholder="MOD" autocomplete="off" spellcheck="false" Class="bb:w-32" />
+                            <span class="bb:text-sm" style="@($"color: {PortalRoleText.ColorOf(m_color)}")">[@(String.IsNullOrWhiteSpace(m_tag) ? "TAG" : m_tag.Trim())] Name</span>
+                        </div>
+                        <p class="bb:text-xs bb:text-muted-foreground">Shows in brackets before the player name in game. Up to 16 characters, empty for none.</p>
+                        @if (!PortalRoleText.IsValidTag(m_tag))
+                        {
+                            <p class="bb:text-xs bb:text-destructive" role="alert">Use up to 16 characters and no square brackets.</p>
+                        }
+                    </div>
+                    <div class="bb:space-y-2">
                         <BbLabel For="role-description">Description</BbLabel>
                         <BbTextarea Id="role-description" @bind-Value="m_description" Disabled="@ReadOnly" autocomplete="off" />
                     </div>
@@ -270,6 +282,7 @@ else
     private bool m_deleteOpen;
     private string? m_displayName;
     private string? m_color;
+    private string? m_tag;
     private string? m_description;
     private string m_above = "";
     private string? m_playerId;
@@ -281,10 +294,10 @@ else
 
     private bool ColorValid => String.IsNullOrWhiteSpace(m_color) || PortalRoleText.IsValidColor(m_color.Trim());
 
-    private bool Changed => m_role != null && (Trimmed(m_displayName) != m_role.DisplayName || Trimmed(m_color) != (m_role.Color ?? "") || Trimmed(m_description) != (m_role.Description ?? "")
+    private bool Changed => m_role != null && (Trimmed(m_displayName) != m_role.DisplayName || Trimmed(m_color) != (m_role.Color ?? "") || Trimmed(m_tag) != (m_role.Tag ?? "") || Trimmed(m_description) != (m_role.Description ?? "")
         || m_above != "" || !PortalRoleText.SameSet(m_chosen, m_role.Permissions));
 
-    private bool CanSave => Changed && ColorValid && Trimmed(m_displayName).Length > 0;
+    private bool CanSave => Changed && ColorValid && PortalRoleText.IsValidTag(m_tag) && Trimmed(m_displayName).Length > 0;
 
     private static string Trimmed(string? text) => text?.Trim() ?? "";
 
@@ -337,6 +350,7 @@ else
         m_role = role;
         m_displayName = role.DisplayName;
         m_color = role.Color;
+        m_tag = role.Tag;
         m_description = role.Description;
         m_above = "";
         m_chosen.Clear();
@@ -367,6 +381,7 @@ else
         {
             DisplayName = Trimmed(m_displayName) != role.DisplayName ? Trimmed(m_displayName) : null,
             Color = Trimmed(m_color) != (role.Color ?? "") ? Trimmed(m_color) : null,
+            Tag = Trimmed(m_tag) != (role.Tag ?? "") ? Trimmed(m_tag) : null,
             Description = Trimmed(m_description) != (role.Description ?? "") ? Trimmed(m_description) : null,
             Above = m_above != "" ? m_above : null,
             Permissions = PortalRoleText.SameSet(m_chosen, role.Permissions) ? null : m_chosen.Order(StringComparer.Ordinal).ToList()

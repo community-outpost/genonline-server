@@ -123,6 +123,18 @@ else
                     }
                 </div>
                 <div class="bb:space-y-2">
+                    <BbLabel For="role-tag">Name tag (optional)</BbLabel>
+                    <div class="bb:flex bb:items-center bb:gap-2">
+                        <BbInput Id="role-tag" @bind-Value="m_tag" UpdateTiming="UpdateTiming.Immediate" Placeholder="MOD" autocomplete="off" spellcheck="false" Class="bb:w-32" />
+                        <span class="bb:text-sm" style="@($"color: {PortalRoleText.ColorOf(m_color)}")">[@(String.IsNullOrWhiteSpace(m_tag) ? "TAG" : m_tag.Trim())] Name</span>
+                    </div>
+                    <p class="bb:text-xs bb:text-muted-foreground">Shows in brackets before the player name in game. Up to 16 characters, empty for none.</p>
+                    @if (!PortalRoleText.IsValidTag(m_tag))
+                    {
+                        <p class="bb:text-xs bb:text-destructive" role="alert">Use up to 16 characters and no square brackets.</p>
+                    }
+                </div>
+                <div class="bb:space-y-2">
                     <BbLabel For="role-description">Description (optional)</BbLabel>
                     <BbTextarea Id="role-description" @bind-Value="m_description" Placeholder="What this role is for…" autocomplete="off" />
                 </div>
@@ -165,6 +177,7 @@ else
     private string? m_name;
     private string? m_displayName;
     private string? m_color;
+    private string? m_tag;
     private string? m_description;
     private string? m_above;
     private readonly HashSet<string> m_chosen = new(StringComparer.Ordinal);
@@ -174,7 +187,8 @@ else
     private string PlaceChoice => m_above != null && m_places.Any(p => p.Value == m_above) ? m_above : m_places[0].Value;
 
     private bool CanCreate => PortalRoleText.IsValidName(m_name) && !String.IsNullOrWhiteSpace(m_displayName) && m_places.Count > 0
-        && (String.IsNullOrWhiteSpace(m_color) || PortalRoleText.IsValidColor(m_color.Trim()));
+        && (String.IsNullOrWhiteSpace(m_color) || PortalRoleText.IsValidColor(m_color.Trim()))
+        && PortalRoleText.IsValidTag(m_tag);
 
     protected override async Task OnInitializedAsync()
     {
@@ -196,6 +210,7 @@ else
         m_name = null;
         m_displayName = null;
         m_color = null;
+        m_tag = null;
         m_description = null;
         m_above = null;
         m_chosen.Clear();
@@ -210,6 +225,7 @@ else
             Name = m_name!.Trim(),
             DisplayName = m_displayName!.Trim(),
             Color = String.IsNullOrWhiteSpace(m_color) ? null : m_color.Trim(),
+            Tag = String.IsNullOrWhiteSpace(m_tag) ? null : m_tag.Trim(),
             Description = String.IsNullOrWhiteSpace(m_description) ? null : m_description.Trim(),
             Above = PlaceChoice,
             Permissions = m_chosen.Order(StringComparer.Ordinal).ToList()

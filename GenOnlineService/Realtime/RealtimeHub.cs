@@ -198,7 +198,7 @@ namespace GenOnlineService.Realtime
 				User = RealtimeMembers.Of(userID),
 				Permissions = StaffRoles.PermissionsOf(userID).OrderBy(p => p, StringComparer.Ordinal).ToArray(),
 				Features = ClientFeatures.Of(userID),
-				Badges = RealtimeBadges.Definitions,
+				Badges = RealtimeBadges.Definitions(StaffRoles.Catalog),
 				Channels = RoomCatalog.Rooms.Select(channel => new ChannelInfo
 				{
 					Id = channel.ID,

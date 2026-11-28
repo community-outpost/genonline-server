@@ -20,7 +20,7 @@ using System.Text.RegularExpressions;
 
 namespace GenOnlineService
 {
-	public sealed record RoleDefinition(string Name, string DisplayName, string? Color, string? Description, int Position, bool BuiltIn, IReadOnlySet<string> Permissions);
+	public sealed record RoleDefinition(string Name, string DisplayName, string? Color, string? Description, int Position, bool BuiltIn, IReadOnlySet<string> Permissions, string? Tag = null);
 
 	public sealed class RoleCatalog
 	{
@@ -41,6 +41,7 @@ namespace GenOnlineService
 		public const int NameMaxLength = 32;
 		public const int DisplayNameMaxLength = 64;
 		public const int DescriptionMaxLength = 200;
+		public const int TagMaxLength = 16;
 
 		private static readonly Regex s_name = new Regex("^[a-z][a-z0-9_]{1,31}$", RegexOptions.CultureInvariant);
 		private static readonly Regex s_color = new Regex("^#[0-9a-fA-F]{6}$", RegexOptions.CultureInvariant);
@@ -67,13 +68,19 @@ namespace GenOnlineService
 
 		public static bool IsValidColor(string color) => s_color.IsMatch(color);
 
+		// The game adds the brackets around the tag itself
+		public static bool IsValidTag(string tag) => tag.Length <= TagMaxLength && !tag.Any(c => Char.IsControl(c) || c == '[' || c == ']');
+
 		public static bool IsBuiltIn(string name) => name == Moderator || name == Admin || name == Owner || name == Caster || name == Everyone;
+
+		private const string StaffTag = "★★GO STAFF★★";
+		private const string StaffColor = "#f5c542";
 
 		public static IReadOnlyList<RoleDefinition> BuiltInDefinitions { get; } = new[]
 		{
-			new RoleDefinition(Owner, "Owner", null, "Everything an admin may do, and the only role above admin. Granted with the roles command only.", OwnerPosition, true, new HashSet<string>(Permissions.Human, StringComparer.Ordinal)),
-			new RoleDefinition(Admin, "Admin", null, "Every staff permission. Manages moderators, casters and custom roles below it.", AdminPosition, true, new HashSet<string>(Permissions.Human, StringComparer.Ordinal)),
-			new RoleDefinition(Moderator, "Moderator", null, "Kicks, mutes and renames players and deletes chat messages.", ModeratorPosition, true, new HashSet<string>(s_moderatorPermissions, StringComparer.Ordinal)),
+			new RoleDefinition(Owner, "Owner", StaffColor, "Everything an admin may do, and the only role above admin. Granted with the roles command only.", OwnerPosition, true, new HashSet<string>(Permissions.Human, StringComparer.Ordinal), StaffTag),
+			new RoleDefinition(Admin, "Admin", StaffColor, "Every staff permission. Manages moderators, casters and custom roles below it.", AdminPosition, true, new HashSet<string>(Permissions.Human, StringComparer.Ordinal), StaffTag),
+			new RoleDefinition(Moderator, "Moderator", "#4aa3ff", "Kicks, mutes and renames players and deletes chat messages.", ModeratorPosition, true, new HashSet<string>(s_moderatorPermissions, StringComparer.Ordinal), "MOD"),
 			new RoleDefinition(Caster, "Caster", null, "No permission and no rank. Switches on client features through Features:roles.", CasterPosition, true, new HashSet<string>(StringComparer.Ordinal)),
 			new RoleDefinition(Everyone, "Everyone", null, "The baseline of every player. Holds no permission unless an owner adds one.", EveryonePosition, true, new HashSet<string>(StringComparer.Ordinal))
 		};
