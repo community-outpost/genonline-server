@@ -29,6 +29,7 @@ public static class RatingKinds
 public class PlayerRating
 {
 	public Int64 UserID { get; set; }
+	public string Game { get; set; } = ClientGames.ZeroHour;
 	public string Kind { get; set; } = RatingKinds.AllTime;
 	public int Rating { get; set; } = EloConfig.BaseRating;
 	public int MatchesPlayed { get; set; }
@@ -65,16 +66,18 @@ public class PlayerRatingConfiguration : IEntityTypeConfiguration<PlayerRating>
 	{
 		builder.ToTable("player_ratings");
 
-		builder.HasKey(e => new { e.UserID, e.Kind });
+		builder.HasKey(e => new { e.UserID, e.Game, e.Kind });
 
 		builder.Property(e => e.UserID).HasColumnName("user_id");
+		// The default keeps the inserts of a release without games working while both run
+		builder.Property(e => e.Game).HasColumnName("game").HasMaxLength(16).HasDefaultValue(ClientGames.ZeroHour);
 		builder.Property(e => e.Kind).HasColumnName("kind").HasMaxLength(16);
 		builder.Property(e => e.Rating).HasColumnName("rating");
 		builder.Property(e => e.MatchesPlayed).HasColumnName("matches_played");
 		builder.Property(e => e.UpdatedAt).HasColumnName("updated_at");
 
-		builder.HasIndex(e => new { e.Kind, e.Rating, e.UserID })
-			.IsDescending(false, true, false)
+		builder.HasIndex(e => new { e.Game, e.Kind, e.Rating, e.UserID })
+			.IsDescending(false, false, true, false)
 			.HasDatabaseName("ix_player_ratings_leaderboard");
 	}
 }
@@ -152,12 +155,12 @@ namespace Database
 
 	public static class PlayerRatings
 	{
-		public static async Task<(int Total, List<RankedPlayer> Page)> GetRanked(AppDbContext db, int skip, int take)
+		public static async Task<(int Total, List<RankedPlayer> Page)> GetRanked(AppDbContext db, string game, int skip, int take)
 		{
 			var ranked =
 				from rating in db.PlayerRatings.AsNoTracking()
 				join user in PublicPlayers.Visible(db) on rating.UserID equals user.ID
-				where rating.Kind == RatingKinds.AllTime && rating.MatchesPlayed > 0
+				where rating.Game == game && rating.Kind == RatingKinds.AllTime && rating.MatchesPlayed > 0
 				select new { rating.UserID, user.Username, user.NameTag, rating.Rating, rating.MatchesPlayed };
 
 			int total = await ranked.CountAsync();
@@ -171,10 +174,10 @@ namespace Database
 			return (total, page);
 		}
 
-		public static async Task<Dictionary<long, EloData>> GetBulk(AppDbContext db, List<long> userIds)
+		public static async Task<Dictionary<long, EloData>> GetBulk(AppDbContext db, List<long> userIds, string game)
 		{
 			var rows = await db.PlayerRatings.AsNoTracking()
-				.Where(r => userIds.Contains(r.UserID))
+				.Where(r => r.Game == game && userIds.Contains(r.UserID))
 				.ToListAsync();
 
 			var results = new Dictionary<long, EloData>();
@@ -193,8 +196,19 @@ namespace Database
 			return results;
 		}
 
+		// One rating per rated game, the base rating for a game the player has no rating in
+		public static async Task<Dictionary<string, EloData>> GetGames(AppDbContext db, long userId)
+		{
+			Dictionary<string, EloData> games = new();
+			foreach (string game in ClientGames.Rated)
+			{
+				games[game] = (await GetBulk(db, [userId], game)).GetValueOrDefault(userId) ?? new EloData(EloConfig.BaseRating, EloConfig.BaseRating, 0);
+			}
+			return games;
+		}
+
 		// The all-time row holds the match count; the monthly row keeps its own
-		public static async Task Save(AppDbContext db, long userId, EloData data, CancellationToken cancellationToken = default)
+		public static async Task Save(AppDbContext db, long userId, string game, EloData data, CancellationToken cancellationToken = default)
 		{
 			for (int attempt = 0; ; attempt++)
 			{
@@ -202,11 +216,11 @@ namespace Database
 				{
 					DateTime now = DateTime.UtcNow;
 					var rows = await db.PlayerRatings.AsTracking()
-						.Where(r => r.UserID == userId)
+						.Where(r => r.UserID == userId && r.Game == game)
 						.ToListAsync(cancellationToken);
 
-					PlayerRating allTime = rows.FirstOrDefault(r => r.Kind == RatingKinds.AllTime) ?? Add(db, userId, RatingKinds.AllTime);
-					PlayerRating monthly = rows.FirstOrDefault(r => r.Kind == RatingKinds.Monthly) ?? Add(db, userId, RatingKinds.Monthly);
+					PlayerRating allTime = rows.FirstOrDefault(r => r.Kind == RatingKinds.AllTime) ?? Add(db, userId, game, RatingKinds.AllTime);
+					PlayerRating monthly = rows.FirstOrDefault(r => r.Kind == RatingKinds.Monthly) ?? Add(db, userId, game, RatingKinds.Monthly);
 
 					allTime.Rating = data.Rating;
 					allTime.MatchesPlayed = data.NumMatches;
@@ -230,9 +244,9 @@ namespace Database
 			}
 		}
 
-		private static PlayerRating Add(AppDbContext db, long userId, string kind)
+		private static PlayerRating Add(AppDbContext db, long userId, string game, string kind)
 		{
-			var row = new PlayerRating { UserID = userId, Kind = kind, Rating = EloConfig.BaseRating };
+			var row = new PlayerRating { UserID = userId, Game = game, Kind = kind, Rating = EloConfig.BaseRating };
 			db.PlayerRatings.Add(row);
 			return row;
 		}

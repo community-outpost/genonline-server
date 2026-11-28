@@ -2630,6 +2630,13 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("bigint")
                         .HasColumnName("user_id");
 
+                    b.Property<string>("Game")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasDefaultValue("zerohour")
+                        .HasColumnName("game");
+
                     b.Property<string>("Kind")
                         .HasMaxLength(16)
                         .HasColumnType("varchar(16)")
@@ -2647,10 +2654,10 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("datetime(6)")
                         .HasColumnName("updated_at");
 
-                    b.HasKey("UserID", "Kind");
+                    b.HasKey("UserID", "Game", "Kind");
 
-                    b.HasIndex("Kind", "Rating", "UserID")
-                        .IsDescending(false, true, false)
+                    b.HasIndex("Game", "Kind", "Rating", "UserID")
+                        .IsDescending(false, false, true, false)
                         .HasDatabaseName("ix_player_ratings_leaderboard");
 
                     b.ToTable("player_ratings", (string)null);

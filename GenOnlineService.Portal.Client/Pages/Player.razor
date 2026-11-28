@@ -143,9 +143,10 @@ else
     </PageHeader>
 
     <div class="go-stats">
-        <StatCard Label="Elo rating" Value="@player.EloRating.ToString()" Icon="trophy" Hint="Quickmatch, all time" />
-        <StatCard Label="Monthly Elo" Value="@player.MonthlyEloRating.ToString()" Icon="calendar" Hint="Quickmatch, this month" />
-        <StatCard Label="Rated matches" Value="@PortalText.Count(player.EloMatches)" Icon="swords" Hint="Quickmatch games counted" />
+        @foreach (PortalGameRating rating in player.Ratings)
+        {
+            <StatCard Label="@($"{PortalText.Game(rating.Game)} Elo")" Value="@rating.EloRating.ToString()" Icon="trophy" Hint="@($"Quickmatch, {rating.MonthlyEloRating} this month, {PortalText.Count(rating.EloMatches)} rated matches")" />
+        }
         <StatCard Label="Active sanctions" Value="@activeSanctions.ToString()" Icon="gavel" Attention="@(activeSanctions > 0)" Hint="@($"{player.Sanctions.Count} on record")" />
     </div>
 

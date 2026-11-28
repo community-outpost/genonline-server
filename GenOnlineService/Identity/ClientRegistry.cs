@@ -75,6 +75,8 @@ public static class ClientGames
 
 	public static readonly IReadOnlyList<string> All = new[] { ZeroHour, Generals, None };
 
+	public static readonly IReadOnlyList<string> Rated = new[] { ZeroHour, Generals };
+
 	// The game a rating or leaderboard counts a build under, since every client before Generals was Zero Hour
 	public static string RatedOf(string game) => game == Generals ? Generals : ZeroHour;
 }

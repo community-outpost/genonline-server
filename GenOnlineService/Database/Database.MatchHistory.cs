@@ -1235,22 +1235,38 @@ namespace Database
 			if (lobby.MatchID == 0)
 				return;
 
-			await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+			bool external = PublishesExternally(lobby.Game);
+			bool finishedNow;
+			await using (var transaction = await db.Database.BeginTransactionAsync(cancellationToken))
+			{
+				finishedNow = await FinishMatch(db, (long)lobby.MatchID, cancellationToken);
+				await DetermineLobbyWinnerIfNotPresent(db, lobby, cancellationToken);
+				if (external)
+				{
+					await ScheduleExternalPublication(db, lobby.MatchID, cancellationToken);
+				}
 
-			await FinishMatch(db, (long)lobby.MatchID, cancellationToken);
-			await DetermineLobbyWinnerIfNotPresent(db, lobby, cancellationToken);
-			await ScheduleExternalPublication(db, lobby.MatchID, cancellationToken);
+				await transaction.CommitAsync(cancellationToken);
+			}
 
-			await transaction.CommitAsync(cancellationToken);
+			// Only the call that finished the match rates it, so a repeated call never counts it twice
+			if (!external && finishedNow)
+			{
+				await UpdateLeaderboardAndElo(db, lobby);
+			}
 		}
 
-		internal static async Task FinishMatch(
+		// The external leaderboard does not take a game yet, so Generals is rated here and never published
+		public static bool PublishesExternally(string game) => game != ClientGames.Generals;
+
+		// True when this call finished the match
+		internal static async Task<bool> FinishMatch(
 			AppDbContext db,
 			long matchID,
 			CancellationToken cancellationToken)
 		{
 			if (matchID == 0)
-				return;
+				return false;
 
 			// Whole microseconds, the precision both providers store, so a page cursor equals the stored value
 			DateTime now = DateTime.UtcNow;
@@ -1278,6 +1294,7 @@ namespace Database
 
 			if (!matchExists)
 				throw new InvalidOperationException($"Finished match {matchID} was not found.");
+			return finished == 1;
 		}
 
 		private static async Task ScheduleExternalPublication(
@@ -1539,8 +1556,9 @@ namespace Database
 				if (members.Count == 0)
 					return;
 
-				await UpdateCurrentEloAsync(db, members);
-				await UpdatePeriodEloAndLeaderboardsAsync(db, ClientGames.RatedOf(lobby.Game), members, lobby.TimeCreated.ToUniversalTime());
+				string game = ClientGames.RatedOf(lobby.Game);
+				await UpdateCurrentEloAsync(db, game, members);
+				await UpdatePeriodEloAndLeaderboardsAsync(db, game, members, lobby.TimeCreated.ToUniversalTime());
 			}
 			catch (Exception ex)
 			{
@@ -1548,10 +1566,10 @@ namespace Database
 			}
 		}
 
-		private static async Task UpdateCurrentEloAsync(AppDbContext db, List<MatchdataMemberModel> members)
+		private static async Task UpdateCurrentEloAsync(AppDbContext db, string game, List<MatchdataMemberModel> members)
 		{
 			var userIds = members.Select(m => (long)m.user_id).ToList();
-			var dictElo = await Database.Users.GetBulkELOData(db, userIds);
+			var dictElo = await Database.Users.GetBulkELOData(db, userIds, game);
 
 			// --- ELO pairwise loop (ref-safe) ---
 			foreach (var a in members)
@@ -1579,22 +1597,10 @@ namespace Database
 				dictElo[m.user_id].NumMatches++;
 			}
 
-			// --- Persist (copy out of ref before EF) ---
+			// The session stats hold the Zero Hour rating of the external leaderboard, so a local rating leaves them alone
 			foreach (var pair in dictElo)
 			{
-				long userId = pair.Key;
-				EloData data = pair.Value;
-
-				// Update live user if online
-				var shared = GenOnlineService.WebSocketManager.GetSharedDataForUser(userId);
-				if (shared?.GameStats != null)
-				{
-					shared.GameStats.EloRating = data.Rating;
-					shared.GameStats.EloMatches = data.NumMatches;
-				}
-
-				// EF Core persistence (no ref locals allowed)
-				await Database.Users.SaveELOData(db, userId, data);
+				await Database.Users.SaveELOData(db, pair.Key, game, pair.Value);
 			}
 		}
 

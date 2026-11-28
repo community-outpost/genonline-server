@@ -430,6 +430,7 @@ namespace GenOnlineService.Portal.Client
 		public int EloRating { get; init; }
 		public int MonthlyEloRating { get; init; }
 		public int EloMatches { get; init; }
+		public IReadOnlyList<PortalGameRating> Ratings { get; init; } = [];
 		public IReadOnlyList<PortalSanction> Sanctions { get; init; } = [];
 
 		// Every role row with its source: "local", or "upstream:<provider>" for a role that follows that provider and cannot be changed here
@@ -449,6 +450,14 @@ namespace GenOnlineService.Portal.Client
 
 		[JsonIgnore]
 		public string FullName => Tag == null ? Name : Name + "#" + Tag;
+	}
+
+	public sealed record PortalGameRating
+	{
+		public string Game { get; init; } = "";
+		public int EloRating { get; init; }
+		public int MonthlyEloRating { get; init; }
+		public int EloMatches { get; init; }
 	}
 
 	// A document in force and the latest version of it the player agreed to (null: not agreed)

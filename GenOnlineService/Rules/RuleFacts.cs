@@ -111,7 +111,7 @@ namespace GenOnlineService.Rules
 		public async Task<object?[]> EloAsync()
 		{
 			int? rating = await m_db.PlayerRatings.AsNoTracking()
-				.Where(r => r.UserID == UserID && r.Kind == RatingKinds.AllTime && r.MatchesPlayed > 0)
+				.Where(r => r.UserID == UserID && r.Game == ClientGames.ZeroHour && r.Kind == RatingKinds.AllTime && r.MatchesPlayed > 0)
 				.Select(r => (int?)r.Rating)
 				.FirstOrDefaultAsync();
 			return rating == null ? [] : [(double)rating.Value];

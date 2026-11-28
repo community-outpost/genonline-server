@@ -163,8 +163,8 @@ namespace GenOnlineService.Rest
 				return RestResults.NotFound("user");
 			}
 
-			Dictionary<long, EloData> ratings = await Database.PlayerRatings.GetBulk(db, [userID]);
-			EloData elo = ratings.TryGetValue(userID, out EloData? stored) ? stored : new EloData(EloConfig.BaseRating, EloConfig.BaseRating, 0);
+			Dictionary<string, EloData> ratings = await Database.PlayerRatings.GetGames(db, userID);
+			EloData elo = ratings[ClientGames.ZeroHour];
 			return RestResults.Ok(new PlayerProfileResponse
 			{
 				Id = player.Value.ID,
@@ -174,7 +174,8 @@ namespace GenOnlineService.Rest
 				CreatedAt = player.Value.CreatedAt,
 				EloRating = elo.Rating,
 				MonthlyEloRating = elo.MonthlyRating,
-				EloMatches = elo.NumMatches
+				EloMatches = elo.NumMatches,
+				Ratings = GameRating.ListOf(ratings)
 			});
 		}
 

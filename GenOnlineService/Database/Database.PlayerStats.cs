@@ -118,7 +118,7 @@ namespace Database
 			if (known.Count == 0)
 				return results;
 
-			Dictionary<long, EloData> ratings = await PlayerRatings.GetBulk(db, known);
+			Dictionary<long, EloData> ratings = await PlayerRatings.GetBulk(db, known, ClientGames.ZeroHour);
 			Dictionary<long, string> documents = await db.PlayerStats.AsNoTracking()
 				.Where(s => known.Contains(s.UserId))
 				.ToDictionaryAsync(s => s.UserId, s => s.Stats);

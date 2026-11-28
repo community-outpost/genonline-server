@@ -188,4 +188,73 @@ public class MatchGameTests
 		Assert.Equal(ClientGames.ZeroHour, entry.Game);
 		Assert.Equal(1600, entry.Points);
 	}
+
+	[Theory]
+	[InlineData("zerohour", true)]
+	[InlineData("", true)]
+	[InlineData("generals", false)]
+	public void OnlyGeneralsMatchesStayOffTheExternalLeaderboard(string game, bool published)
+	{
+		Assert.Equal(published, Database.MatchHistory.PublishesExternally(game));
+	}
+
+	[Theory]
+	[InlineData("", "zerohour")]
+	[InlineData("?game=zerohour", "zerohour")]
+	[InlineData("?game=generals&page=2", "generals")]
+	[InlineData("?game=none", null)]
+	[InlineData("?game=generals&game=zerohour", null)]
+	public void TheLeaderboardGameDefaultsToZeroHour(string query, string? game)
+	{
+		(string? read, Failure? failure) = LeaderboardArgs.ReadGame(Query(query));
+		Assert.Equal(game, read);
+		Assert.Equal(game == null ? "invalid_argument" : null, failure?.Code);
+	}
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task EachGameKeepsItsOwnRating(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider);
+		if (probe == null) return;
+		await using AppDbContext db = probe.Open();
+		User zh = await Database.Users.Create(db, "ZeroHourPlayer");
+		User gen = await Database.Users.Create(db, "GeneralsPlayer");
+
+		await Database.PlayerRatings.Save(db, zh.ID, ClientGames.ZeroHour, new EloData(1600, 1550, 10));
+		await Database.PlayerRatings.Save(db, zh.ID, ClientGames.Generals, new EloData(1400, 1450, 2));
+		await Database.PlayerRatings.Save(db, gen.ID, ClientGames.Generals, new EloData(1500, 1500, 4));
+		await Database.PlayerRatings.Save(db, zh.ID, ClientGames.Generals, new EloData(1410, 1460, 3));
+
+		Assert.Equal(1600, (await Database.PlayerRatings.GetBulk(db, [zh.ID], ClientGames.ZeroHour))[zh.ID].Rating);
+		Assert.Equal(1410, (await Database.PlayerRatings.GetBulk(db, [zh.ID], ClientGames.Generals))[zh.ID].Rating);
+		Assert.False((await Database.PlayerRatings.GetBulk(db, [gen.ID], ClientGames.ZeroHour)).ContainsKey(gen.ID));
+
+		Dictionary<string, EloData> games = await Database.PlayerRatings.GetGames(db, gen.ID);
+		Assert.Equal(new[] { ClientGames.ZeroHour, ClientGames.Generals }, games.Keys.ToArray());
+		Assert.Equal(EloConfig.BaseRating, games[ClientGames.ZeroHour].Rating);
+		Assert.Equal(4, games[ClientGames.Generals].NumMatches);
+
+		Assert.Equal(new[] { gen.ID, zh.ID }, (await Database.PlayerRatings.GetRanked(db, ClientGames.Generals, 0, 10)).Page.Select(r => r.UserID).ToArray());
+		Assert.Equal(new[] { zh.ID }, (await Database.PlayerRatings.GetRanked(db, ClientGames.ZeroHour, 0, 10)).Page.Select(r => r.UserID).ToArray());
+	}
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task TheMigrationMakesExistingRatingsZeroHour(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider, migrate: false);
+		if (probe == null) return;
+		await using AppDbContext db = probe.Open();
+		IMigrator migrator = db.GetService<IMigrator>();
+		await migrator.MigrateAsync("LeaderboardGame");
+		await db.Database.ExecuteSqlRawAsync("INSERT INTO player_ratings (user_id, kind, rating, matches_played, updated_at) VALUES (5, 'all_time', 1600, 10, '2026-11-01 10:00:00')");
+
+		await migrator.MigrateAsync();
+		db.ChangeTracker.Clear();
+
+		PlayerRating rating = await db.PlayerRatings.SingleAsync();
+		Assert.Equal(ClientGames.ZeroHour, rating.Game);
+		Assert.Equal(1600, rating.Rating);
+	}
 }

@@ -37,9 +37,24 @@ namespace GenOnlineService.Rest
 		public string? Tag { get; init; }
 		public IReadOnlyList<string> Badges { get; init; } = [];
 		public DateTime CreatedAt { get; init; }
+
+		// The Zero Hour rating, as before games were rated apart
 		public int EloRating { get; init; }
 		public int MonthlyEloRating { get; init; }
 		public int EloMatches { get; init; }
+
+		public IReadOnlyList<GameRating> Ratings { get; init; } = [];
+	}
+
+	public sealed record GameRating
+	{
+		public string Game { get; init; } = "";
+		public int EloRating { get; init; }
+		public int MonthlyEloRating { get; init; }
+		public int EloMatches { get; init; }
+
+		public static IReadOnlyList<GameRating> ListOf(IReadOnlyDictionary<string, EloData> ratings) =>
+			ratings.Select(pair => new GameRating { Game = pair.Key, EloRating = pair.Value.Rating, MonthlyEloRating = pair.Value.MonthlyRating, EloMatches = pair.Value.NumMatches }).ToArray();
 	}
 
 	public sealed record GeneralStats

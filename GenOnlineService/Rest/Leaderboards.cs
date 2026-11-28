@@ -17,6 +17,7 @@
 */
 
 using GenOnlineService.Api;
+using GenOnlineService.OpenApi;
 using GenOnlineService.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,6 +31,18 @@ namespace GenOnlineService.Rest
 		public const string Elo = "elo";
 
 		public static bool IsKnown(string id) => id == Elo;
+	}
+
+	public static class LeaderboardArgs
+	{
+		public static (string? Game, Failure? Failure) ReadGame(IQueryCollection query)
+		{
+			if (!query.TryGetValue("game", out var text))
+			{
+				return (ClientGames.ZeroHour, null);
+			}
+			return text.Count == 1 && ClientGames.Rated.Contains(text[0]) ? (text[0], null) : (null, Result.Invalid("game"));
+		}
 	}
 
 	public sealed record LeaderboardEntryView
@@ -48,6 +61,7 @@ namespace GenOnlineService.Rest
 	public sealed record LeaderboardResponse
 	{
 		public string Id { get; init; } = "";
+		public string Game { get; init; } = "";
 		public IReadOnlyList<LeaderboardEntryView> Entries { get; init; } = [];
 	}
 
@@ -63,10 +77,11 @@ namespace GenOnlineService.Rest
 			m_dbFactory = dbFactory;
 		}
 
-		// elo: all-time ELO of visible players with at least one rated match, highest first, ties by user id;
+		// elo: all-time ELO of visible players with at least one rated match in the game, highest first, ties by user id;
 		// rank is the position in that order, offset paged with ?page=&per_page=
 		[EndpointSummary("Reads a leaderboard.")]
 		[ProducesResponseType<LeaderboardResponse>(StatusCodes.Status200OK)]
+		[ApiQueryParameter("game", "string", "The game the leaderboard ranks, `zerohour` by default.", Enum = new[] { "zerohour", "generals" })]
 		[HttpGet("~/api/v1/leaderboards/{id}")]
 		public async Task<IActionResult> Get(string id)
 		{
@@ -80,14 +95,20 @@ namespace GenOnlineService.Rest
 			{
 				return RestResults.Fail(failure.Value);
 			}
+			(string? game, Failure? gameFailure) = LeaderboardArgs.ReadGame(Request.Query);
+			if (gameFailure != null)
+			{
+				return RestResults.Fail(gameFailure.Value);
+			}
 
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(HttpContext.RequestAborted);
-			(int total, List<Database.RankedPlayer> ranked) = await Database.PlayerRatings.GetRanked(db, page.Skip, page.PerPage);
+			(int total, List<Database.RankedPlayer> ranked) = await Database.PlayerRatings.GetRanked(db, game!, page.Skip, page.PerPage);
 
 			Paging.WriteOffsetHeaders(HttpContext, page, total);
 			return RestResults.Ok(new LeaderboardResponse
 			{
 				Id = id,
+				Game = game!,
 				Entries = ranked.Select((entry, index) => new LeaderboardEntryView
 				{
 					Rank = page.Skip + index + 1,

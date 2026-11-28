@@ -141,6 +141,15 @@ namespace GenOnlineService
 				if (matchEntry == null)
 					throw new InvalidOperationException($"MatchHistory entry not found for match ID {item.MatchId}.");
 
+				// The external leaderboard keeps one rating, the Zero Hour one, so a Generals match queued by an older release is dropped
+				if (matchEntry.game == ClientGames.Generals)
+				{
+					_logger.LogInformation("Match {MatchId} is a Generals match and is not published to the external leaderboard", item.MatchId);
+					await using AppDbContext skipDb = await _dbFactory.CreateDbContextAsync(stoppingToken);
+					await Database.MatchHistory.MarkExternalPublicationSucceeded(skipDb, (ulong)item.MatchId, item.Attempt, stoppingToken);
+					return;
+				}
+
 				string responseBody = await ExternalLeaderboardsClient.PostMatchResultAsync(matchEntry, stoppingToken);
 				try
 				{

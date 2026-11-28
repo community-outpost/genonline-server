@@ -264,7 +264,7 @@ namespace GenOnlineService.Rest
 		public static async Task<Result<PortalPlayer>> GetAsync(IDbContextFactory<AppDbContext> dbFactory, long userID, CancellationToken cancellationToken = default, AgreementsSettings? agreements = null)
 		{
 			User? user;
-			EloData elo;
+			Dictionary<string, EloData> ratings;
 			List<UserRole> roleRows;
 			Dictionary<long, (string? Kind, long? By, string? Reason)> lifts;
 			Dictionary<long, (string Name, int Tag)> lifters;
@@ -277,7 +277,7 @@ namespace GenOnlineService.Rest
 				{
 					return Result.NotFound("user");
 				}
-				elo = (await Database.PlayerRatings.GetBulk(db, [userID])).GetValueOrDefault(userID) ?? new EloData(EloConfig.BaseRating, EloConfig.BaseRating, 0);
+				ratings = await Database.PlayerRatings.GetGames(db, userID);
 				roleRows = await Database.Moderation.GetRoles(db, userID);
 
 				lifts = (await db.Sanctions.AsNoTracking()
@@ -327,9 +327,10 @@ namespace GenOnlineService.Rest
 				}).ToList(),
 				LobbyId = lobbyID == -1 ? null : lobbyID,
 				Sessions = sessions,
-				EloRating = elo.Rating,
-				MonthlyEloRating = elo.MonthlyRating,
-				EloMatches = elo.NumMatches,
+				EloRating = ratings[ClientGames.ZeroHour].Rating,
+				MonthlyEloRating = ratings[ClientGames.ZeroHour].MonthlyRating,
+				EloMatches = ratings[ClientGames.ZeroHour].NumMatches,
+				Ratings = ratings.Select(pair => new PortalGameRating { Game = pair.Key, EloRating = pair.Value.Rating, MonthlyEloRating = pair.Value.MonthlyRating, EloMatches = pair.Value.NumMatches }).ToList(),
 				Sanctions = sanctions.Data!.Sanctions.Select(sanction => new PortalSanction
 				{
 					Id = sanction.Id,

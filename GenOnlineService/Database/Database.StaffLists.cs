@@ -233,7 +233,7 @@ namespace Database
 				.ToDictionaryAsync(g => g.UserID, g => g.Count, cancellationToken);
 
 			Dictionary<long, int> ratings = await db.PlayerRatings.AsNoTracking()
-				.Where(r => ids.Contains(r.UserID) && r.Kind == RatingKinds.AllTime && r.MatchesPlayed > 0)
+				.Where(r => ids.Contains(r.UserID) && r.Game == ClientGames.ZeroHour && r.Kind == RatingKinds.AllTime && r.MatchesPlayed > 0)
 				.ToDictionaryAsync(r => r.UserID, r => r.Rating, cancellationToken);
 
 			return ids.ToDictionary(id => id, id => new StaffPlayerFacts(

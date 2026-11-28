@@ -273,7 +273,7 @@ namespace Database
 			return db.Users.AsNoTracking().AnyAsync(u => u.EmailNormalized == normalizedEmail && u.ID != userID, cancellationToken);
 		}
 
-		public static async Task<Dictionary<long, EloData>> GetBulkELOData(AppDbContext db, List<long> userIds)
+		public static async Task<Dictionary<long, EloData>> GetBulkELOData(AppDbContext db, List<long> userIds, string game)
 		{
 			Dictionary<long, EloData> results = new();
 
@@ -282,7 +282,7 @@ namespace Database
 
 			try
 			{
-				results = await PlayerRatings.GetBulk(db, userIds);
+				results = await PlayerRatings.GetBulk(db, userIds, game);
 			}
 			catch (Exception ex)
 			{
@@ -472,6 +472,7 @@ namespace Database
 			return SetPreference(db, userId, p => p.Color = color, "SetFavorite_Color");
 		}
 
+		// The external leaderboard rates Zero Hour only, so this is the Zero Hour rating
 		public static async Task<EloData> GetELOData(AppDbContext db, long userId)
 		{
 			try
@@ -480,7 +481,7 @@ namespace Database
 				if (apiElo != null)
 				{
 					// The stored rating is the fallback when the external API is unavailable
-					await SaveELOData(db, userId, apiElo);
+					await SaveELOData(db, userId, ClientGames.ZeroHour, apiElo);
 					return apiElo;
 				}
 			}
@@ -491,7 +492,7 @@ namespace Database
 
 			try
 			{
-				Dictionary<long, EloData> stored = await PlayerRatings.GetBulk(db, new List<long> { userId });
+				Dictionary<long, EloData> stored = await PlayerRatings.GetBulk(db, new List<long> { userId }, ClientGames.ZeroHour);
 				if (stored.TryGetValue(userId, out EloData? result))
 					return result;
 			}
@@ -521,11 +522,11 @@ namespace Database
 			}
 		}
 
-		public static async Task SaveELOData(AppDbContext db, long userId, EloData newEloData, CancellationToken cancellationToken = default)
+		public static async Task SaveELOData(AppDbContext db, long userId, string game, EloData newEloData, CancellationToken cancellationToken = default)
 		{
 			try
 			{
-				await PlayerRatings.Save(db, userId, newEloData, cancellationToken);
+				await PlayerRatings.Save(db, userId, game, newEloData, cancellationToken);
 			}
 			catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 			{
@@ -547,7 +548,7 @@ namespace Database
 				return false;
 			}
 
-			await PlayerRatings.Save(db, userId, newEloData, cancellationToken);
+			await PlayerRatings.Save(db, userId, ClientGames.ZeroHour, newEloData, cancellationToken);
 			return true;
 		}
 	}
