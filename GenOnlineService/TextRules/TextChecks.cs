@@ -24,7 +24,7 @@ using System.Text.Json;
 
 namespace GenOnlineService.TextRules
 {
-	public sealed record TextCheck(string Kind, string Outcome, string? Rule, IReadOnlyList<TextHit> Hits, string? Masked, IReadOnlyList<TextReading> Readings, TextRuleFacts Facts);
+	public sealed record TextCheck(string Kind, string Outcome, string? Rule, IReadOnlyList<TextHit> Hits, IReadOnlyList<TextReading> Readings, TextRuleFacts Facts);
 
 	// A reload builds a new set and swaps it in whole
 	public sealed class TextRuleSet
@@ -118,24 +118,7 @@ namespace GenOnlineService.TextRules
 				.OrderBy(h => h.Start).ThenByDescending(h => h.End).ThenByDescending(h => h.Term.Term.Length).ToList();
 			TextRuleFacts facts = TextRuleFacts.Of(kind, distinct);
 			TextRuleDecision decision = Workflows.Decide(facts);
-			string? masked = decision.Outcome == TextOutcomes.Mask ? Mask(text, distinct) : null;
-			return new TextCheck(kind, decision.Outcome, decision.Rule, distinct, masked, readings, facts);
-		}
-
-		private static string Mask(string text, IEnumerable<TextHit> hits)
-		{
-			char[] masked = text.ToCharArray();
-			foreach (TextHit hit in hits.Where(h => !TextCategories.IsNameOnly(h.Term.Category)))
-			{
-				for (int i = hit.Start; i < hit.End && i < masked.Length; i++)
-				{
-					if (!Char.IsWhiteSpace(masked[i]))
-					{
-						masked[i] = '*';
-					}
-				}
-			}
-			return new string(masked);
+			return new TextCheck(kind, decision.Outcome, decision.Rule, distinct, readings, facts);
 		}
 	}
 
@@ -254,15 +237,10 @@ namespace GenOnlineService.TextRules
 			return Result.Fail(ErrorCodes.NameReserved, new { Word = check.Hits.FirstOrDefault()?.Term.Term ?? check.Rule ?? TextOutcomes.Refuse });
 		}
 
-		public static (Failure? Blocked, string Content) ChatContent(string content)
+		// Chat is stored and delivered as written: a block rule refuses it, a filter rule only feeds the client filter list
+		public static Failure? ChatRefusal(string content)
 		{
-			TextCheck check = Check(TextKinds.Chat, content);
-			return check.Outcome switch
-			{
-				TextOutcomes.Block => (Result.Fail(ChatBlocked), content),
-				TextOutcomes.Mask => (null, check.Masked ?? content),
-				_ => (null, content)
-			};
+			return Check(TextKinds.Chat, content).Outcome == TextOutcomes.Block ? Result.Fail(ChatBlocked) : null;
 		}
 
 		// A database seeded with an older version gets only what later versions added; staff edits and removals stay. One transaction, so a second copy starting at the same time fails and writes nothing.

@@ -1240,7 +1240,6 @@ namespace GenOnlineService.Portal.Client
 		public string Kind { get; init; } = "";
 		public string Outcome { get; init; } = "";
 		public string? Rule { get; init; }
-		public string? Masked { get; init; }
 		public IReadOnlyList<PortalTextTestReading> Readings { get; init; } = [];
 		public IReadOnlyList<PortalTextTestHit> Hits { get; init; } = [];
 	}
@@ -1254,6 +1253,9 @@ namespace GenOnlineService.Portal.Client
 		public static readonly IReadOnlyList<string> Matches = ["word", "anywhere", "literal"];
 
 		public static string KindTitle(string kind) => Kinds.FirstOrDefault(k => k.Value == kind).Title ?? kind;
+
+		// The stored outcome "mask" is the filter list: it changes nothing in the stored or sent chat
+		public static string OutcomeTitle(string outcome) => outcome == "mask" ? "filter for players who turn on the chat filter" : outcome;
 	}
 
 	public sealed record PortalReasonError

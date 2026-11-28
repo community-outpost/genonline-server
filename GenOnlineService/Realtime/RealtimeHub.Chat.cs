@@ -240,19 +240,17 @@ namespace GenOnlineService.Realtime
 				return Result.Fail(ErrorCodes.ChatRateLimited, new { RetryAfterMs = retryAfterMs });
 			}
 
-			// the text rules block the message or mask its words; the store and delivery above read content when they run
-			(Failure? refused, string checkedContent) = TextRules.TextChecks.ChatContent(content);
-			if (refused != null)
+			// the text rules may block the message, the text itself is stored and delivered as written
+			if (TextRules.TextChecks.ChatRefusal(content) is Failure refused)
 			{
-				return refused.Value;
+				return refused;
 			}
-			content = checkedContent;
 
 			// stored before delivery, so the wire id and created_at are the stored ones and history never misses a delivered message
 			ChatMessage stored;
 			await using (AppDbContext db = await m_dbFactory.CreateDbContextAsync())
 			{
-				// mentions resolve on the text as stored and delivered, so a name the text rules masked stays plain text
+				// mentions resolve on the text as stored and delivered
 				mentions = await ChatMentions.ResolveAsync(db, content, mentionable(), outsidersByTag: kind == "channel");
 				stored = await store(db);
 

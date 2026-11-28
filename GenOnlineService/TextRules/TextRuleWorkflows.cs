@@ -117,7 +117,7 @@ namespace GenOnlineService.TextRules
 				[
 					new TextRuleDefinition { Name = "reserved words", Expression = "input.Impersonation > 0 || input.Reserved > 0", Outcome = TextOutcomes.Refuse },
 					new TextRuleDefinition { Name = "blocked words", Expression = "input.Block > 0", Outcome = TextOutcomes.Refuse },
-					// names are stricter than chat, which only masks these
+					// names are stricter than chat, which only filters these for players who turn the chat filter on
 					new TextRuleDefinition { Name = "flagged words", Expression = "input.Flag > 0", Outcome = TextOutcomes.Refuse }
 				]
 			},
@@ -130,7 +130,7 @@ namespace GenOnlineService.TextRules
 				Rules =
 				[
 					new TextRuleDefinition { Name = "blocked words", Expression = "input.Block > 0", Outcome = TextOutcomes.Block },
-					new TextRuleDefinition { Name = "flagged words", Expression = "input.Flag > 0", Outcome = TextOutcomes.Mask }
+					new TextRuleDefinition { Name = "flagged words", Expression = "input.Flag > 0", Outcome = TextOutcomes.Filter }
 				]
 			}
 		};

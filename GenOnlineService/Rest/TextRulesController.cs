@@ -132,7 +132,6 @@ namespace GenOnlineService.Rest
 		public string Kind { get; init; } = "";
 		public string Outcome { get; init; } = "";
 		public string? Rule { get; init; }
-		public string? Masked { get; init; }
 		public IReadOnlyList<TextTestReading> Readings { get; init; } = [];
 		public IReadOnlyList<TextTestHit> Hits { get; init; } = [];
 		public TextRuleFacts Facts { get; init; } = new TextRuleFacts();
@@ -262,7 +261,6 @@ namespace GenOnlineService.Rest
 				Kind = check.Kind,
 				Outcome = check.Outcome,
 				Rule = check.Rule,
-				Masked = check.Masked,
 				Readings = check.Readings.Select(r => new TextTestReading { Name = r.Name, Text = r.Text }).ToList(),
 				Hits = check.Hits.Select(h => new TextTestHit
 				{

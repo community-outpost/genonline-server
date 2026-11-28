@@ -82,9 +82,11 @@ namespace GenOnlineService.TextRules
 		public const string Allow = "allow";
 		public const string Refuse = "refuse";
 		public const string Block = "block";
-		public const string Mask = "mask";
 
-		public static IReadOnlyList<string> For(string kind) => kind == TextKinds.Chat ? [Allow, Block, Mask] : [Allow, Refuse];
+		// Chat only: the words of the rule go to the filter list of players who turn the chat filter on, and the stored value stays "mask" from when the rule rewrote the text
+		public const string Filter = "mask";
+
+		public static IReadOnlyList<string> For(string kind) => kind == TextKinds.Chat ? [Allow, Block, Filter] : [Allow, Refuse];
 	}
 
 	public class TextRuleTerm

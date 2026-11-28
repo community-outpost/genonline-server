@@ -86,7 +86,7 @@ else
                     }
                     else
                     {
-                        <p class="bb:text-xs bb:text-muted-foreground" data-testid="word-count">@(m_terms.Total > m_terms.Terms.Count ? $"The first {m_terms.Terms.Count} of {m_terms.Total} words." : $"{m_terms.Total} words.") A block word refuses a display name or lobby name and blocks a chat message, a flag word is masked in chat; impersonation and reserved words refuse display names only.</p>
+                        <p class="bb:text-xs bb:text-muted-foreground" data-testid="word-count">@(m_terms.Total > m_terms.Terms.Count ? $"The first {m_terms.Terms.Count} of {m_terms.Total} words." : $"{m_terms.Total} words.") A block word refuses a display name or lobby name and blocks a chat message, a flag word goes to the chat filter list of players who turn the filter on and never changes the chat that is stored or sent; impersonation and reserved words refuse display names only.</p>
                         <BbDataTable TData="PortalTextTerm" Data="@m_terms.Terms" ShowToolbar="false" ShowPagination="false" AriaLabel="Words">
                             <Columns>
                                 <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Term)" Header="Word">
@@ -191,13 +191,13 @@ else
             else
             {
                 <div class="bb:space-y-4">
-                    <p class="bb:text-sm bb:text-muted-foreground">The rules of each input are checked in order: the first enabled rule whose condition holds decides, none means allow. A condition reads @String.Join(", ", m_fields.Select(f => "input." + f)) with numbers, comparisons and &amp;&amp;, || and !. The service compiles and runs the rules before it saves them.</p>
+                    <p class="bb:text-sm bb:text-muted-foreground">The rules of each input are checked in order: the first enabled rule whose condition holds decides, none means allow. A condition reads @String.Join(", ", m_fields.Select(f => "input." + f)) with numbers, comparisons and &amp;&amp;, || and !. The service compiles and runs the rules before it saves them. A chat rule that filters adds its flag words to the list that players who turn on the chat filter download; it does not change what is stored or sent.</p>
                     @foreach (WorkflowDraft workflow in m_workflows)
                     {
                         <BbCard>
                             <BbCardHeader>
                                 <BbCardTitle As="h2">@PortalTextChoices.KindTitle(workflow.Kind)</BbCardTitle>
-                                <BbCardDescription>Outcomes: @String.Join(", ", workflow.Outcomes).@(workflow.UpdatedAt == null ? " The default rules." : $" Changed {PortalText.Date(workflow.UpdatedAt)} by {workflow.UpdatedBy}.")</BbCardDescription>
+                                <BbCardDescription>Outcomes: @String.Join(", ", workflow.Outcomes.Select(PortalTextChoices.OutcomeTitle)).@(workflow.UpdatedAt == null ? " The default rules." : $" Changed {PortalText.Date(workflow.UpdatedAt)} by {workflow.UpdatedBy}.")</BbCardDescription>
                             </BbCardHeader>
                             <BbCardContent Class="bb:space-y-4">
                                 @foreach (RuleDraft rule in workflow.Rules)
@@ -213,7 +213,7 @@ else
                                             <BbNativeSelect TValue="string" @bind-Value="rule.Outcome" AriaLabel="Outcome" Class="go-select">
                                                 @foreach (string outcome in workflow.Outcomes)
                                                 {
-                                                    <option value="@outcome">@outcome</option>
+                                                    <option value="@outcome">@PortalTextChoices.OutcomeTitle(outcome)</option>
                                                 }
                                             </BbNativeSelect>
                                             <BbButton Type="ButtonType.Button" Variant="@(rule.Enabled ? ButtonVariant.Secondary : ButtonVariant.Outline)" Size="ButtonSize.Small" OnClick="@(() => rule.Enabled = !rule.Enabled)" aria-pressed="@(rule.Enabled ? "true" : "false")">
@@ -283,10 +283,6 @@ else
                     {
                         <BbCardContent Class="bb:space-y-4">
                             <BbBadge Variant="@(m_test.Outcome == "allow" ? BadgeVariant.Secondary : BadgeVariant.SoftDestructive)" data-testid="test-outcome">@m_test.Outcome</BbBadge>
-                            @if (m_test.Masked != null)
-                            {
-                                <p class="bb:text-sm" dir="auto">@m_test.Masked</p>
-                            }
                             <div class="go-list">
                                 @foreach (PortalTextTestReading reading in m_test.Readings)
                                 {
