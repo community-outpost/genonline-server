@@ -20,6 +20,7 @@ using GenOnlineService;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 // Local rows are managed in this environment, upstream rows are replaced at each sign-in through that provider
 public static class AuthoritySources
@@ -256,6 +257,9 @@ namespace Database
 		public Int64? UserID { get; init; }
 		public string Name { get; init; } = String.Empty;
 		public string Source { get; init; } = String.Empty;
+
+		// Where the staff member took the action, such as channel:3, kept in the details of its audit entries
+		public string? Context { get; init; }
 	}
 
 	public static class Moderation
@@ -310,8 +314,20 @@ namespace Database
 				TargetID = target,
 				Reason = String.IsNullOrEmpty(reason) ? null : reason,
 				Source = actor.Source,
-				Details = details == null ? null : JsonSerializer.Serialize(details)
+				Details = DetailsOf(actor, details)
 			};
+		}
+
+		private static string? DetailsOf(ModerationActor actor, object? details)
+		{
+			if (actor.Context == null)
+			{
+				return details == null ? null : JsonSerializer.Serialize(details);
+			}
+
+			JsonObject merged = details == null ? new JsonObject() : JsonSerializer.SerializeToNode(details) as JsonObject ?? new JsonObject();
+			merged["context"] = actor.Context;
+			return merged.ToJsonString();
 		}
 
 		public static async Task<List<UserRole>> GetAllRoles(AppDbContext db)

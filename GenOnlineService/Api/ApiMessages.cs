@@ -97,6 +97,19 @@ namespace GenOnlineService.Api
 		public long? DurationS { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public string? Reason { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public SanctionContext? Context { get; init; }
+	}
+
+	// Where the staff member took a kick, mute or ban, with at most one of the three set, and the public line goes there while the staff member is still there
+	public sealed record SanctionContext
+	{
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public long? ChannelId { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public long? LobbyId { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? MatchId { get; init; }
 	}
 
 	[ApiFixture("post-players-sanctions.response")]

@@ -32,11 +32,13 @@ namespace GenOnlineService.Api
 	{
 		private readonly IDbContextFactory<AppDbContext> m_dbFactory;
 		private readonly PlayerNames m_names;
+		private readonly LobbyManager? m_lobbyManager;
 
-		public ModerationController(IDbContextFactory<AppDbContext> dbFactory, IAuthorizationService authorization, PlayerNames names) : base(authorization)
+		public ModerationController(IDbContextFactory<AppDbContext> dbFactory, IAuthorizationService authorization, PlayerNames names, LobbyManager? lobbyManager = null) : base(authorization)
 		{
 			m_dbFactory = dbFactory;
 			m_names = names;
+			m_lobbyManager = lobbyManager;
 		}
 
 		[AllowSignInCookie]
@@ -95,7 +97,7 @@ namespace GenOnlineService.Api
 			{
 				return ApiResults.Fail(malformed.Value);
 			}
-			return ApiResults.Answer(await SanctionActions.CreateAsync(m_dbFactory, Me, userID, body ?? new CreateSanctionRequest(), RequirePermissionAsync));
+			return ApiResults.Answer(await SanctionActions.CreateAsync(m_dbFactory, Me, userID, body ?? new CreateSanctionRequest(), RequirePermissionAsync, m_lobbyManager));
 		}
 
 		// moderation.kick or higher reads the list

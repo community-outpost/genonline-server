@@ -44,21 +44,28 @@ namespace GenOnlineService.Realtime
 		};
 
 		// A staff action through the REST API, such as these sanction endpoints and the staff rename
-		public static Database.ModerationActor ApiActorOf(Int64 userID) => new Database.ModerationActor
+		public static Database.ModerationActor ApiActorOf(Int64 userID, string? context = null) => new Database.ModerationActor
 		{
 			Kind = AuditActorKinds.User,
 			UserID = userID,
 			Name = $"user:{userID}",
-			Source = ModerationSources.Api
+			Source = ModerationSources.Api,
+			Context = context
 		};
 
-		public static Task<Result<CreateSanctionResponse>> CreateAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 target, CreateSanctionRequest request, Func<string, Task<Failure?>> requirePermission)
-			=> CreateAsync(dbFactory, ApiActorOf(me), target, request, requirePermission);
+		public static Task<Result<CreateSanctionResponse>> CreateAsync(IDbContextFactory<AppDbContext> dbFactory, Int64 me, Int64 target, CreateSanctionRequest request, Func<string, Task<Failure?>> requirePermission, LobbyManager? lobbyManager = null)
+		{
+			if (SanctionNotice.ParseContext(request.Context, out SanctionPlace? place) is Failure invalid)
+			{
+				return Task.FromResult<Result<CreateSanctionResponse>>(invalid);
+			}
+			return CreateAsync(dbFactory, ApiActorOf(me, place?.ToString()), target, request, requirePermission, lobbyManager, place);
+		}
 
 		// A staff member's sanction through any route, whose actor names the route in the audit log and must carry the account
-		public static async Task<Result<CreateSanctionResponse>> CreateAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, CreateSanctionRequest request, Func<string, Task<Failure?>> requirePermission)
+		public static async Task<Result<CreateSanctionResponse>> CreateAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 target, CreateSanctionRequest request, Func<string, Task<Failure?>> requirePermission, LobbyManager? lobbyManager = null, SanctionPlace? place = null)
 		{
-			if (actor.UserID is not Int64)
+			if (actor.UserID is not Int64 staff)
 			{
 				throw new ArgumentException("A staff sanction needs the acting account", nameof(actor));
 			}
@@ -73,12 +80,17 @@ namespace GenOnlineService.Realtime
 				return failure.Value;
 			}
 
-			return type switch
+			Result<CreateSanctionResponse> created = type switch
 			{
 				SanctionType.Kick => await KickAsync(dbFactory, actor, target, request.Reason),
 				SanctionType.Mute => await MuteAsync(dbFactory, actor, target, request.DurationS, request.Reason),
 				_ => await BanAsync(dbFactory, actor, target, request.DurationS, request.Reason)
 			};
+			if (created.Ok && place is SanctionPlace at)
+			{
+				await SanctionNotice.PostAsync(dbFactory, lobbyManager, at, staff, target, type, request.DurationS);
+			}
+			return created;
 		}
 
 		// By any actor, such as an automated rule: staff are never sanctioned this way, a ban disconnects the player on every copy through the access reload,
