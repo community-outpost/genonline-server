@@ -2,6 +2,7 @@
 @page "/admin/partners/{Id:long}"
 @inject PortalApi Api
 @inject ToastService Toasts
+@inject NavigationManager Navigation
 
 <PageTitle>@(m_partner?.Name ?? "Partner") · Generals Online</PageTitle>
 
@@ -71,6 +72,13 @@ else
                 <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("enable"))" data-testid="enable-partner">
                     <LucideIcon Name="circle-check" Class="bb:h-4 bb:w-4" />
                     Enable
+                </BbButton>
+            }
+            @if (Session.Can(PortalPermissions.PartnersDelete))
+            {
+                <BbButton Variant="ButtonVariant.Destructive" Size="ButtonSize.Small" OnClick="OpenDelete" data-testid="delete-partner">
+                    <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4" />
+                    Delete
                 </BbButton>
             }
         </Actions>
@@ -634,6 +642,29 @@ else
         </BbDialogContent>
     </BbDialog>
 
+    <BbDialog @bind-Open="m_deleteOpen">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>Delete @partner.Name</BbDialogTitle>
+                <BbDialogDescription>The partner is removed for good with its @partner.Permissions.Count permissions, its @m_tokens.Count API tokens and its @(m_clients?.Count ?? 0) clients. Players signed in through those clients are signed out. This cannot be undone. The audit log keeps one row with what was removed and the reason given. To stop a partner for a while, disable it instead.</BbDialogDescription>
+            </BbDialogHeader>
+            <div class="bb:space-y-2">
+                <BbLabel For="delete-reason">Reason (required)</BbLabel>
+                <BbTextarea Id="delete-reason" @bind-Value="m_deleteReason" UpdateTiming="UpdateTiming.Immediate" Placeholder="Kept in the audit log…" autocomplete="off" />
+                @if (String.IsNullOrWhiteSpace(m_deleteReason))
+                {
+                    <p id="delete-reason-needed" class="bb:flex bb:items-center bb:gap-2 bb:text-sm bb:font-medium" data-testid="reason-needed">
+                        <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4 bb:shrink-0" />
+                        Write the reason first.
+                    </p>
+                }
+            </div>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_deleteOpen = false)" Disabled="@m_saving">Cancel</BbButton>
+                <BbButton Variant="ButtonVariant.Destructive" OnClick="DeletePartnerAsync" Loading="@m_saving" Disabled="@String.IsNullOrWhiteSpace(m_deleteReason)" aria-describedby="@(String.IsNullOrWhiteSpace(m_deleteReason) ? "delete-reason-needed" : null)" data-testid="confirm-delete-partner">Delete partner</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
 }
 
 @code {
@@ -670,6 +701,9 @@ else
     private string? m_clientError;
     private string? m_clientSecret;
     private string? m_clientSecretName;
+
+    private bool m_deleteOpen;
+    private string? m_deleteReason;
 
     private PortalPartner? m_partner;
     private List<PortalPartnerToken>? m_tokens;
@@ -955,6 +989,28 @@ else
         {
             Toasts.Error("The browser did not allow the clipboard. Select the secret and copy it by hand.", "Not copied");
         }
+    }
+
+    private void OpenDelete()
+    {
+        m_deleteReason = null;
+        m_deleteOpen = true;
+    }
+
+    private async Task DeletePartnerAsync()
+    {
+        m_saving = true;
+        PortalOutcome outcome = await Api.DeletePartnerAsync(Id, m_deleteReason?.Trim());
+        m_saving = false;
+        if (outcome.Ok)
+        {
+            m_deleteOpen = false;
+            Toasts.Success("The partner is deleted and in the audit log.", "Done");
+            Navigation.NavigateTo(PortalRoutes.PartnersPage);
+            return;
+        }
+
+        Toasts.Error(PortalText.Error(outcome.Error), "Not deleted");
     }
 
     private async Task<PortalOutcome> UpdateAsync(PortalUpdatePartnerRequest change)

@@ -170,6 +170,7 @@ namespace GenOnlineService.Portal.Client
 		public const string RulesManage = "rules.manage";
 		public const string RulesDelete = "rules.delete";
 		public const string SanctionsDelete = "sanctions.delete";
+		public const string PartnersDelete = "partners.delete";
 		public const string ChannelsManage = "channels.manage";
 	}
 
@@ -230,6 +231,7 @@ namespace GenOnlineService.Portal.Client
 			"client_add" => "Client added",
 			"client_update" => "Client changed",
 			"client_disable" => "Client disabled",
+			"sa_delete" => "Partner deleted",
 			"sa_update" => "Service account changed",
 			"text_term_add" => "Word added",
 			"text_term_update" => "Word changed",
@@ -272,7 +274,7 @@ namespace GenOnlineService.Portal.Client
 			"message_delete", "message_lookup", "chat_log_view", "staff_message", "report_view", "report_close", "player_inspect",
 			"device_reveal", "connection_lookup", "anticheat_review", "announcement", "setting_update", "room_create", "room_update", "token_mint", "token_rotate",
 			"token_revoke", "sa_create", "sa_update", "sa_grant", "sa_revoke", "sa_disable", "sa_enable", "password_reset",
-			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "client_update", "client_disable", "text_term_add", "text_term_update",
+			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "client_update", "client_disable", "sa_delete", "text_term_add", "text_term_update",
 			"text_term_remove", "text_exception_add", "text_exception_remove", "text_workflow_update", "text_rules_seed", "investigate_search", "flag_create", "flag_update", "flag_archive", "flag_restore", "flags_publish", "flags_rollback", "flags_import", "flags_reset",
 			"playlist_create", "playlist_update", "playlist_delete", "playlist_map_change",
 			"rule_create", "rule_version", "rule_update", "rule_archive", "rule_restore", "rule_breaker", "rule_match_review", "rule_preview", "rule_sweep_start", "rule_sweep_cancel", "rule_delete", "sanction_delete"

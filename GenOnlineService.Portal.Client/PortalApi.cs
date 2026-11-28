@@ -499,6 +499,9 @@ namespace GenOnlineService.Portal.Client
 		// A rotated secret is in the answer, shown once
 		public Task<PortalClientOutcome<PortalSavedClient>> UpdatePartnerClientAsync(long id, string clientID, PortalUpdateClientRequest change) => SendClientAsync(HttpMethod.Patch, $"{PortalRoutes.ServiceAccounts}/{id}/clients/{Uri.EscapeDataString(clientID)}", change);
 
+		// Removes the partner, its tokens and its clients for good, and signs its clients out
+		public Task<PortalOutcome> DeletePartnerAsync(long id, string? reason) => SendAsync(HttpMethod.Delete, $"{PortalRoutes.ServiceAccounts}/{id}", new PortalReasonRequest { Reason = reason });
+
 		private async Task<PortalClientOutcome<PortalSavedClient>> SendClientAsync(HttpMethod method, string path, object body)
 		{
 			(HttpResponseMessage? response, PortalError? failure) = await SendRawAsync(method, path, body, null);

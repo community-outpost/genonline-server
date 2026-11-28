@@ -26,6 +26,8 @@ using OidcPermissions = OpenIddict.Abstractions.OpenIddictConstants.Permissions;
 
 namespace GenOnlineService.Rest
 {
+	public sealed record PartnerDeleteSummary(string Name, int Permissions, int ApiTokens, int Clients, int Authorizations, int OAuthTokens);
+
 	// The staff pages side of the OAuth clients of a partner and of deleting a partner, with the checks of the clients CLI
 	public static class PartnerAdmin
 	{
@@ -230,6 +232,74 @@ namespace GenOnlineService.Rest
 				.OrderByDescending(e => e.ID)
 				.Take(limit)
 				.ToListAsync();
+		}
+
+		// A real delete: the sign-ins of the clients are revoked and removed with the clients, the API tokens and grants go with the account
+		public static async Task<PartnerDeleteSummary> Delete(IServiceProvider services, ApiTokenActor actor, long partnerID, string? reason)
+		{
+			string? text = CleanReason(reason);
+			if (text == null)
+			{
+				throw Refused("reason", "A reason is required.");
+			}
+
+			await using AsyncServiceScope scope = services.CreateAsyncScope();
+			AppDbContext db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+			var applications = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+
+			ServiceAccount account = await db.ServiceAccounts.AsTracking().FirstOrDefaultAsync(a => a.ID == partnerID) ?? throw NotFound("service_account");
+			List<Client> clients = await db.Clients.AsTracking().Where(c => c.PartnerID == partnerID).ToListAsync();
+
+			// OpenIddict goes first and a repeat finds nothing left of it, so a delete that stopped half way can be run again
+			var removedClients = new List<object>();
+			int authorizationCount = 0;
+			int oauthTokenCount = 0;
+			foreach (Client client in clients)
+			{
+				string clientID = client.ClientID;
+				int clientAuthorizations = await db.Set<OpenIddictEntityFrameworkCoreAuthorization>().CountAsync(a => a.Application != null && a.Application.ClientId == clientID);
+				int clientTokens = await db.Set<OpenIddictEntityFrameworkCoreToken>().CountAsync(t => t.Application != null && t.Application.ClientId == clientID);
+
+				// the sign-ins end first, then the application goes with its authorizations and tokens
+				await ClientRegistry.RevokeClient(clientID, services);
+				object? application = await applications.FindByClientIdAsync(clientID);
+				if (application != null)
+				{
+					await applications.DeleteAsync(application);
+				}
+
+				authorizationCount += clientAuthorizations;
+				oauthTokenCount += clientTokens;
+				removedClients.Add(new { client_id = clientID, authorizations = clientAuthorizations, oauth_tokens = clientTokens });
+			}
+
+			List<string> permissions = await db.ServiceAccountPermissions.AsNoTracking().Where(p => p.ServiceAccountID == partnerID).Select(p => p.Permission).OrderBy(p => p).ToListAsync();
+			List<ApiToken> apiTokens = await db.ApiTokens.AsTracking().Where(t => t.OwnerServiceID == partnerID).ToListAsync();
+			DateTime now = DateTime.UtcNow;
+			int activeTokens = apiTokens.Count(t => t.ExpiresAt > now && (t.RevokedAt == null || t.RevokedAt > now));
+
+			await using (var tx = await db.Database.BeginTransactionAsync())
+			{
+				db.ApiTokens.RemoveRange(apiTokens);
+				db.Clients.RemoveRange(clients);
+				db.ServiceAccounts.Remove(account);
+				db.AuditLog.Add(ApiTokenAdmin.Audit(actor, "sa_delete", AuditTargetKinds.ServiceAccount, partnerID, new
+				{
+					name = account.Name,
+					description = account.Description,
+					disabled = account.DisabledAt != null,
+					permissions,
+					api_tokens = apiTokens.Count,
+					api_tokens_active = activeTokens,
+					clients = removedClients,
+					oauth_authorizations = authorizationCount,
+					oauth_tokens = oauthTokenCount
+				}, text));
+				await db.SaveChangesAsync();
+				await tx.CommitAsync();
+			}
+
+			return new PartnerDeleteSummary(account.Name, permissions.Count, apiTokens.Count, clients.Count, authorizationCount, oauthTokenCount);
 		}
 	}
 }

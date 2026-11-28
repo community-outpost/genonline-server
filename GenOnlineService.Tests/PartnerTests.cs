@@ -19,14 +19,50 @@
 using GenOnlineService.Identity;
 using GenOnlineService.Realtime;
 using GenOnlineService.Rest;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OpenIddict.Abstractions;
+using OpenIddict.EntityFrameworkCore.Models;
+using System.Reflection;
 using System.Text.Json;
 using Xunit;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace GenOnlineService.Tests;
+
+public class PartnerPermissionTests
+{
+	[Fact]
+	public void OwnerAndAdminHoldPartnersDeleteAndModeratorDoesNot()
+	{
+		RoleCatalog catalog = RoleCatalog.Defaults;
+
+		Assert.Contains(Permissions.PartnersDelete, catalog.Roles[RoleCatalog.Owner].Permissions);
+		Assert.Contains(Permissions.PartnersDelete, catalog.Roles[RoleCatalog.Admin].Permissions);
+		Assert.DoesNotContain(Permissions.PartnersDelete, catalog.Roles[RoleCatalog.Moderator].Permissions);
+		Assert.DoesNotContain(Permissions.PartnersDelete, catalog.EveryoneRole.Permissions);
+		Assert.Contains(Permissions.PartnersDelete, Permissions.Human);
+		Assert.False(Permissions.IsMachine(Permissions.PartnersDelete));
+	}
+
+	[Fact]
+	public void TheRoleEditorListsItWithALabelAndADescription()
+	{
+		var entry = PermissionCatalog.Entries.Single(e => e.Name == "partners.delete");
+		Assert.False(String.IsNullOrWhiteSpace(entry.Label));
+		Assert.False(String.IsNullOrWhiteSpace(entry.Description));
+	}
+
+	[Fact]
+	public void TheDeleteRouteNeedsPartnersDeleteOnTopOfTokensManage()
+	{
+		MethodInfo delete = typeof(PartnerClientsController).GetMethod(nameof(PartnerClientsController.Delete))!;
+		Assert.Contains(delete.GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy == PermissionPolicies.Prefix + Permissions.PartnersDelete);
+		Assert.Equal("~/api/v1/service_accounts/{accountID:long}", delete.GetCustomAttribute<Microsoft.AspNetCore.Mvc.HttpDeleteAttribute>()!.Template);
+		Assert.Contains(typeof(PartnerClientsController).GetCustomAttributes<AuthorizeAttribute>(), a => a.Policy == PermissionPolicies.Prefix + Permissions.TokensManage);
+	}
+}
 
 public class PartnerProbeTests
 {
@@ -206,6 +242,116 @@ public class PartnerProbeTests
 		Assert.True(client.FirstParty);
 
 		await Refusal(() => PartnerAdmin.UpdateClient(services, Staff, partner.ID, "strata", new UpdatePartnerClientRequest { RotateSecret = true }));
+		Assert.Equal(1, await db.AuditLog.CountAsync());
+	}
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task DeletingAPartnerRemovesItsTokensClientsAndSignInsAndLeavesOthersAlone(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider);
+		if (probe == null) return;
+		await using AppDbContext db = probe.Open();
+		await using ServiceProvider services = Services(probe);
+		ServiceAccount partner = await AddPartner(db, "strata-team");
+		ServiceAccount other = await AddPartner(db, "other-team");
+
+		await PartnerAdmin.CreateClient(services, Staff, partner.ID, Strata());
+		await PartnerAdmin.CreateClient(services, Staff, other.ID, Strata() with { ClientId = "other_app", Name = "Other" });
+
+		await using (AsyncServiceScope scope = services.CreateAsyncScope())
+		{
+			var applications = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+			var authorizations = scope.ServiceProvider.GetRequiredService<IOpenIddictAuthorizationManager>();
+			var tokens = scope.ServiceProvider.GetRequiredService<IOpenIddictTokenManager>();
+			foreach (string clientID in new[] { "strata", "other_app" })
+			{
+				string applicationID = (await applications.GetIdAsync((await applications.FindByClientIdAsync(clientID))!))!;
+				object authorization = await authorizations.CreateAsync(new OpenIddictAuthorizationDescriptor { ApplicationId = applicationID, Subject = "42", Status = Statuses.Valid, Type = AuthorizationTypes.Permanent });
+				await tokens.CreateAsync(new OpenIddictTokenDescriptor
+				{
+					ApplicationId = applicationID,
+					AuthorizationId = await authorizations.GetIdAsync(authorization),
+					Subject = "42",
+					Status = Statuses.Valid,
+					Type = TokenTypeHints.RefreshToken,
+					ReferenceId = "ref-" + clientID
+				});
+			}
+		}
+
+		db.ApiTokens.AddRange(
+			NewToken(partner.ID, "live", DateTime.UtcNow.AddDays(30), null, 1),
+			NewToken(partner.ID, "old", DateTime.UtcNow.AddDays(30), DateTime.UtcNow.AddDays(-1), 2),
+			NewToken(other.ID, "keep", DateTime.UtcNow.AddDays(30), null, 3));
+		await db.SaveChangesAsync();
+		long partnerClientID = (await db.Clients.AsNoTracking().SingleAsync(c => c.ClientID == "strata")).ID;
+
+		PartnerDeleteSummary summary = await PartnerAdmin.Delete(services, ApiTokenActor.User(9), partner.ID, "ended the deal");
+
+		Assert.Equal(new PartnerDeleteSummary("strata-team", 1, 2, 1, 1, 1), summary);
+		Assert.Null(await db.ServiceAccounts.AsNoTracking().FirstOrDefaultAsync(a => a.ID == partner.ID));
+		Assert.Empty(await db.ServiceAccountPermissions.AsNoTracking().Where(p => p.ServiceAccountID == partner.ID).ToListAsync());
+		Assert.Empty(await db.ApiTokens.AsNoTracking().Where(t => t.OwnerServiceID == partner.ID).ToListAsync());
+		Assert.Null(await db.Clients.AsNoTracking().FirstOrDefaultAsync(c => c.ClientID == "strata"));
+		Assert.Empty(await db.Set<OpenIddictEntityFrameworkCoreApplication>().AsNoTracking().Where(a => a.ClientId == "strata").ToListAsync());
+		Assert.Equal(1, await db.Set<OpenIddictEntityFrameworkCoreAuthorization>().CountAsync());
+		Assert.Equal(1, await db.Set<OpenIddictEntityFrameworkCoreToken>().CountAsync());
+
+		Assert.NotNull(await db.ServiceAccounts.AsNoTracking().FirstOrDefaultAsync(a => a.ID == other.ID));
+		Assert.Equal(1, await db.ApiTokens.CountAsync(t => t.OwnerServiceID == other.ID));
+		Assert.Equal(1, await db.ServiceAccountPermissions.CountAsync(p => p.ServiceAccountID == other.ID));
+		Assert.NotNull(await db.Clients.AsNoTracking().FirstOrDefaultAsync(c => c.ClientID == "other_app"));
+		Assert.Equal(1, await db.Set<OpenIddictEntityFrameworkCoreApplication>().CountAsync(a => a.ClientId == "other_app"));
+
+		AuditLogEntry entry = await db.AuditLog.AsNoTracking().SingleAsync(e => e.Action == "sa_delete");
+		Assert.Equal(AuditTargetKinds.ServiceAccount, entry.TargetKind);
+		Assert.Equal(partner.ID, entry.TargetID);
+		Assert.Equal(9, entry.ActorID);
+		Assert.Equal("ended the deal", entry.Reason);
+		JsonElement details = DetailsOf(entry);
+		Assert.Equal("strata-team", details.GetProperty("name").GetString());
+		Assert.Equal(2, details.GetProperty("api_tokens").GetInt32());
+		Assert.Equal(1, details.GetProperty("api_tokens_active").GetInt32());
+		Assert.Equal(1, details.GetProperty("oauth_authorizations").GetInt32());
+		Assert.Equal(1, details.GetProperty("oauth_tokens").GetInt32());
+		Assert.Equal("strata", details.GetProperty("clients")[0].GetProperty("client_id").GetString());
+		Assert.Equal(1, details.GetProperty("permissions").GetArrayLength());
+
+		// the earlier audit rows of the partner stay readable by their target
+		Assert.Equal(partnerClientID, (await db.AuditLog.AsNoTracking().SingleAsync(e => e.Action == "client_add" && e.TargetID == partnerClientID)).TargetID);
+	}
+
+	private static ApiToken NewToken(long ownerID, string name, DateTime expires, DateTime? revoked, byte seed) => new ApiToken
+	{
+		OwnerServiceID = ownerID,
+		Name = name,
+		TokenHash = Enumerable.Repeat(seed, 32).ToArray(),
+		TokenLast4 = "abcd",
+		Scopes = Permissions.LobbiesRead,
+		CreatedBy = "test",
+		CreatedAt = DateTime.UtcNow.AddDays(-2),
+		ExpiresAt = expires,
+		RevokedAt = revoked
+	};
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task ADeleteWithoutAReasonOrForAMissingPartnerRemovesNothing(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider);
+		if (probe == null) return;
+		await using AppDbContext db = probe.Open();
+		await using ServiceProvider services = Services(probe);
+		ServiceAccount partner = await AddPartner(db, "strata-team");
+		await PartnerAdmin.CreateClient(services, Staff, partner.ID, Strata());
+
+		ApiTokenAdminException noReason = await Refusal(() => PartnerAdmin.Delete(services, Staff, partner.ID, "   "));
+		Assert.Equal(ErrorCodes.InvalidArgument, noReason.Failure.Code);
+		Assert.Equal(ErrorCodes.NotFound, (await Refusal(() => PartnerAdmin.Delete(services, Staff, partner.ID + 100, "reason"))).Failure.Code);
+
+		Assert.NotNull(await db.ServiceAccounts.AsNoTracking().FirstOrDefaultAsync(a => a.ID == partner.ID));
+		Assert.Equal(1, await db.Clients.CountAsync());
 		Assert.Equal(1, await db.AuditLog.CountAsync());
 	}
 }

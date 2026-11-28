@@ -179,5 +179,35 @@ namespace GenOnlineService.Rest
 				return null;
 			}
 		}
+
+		// Needs partners.delete as well as tokens.manage, which owner and admin hold
+		[AllowSignInCookie]
+		[Authorize(Policy = PermissionPolicies.Prefix + Permissions.PartnersDelete)]
+		[EndpointSummary("Deletes a service account with its tokens and clients, and signs its clients out.")]
+		[ProducesResponseType(StatusCodes.Status204NoContent)]
+		[ApiRequestBody(typeof(ReasonRequest))]
+		[HttpDelete("~/api/v1/service_accounts/{accountID:long}")]
+		public async Task<IActionResult> Delete(long accountID)
+		{
+			if (RequireWebSession() is IActionResult denied)
+			{
+				return denied;
+			}
+
+			(ReasonRequest? body, Failure? malformed) = await ReadBodyAsync<ReasonRequest>();
+			if (malformed != null)
+			{
+				return RestResults.Fail(malformed.Value);
+			}
+
+			return await Answer(async () =>
+			{
+				await PartnerAdmin.Delete(HttpContext.RequestServices, Actor, accountID, body?.Reason);
+				await using AppDbContext db = await DbFactory.CreateDbContextAsync();
+				await ApiTokenCache.Reload(db);
+				await ClientRegistry.Reload(db);
+				return NoContent();
+			});
+		}
 	}
 }

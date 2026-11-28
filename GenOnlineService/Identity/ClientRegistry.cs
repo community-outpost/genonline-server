@@ -196,12 +196,12 @@ namespace GenOnlineService.Identity
 			}
 		}
 
-		public static async Task<int> RevokeClient(string clientID)
+		public static async Task<int> RevokeClient(string clientID, IServiceProvider? services = null)
 		{
 			int revoked = 0;
 			try
 			{
-				using IServiceScope scope = ServiceLocator.Services.CreateScope();
+				using IServiceScope scope = (services ?? ServiceLocator.Services).CreateScope();
 				var applications = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
 				var authorizations = scope.ServiceProvider.GetRequiredService<IOpenIddictAuthorizationManager>();
 				var tokens = scope.ServiceProvider.GetRequiredService<IOpenIddictTokenManager>();

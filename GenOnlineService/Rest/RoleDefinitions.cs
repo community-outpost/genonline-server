@@ -122,6 +122,7 @@ namespace GenOnlineService.Rest
 			(Permissions.AccountsSupport, "Players", "Account support", "Reset the password or two-factor sign-in of a player, from the staff pages only."),
 			(Permissions.RolesManage, "Access", "Manage roles", "Create and edit roles below your own and give them to players."),
 			(Permissions.TokensManage, "Access", "Manage partner tokens", "Create partner accounts and their access tokens."),
+			(Permissions.PartnersDelete, "Access", "Delete partners", "Remove a partner for good, with its tokens, clients and sign-ins."),
 			(Permissions.AuditRead, "Server", "Read the audit log", "Read every audited staff action."),
 			(Permissions.ServerStats, "Server", "Read server status", "See the live status of the service, lobbies and queues."),
 			(Permissions.SettingsManage, "Server", "Manage settings", "Change application settings such as the message of the day."),
