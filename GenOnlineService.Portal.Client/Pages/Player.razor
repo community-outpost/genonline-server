@@ -938,17 +938,20 @@ else
                 {
                     <div class="bb:space-y-2">
                         <BbLabel For="reason">Reason@(ReasonRequired ? " (required)" : " (optional)")</BbLabel>
-                        <BbTextarea Id="reason" @bind-Value="m_reason" @bind-Value:event="oninput" Placeholder="Kept in the audit log…" autocomplete="off" />
+                        <BbTextarea Id="reason" @bind-Value="m_reason" UpdateTiming="UpdateTiming.Immediate" Placeholder="@(m_action == "ban" ? "Shown to the player and kept in the audit log…" : "Kept in the audit log…")" autocomplete="off" />
                         @if (NeedsReason)
                         {
-                            <p class="bb:text-xs bb:text-muted-foreground" data-testid="reason-needed">@(m_action == "ban" ? "A ban needs a reason; it is kept on the player's record and in the audit log." : "This action needs a reason; it is kept in the audit log.")</p>
+                            <p id="reason-needed" class="bb:flex bb:items-center bb:gap-2 bb:text-sm bb:font-medium" data-testid="reason-needed">
+                                <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4 bb:shrink-0" />
+                                @ReasonNeededText
+                            </p>
                         }
                     </div>
                 }
             </div>
             <BbDialogFooter>
                 <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_dialogOpen = false)" Disabled="@m_saving">Cancel</BbButton>
-                <BbButton Variant="@(m_action is "ban" or "revoke_role" or "reset_name" or "password_reset" or "two_factor_reset" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="ConfirmAsync" Loading="@m_saving" Disabled="@NeedsReason" data-testid="confirm">Confirm</BbButton>
+                <BbButton Variant="@(m_action is "ban" or "revoke_role" or "reset_name" or "password_reset" or "two_factor_reset" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="ConfirmAsync" Loading="@m_saving" Disabled="@NeedsReason" title="@(NeedsReason ? ReasonNeededText : null)" aria-describedby="@(NeedsReason ? "reason-needed" : null)" data-testid="confirm">Confirm</BbButton>
             </BbDialogFooter>
         </BbDialogContent>
     </BbDialog>
@@ -1158,6 +1161,10 @@ else
     }
 
     private bool NeedsReason => ReasonRequired && String.IsNullOrWhiteSpace(m_reason);
+
+    private string ReasonNeededText => m_action == "ban"
+        ? "Type a reason to confirm the ban. The player sees it, and it is kept on their record and in the audit log."
+        : "Type a reason to confirm. It is kept in the audit log.";
 
     private void ShowTab(string tab)
     {

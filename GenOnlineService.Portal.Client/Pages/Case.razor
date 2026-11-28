@@ -272,12 +272,12 @@ else
                             {
                                 <div class="bb:space-y-2">
                                     <BbLabel For="case-reason">Reason the player sees@(m_outcome == "ban" ? " (required)" : "")</BbLabel>
-                                    <BbTextarea Id="case-reason" @bind-Value="m_reason" @bind-Value:event="oninput" autocomplete="off" />
+                                    <BbTextarea Id="case-reason" @bind-Value="m_reason" UpdateTiming="UpdateTiming.Immediate" autocomplete="off" />
                                 </div>
                             }
                             <div class="bb:space-y-2">
                                 <BbLabel For="case-note">Note for staff</BbLabel>
-                                <BbTextarea Id="case-note" @bind-Value="m_note" @bind-Value:event="oninput" Placeholder="Why, for the case history…" autocomplete="off" data-testid="case-note" />
+                                <BbTextarea Id="case-note" @bind-Value="m_note" UpdateTiming="UpdateTiming.Immediate" Placeholder="Why, for the case history…" autocomplete="off" data-testid="case-note" />
                             </div>
                             <BbButton Variant="@(m_outcome == "ban" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="CloseAsync" Loading="@m_saving"
                                       Disabled="@(m_selected.Count == 0 || (m_outcome == "ban" && String.IsNullOrWhiteSpace(m_reason)))" Class="bb:w-full" data-testid="case-close">

@@ -613,6 +613,19 @@ html.dark {
   border-color: transparent;
 }
 
+/* a disabled button keeps its disabled look under the pointer, so it never seems clickable */
+.dark button[class~="bb:disabled:cursor-not-allowed"]:disabled:hover,
+.dark button[class~="bb:disabled:cursor-not-allowed"]:disabled:active {
+  background: var(--go-color-bg-surface);
+  box-shadow: none;
+  transform: none;
+}
+
+.dark button[class~="bb:disabled:cursor-not-allowed"][class~="bb:hover:bg-accent"]:not([class~="bb:border-input"]):disabled:hover {
+  background: transparent;
+  color: var(--go-color-text-disabled);
+}
+
 .dark button[aria-pressed][class~="bb:disabled:cursor-not-allowed"] {
   height: var(--go-space-8);
   padding: 0 var(--go-space-3);
