@@ -161,6 +161,7 @@ namespace GenOnlineService.Portal.Client
 			"flag.no_changes" => "The draft holds no change to publish.",
 			"flag.in_use" => "The service itself reads this field, so it cannot be archived or moved out of the service.",
 			"flag.exists" => "A field with this key exists already.",
+			"playlist.last_enabled" => "This is the only enabled playlist. Disable it to pause the quick match instead of deleting it.",
 			_ => "The service answered: " + code
 		};
 
@@ -174,6 +175,43 @@ namespace GenOnlineService.Portal.Client
 			"position" => "That place is not allowed for a role.",
 			"permissions" => "A permission is not known or cannot go on a role.",
 			_ => "This is not valid: " + field + "."
+		};
+
+		public static string PlaylistError(string? code, string? field)
+		{
+			if (code != "invalid_argument" || field == null)
+			{
+				return Error(code);
+			}
+
+			// maps[3].path names the fourth map of the playlist
+			int dot = field.IndexOf("].", StringComparison.Ordinal);
+			if (field.StartsWith("maps[", StringComparison.Ordinal) && dot > 0 && Int32.TryParse(field.AsSpan(5, dot - 5), out int map))
+			{
+				return $"Map {map + 1}: " + MapFieldText(field[(dot + 2)..]);
+			}
+
+			return field switch
+			{
+				"name" => "The name needs 1 to 64 characters, with no space at either end.",
+				"min_players" => "A match needs at least 2 players.",
+				"desired_players" => "The desired players cannot be below the minimum or above 8, the size of a lobby.",
+				"min_selected_maps" => "Players must pick at least 1 map and no more than the playlist has enabled.",
+				"team_size" => "The team size is none or 1 to 6.",
+				"grace_period_s" => "The grace period is 0 to 65 seconds.",
+				"maps" => "Every size from the minimum to the desired players needs an enabled map of exactly that size.",
+				"map_ids" => "The order must list every map once.",
+				"If-Match" => "The page expired. Reload it and try again.",
+				_ => "This is not valid: " + field + "."
+			};
+		}
+
+		private static string MapFieldText(string field) => field switch
+		{
+			"name" => "the name needs 1 to 128 characters, with no space at either end.",
+			"path" => "the file name needs 1 to 128 characters, with no folder, no drive and no .map ending.",
+			"max_players" => "the players must fit the playlist, from the minimum to the desired players, and be 2 to 12.",
+			_ => "this is not valid: " + field + "."
 		};
 
 		public static string FlagError(string? code, string? field) => code != "invalid_argument" || field == null ? Error(code) : field switch

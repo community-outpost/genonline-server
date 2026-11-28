@@ -1,0 +1,523 @@
+@page "/admin/playlists"
+@using System.Globalization
+@inject PortalApi Api
+@inject ToastService Toasts
+
+<PageTitle>Playlists · Generals Online</PageTitle>
+
+@if (!Api.Session!.Can(PortalPermissions.PlaylistsManage))
+{
+    <Refusal Title="Playlists" Description="Changing the playlists needs the playlists.manage permission." Icon="lock" />
+}
+else
+{
+    <PageHeader Description="The quick match playlists and the maps players pick from. A change holds at once, and players queued in a changed playlist are sent back to the start.">
+        <Title>Playlists</Title>
+        <Actions>
+            <BbButton Size="ButtonSize.Small" OnClick="OpenNew" Disabled="@(m_list == null)" data-testid="new-playlist">
+                <LucideIcon Name="plus" Class="bb:h-4 bb:w-4" />
+                New playlist
+            </BbButton>
+        </Actions>
+    </PageHeader>
+
+    @if (m_error != null)
+    {
+        <BbAlert Variant="AlertVariant.Danger" Class="bb:mb-4">
+            <Icon>
+                <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+            </Icon>
+            <ChildContent>
+                <BbAlertTitle>The playlists could not load</BbAlertTitle>
+                <BbAlertDescription>@PortalText.Error(m_error)</BbAlertDescription>
+            </ChildContent>
+        </BbAlert>
+    }
+
+    @if (m_list == null)
+    {
+        <BbSkeleton Class="go-skeleton-panel" />
+    }
+    else
+    {
+        <div class="bb:space-y-4">
+            <BbCard>
+                <BbCardHeader>
+                    <BbCardTitle As="h2">Rating</BbCardTitle>
+                    <BbCardDescription>Every playlist uses the one rating below. A playlist has no rating rules of its own.</BbCardDescription>
+                </BbCardHeader>
+                <BbCardContent>
+                    <ul class="bb:text-sm bb:space-y-1" data-testid="rating">
+                        <li>Elo rating, new players start at @m_list.Rating.BaseRating.</li>
+                        <li>K factor @m_list.Rating.KFactor, twice that for the first 10 matches and 1.25 times that up to 100 matches.</li>
+                        <li>Matchmaking widens its Elo window by @m_list.Rating.ExpansionStep every @m_list.Rating.ExpansionIntervalS seconds, by @m_list.Rating.ExpansionStepHigh from @m_list.Rating.HighEloThreshold Elo.</li>
+                    </ul>
+                </BbCardContent>
+            </BbCard>
+
+            <BbCard>
+                <BbCardContent Class="bb:pt-6 bb:space-y-4">
+                    <div class="go-filterbar">
+                        <BbNativeSelect TValue="string" Value="@(m_creating ? "new" : m_selectedId?.ToString(CultureInfo.InvariantCulture) ?? "")" ValueChanged="@((string v) => Pick(v))" AriaLabel="Which playlist" Class="bb:w-80" data-testid="playlist-picker">
+                            @if (m_selectedId == null && !m_creating)
+                            {
+                                <option value="">Pick a playlist</option>
+                            }
+                            @if (m_creating)
+                            {
+                                <option value="new">New playlist</option>
+                            }
+                            @foreach (PortalPlaylist playlist in m_list.Playlists)
+                            {
+                                <option value="@playlist.Id">@playlist.Name@(playlist.Enabled ? "" : " (disabled)")</option>
+                            }
+                        </BbNativeSelect>
+                    </div>
+                    @if (m_list.Playlists.Count == 0 && !m_creating)
+                    {
+                        <BbEmpty Size="EmptySize.Small" Title="No playlists" Description="Add one to give the quick match something to offer." />
+                    }
+                </BbCardContent>
+            </BbCard>
+
+            @if (m_creating || Selected != null)
+            {
+                <BbCard>
+                    <BbCardHeader>
+                        <BbCardTitle As="h2">@(m_creating ? "New playlist" : "Settings")</BbCardTitle>
+                        <BbCardDescription>
+                            @if (m_creating)
+                            {
+                                <span>A new playlist starts without maps. Add them after it is saved, then enable it.</span>
+                            }
+                            else
+                            {
+                                <span>Changed by @Selected!.UpdatedBy on @PortalText.Date(Selected.UpdatedAt) UTC. @(Selected.Enabled && !Selected.Offered ? "It is enabled but not offered, because it breaks a rule." : "")</span>
+                            }
+                        </BbCardDescription>
+                    </BbCardHeader>
+                    <BbCardContent Class="bb:space-y-4">
+                        <div class="bb:space-y-2">
+                            <BbLabel For="playlist-name">Name</BbLabel>
+                            <BbInput Id="playlist-name" @bind-Value="m_name" UpdateTiming="UpdateTiming.Immediate" MaxLength="64" autocomplete="off" Class="bb:max-w-md" data-testid="playlist-name" />
+                        </div>
+                        <div class="bb:flex bb:items-center bb:gap-2">
+                            <BbSwitch Id="playlist-enabled" Checked="@m_enabled" CheckedChanged="@((bool on) => m_enabled = on)" />
+                            <BbLabel For="playlist-enabled">Enabled, offered in the quick match</BbLabel>
+                        </div>
+                        <div class="bb:grid bb:gap-4 sm:bb:grid-cols-3">
+                            <div class="bb:space-y-2">
+                                <BbLabel For="playlist-min">Minimum players</BbLabel>
+                                <BbInput Id="playlist-min" Type="InputType.Number" @bind-Value="m_min" UpdateTiming="UpdateTiming.Immediate" autocomplete="off" />
+                            </div>
+                            <div class="bb:space-y-2">
+                                <BbLabel For="playlist-desired">Desired players</BbLabel>
+                                <BbInput Id="playlist-desired" Type="InputType.Number" @bind-Value="m_desired" UpdateTiming="UpdateTiming.Immediate" autocomplete="off" />
+                            </div>
+                            <div class="bb:space-y-2">
+                                <BbLabel For="playlist-min-maps">Maps a player must pick (at least)</BbLabel>
+                                <BbInput Id="playlist-min-maps" Type="InputType.Number" @bind-Value="m_minMaps" UpdateTiming="UpdateTiming.Immediate" autocomplete="off" />
+                            </div>
+                            <div class="bb:space-y-2">
+                                <BbLabel For="playlist-grace">Grace period at the minimum, seconds (0 to 65)</BbLabel>
+                                <BbInput Id="playlist-grace" Type="InputType.Number" @bind-Value="m_grace" UpdateTiming="UpdateTiming.Immediate" autocomplete="off" />
+                            </div>
+                            <div class="bb:space-y-2">
+                                <BbLabel For="playlist-team-size">Team size</BbLabel>
+                                <BbNativeSelect TValue="string" Id="playlist-team-size" Value="@m_teamSize" ValueChanged="@((string v) => m_teamSize = v)" Class="bb:w-full">
+                                    <option value="-1">No teams</option>
+                                    @for (int size = 1; size <= 6; size++)
+                                    {
+                                        <option value="@size">@size per team</option>
+                                    }
+                                </BbNativeSelect>
+                            </div>
+                        </div>
+                        <div class="bb:flex bb:flex-wrap bb:gap-6">
+                            <div class="bb:flex bb:items-center bb:gap-2">
+                                <BbSwitch Id="playlist-teams" Checked="@m_allowTeams" CheckedChanged="@((bool on) => m_allowTeams = on)" />
+                                <BbLabel For="playlist-teams">Players may pick teams</BbLabel>
+                            </div>
+                            <div class="bb:flex bb:items-center bb:gap-2">
+                                <BbSwitch Id="playlist-army" Checked="@m_allowArmy" CheckedChanged="@((bool on) => m_allowArmy = on)" />
+                                <BbLabel For="playlist-army">Players may pick their army</BbLabel>
+                            </div>
+                        </div>
+                        @if (m_formError != null)
+                        {
+                            <p class="bb:text-sm bb:text-destructive" role="alert" data-testid="playlist-error">@m_formError</p>
+                        }
+                    </BbCardContent>
+                    <BbCardFooter Class="bb:flex bb:flex-wrap bb:gap-2">
+                        <BbButton OnClick="SaveAsync" Loading="@m_busy" Disabled="@String.IsNullOrWhiteSpace(m_name)" data-testid="save-playlist">
+                            <LucideIcon Name="save" Class="bb:h-4 bb:w-4" />
+                            @(m_creating ? "Add playlist" : "Save changes")
+                        </BbButton>
+                        @if (m_creating)
+                        {
+                            <BbButton Variant="ButtonVariant.Outline" OnClick="CancelNew" Disabled="@m_busy">Cancel</BbButton>
+                        }
+                        else
+                        {
+                            <BbButton Variant="ButtonVariant.Destructive" OnClick="@(() => m_confirmDelete = true)" Disabled="@m_busy" data-testid="delete-playlist">
+                                <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4" />
+                                Delete playlist
+                            </BbButton>
+                        }
+                    </BbCardFooter>
+                </BbCard>
+            }
+
+            @if (!m_creating && Selected != null)
+            {
+                <BbCard>
+                    <BbCardHeader>
+                        <BbCardTitle As="h2">Maps</BbCardTitle>
+                        <BbCardDescription>
+                            @Selected.Maps.Count(m => m.Enabled) of @Selected.Maps.Count maps are enabled. The index is the place among the enabled maps, in this order, and the game sends it when a player joins the queue.
+                        </BbCardDescription>
+                    </BbCardHeader>
+                    <BbCardContent Class="bb:space-y-4">
+                        <div class="go-table-frame">
+                            <table aria-label="Maps of the playlist">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Index</th>
+                                        <th scope="col">Name</th>
+                                        <th scope="col">File name</th>
+                                        <th scope="col">Kind</th>
+                                        <th scope="col">Players</th>
+                                        <th scope="col">Enabled</th>
+                                        <th scope="col"><span class="go-sr-only">Actions</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @for (int i = 0; i < m_rows.Count; i++)
+                                    {
+                                        MapRow row = m_rows[i];
+                                        int at = i;
+                                        <tr data-testid="map-row">
+                                            <td><span class="go-num">@(row.Source.Index?.ToString(CultureInfo.InvariantCulture) ?? "-")</span></td>
+                                            <td><BbInput @bind-Value="row.Name" UpdateTiming="UpdateTiming.Immediate" MaxLength="128" AriaLabel="Map name" autocomplete="off" data-testid="map-name" /></td>
+                                            <td><BbInput @bind-Value="row.Path" UpdateTiming="UpdateTiming.Immediate" MaxLength="128" AriaLabel="Map file name" autocomplete="off" spellcheck="false" data-testid="map-path" /></td>
+                                            <td>
+                                                <BbNativeSelect TValue="string" Value="@(row.Custom ? "custom" : "retail")" ValueChanged="@((string v) => row.Custom = v == "custom")" AriaLabel="Kind of map" data-testid="map-kind">
+                                                    <option value="custom">Custom map (players download it)</option>
+                                                    <option value="retail">Retail map</option>
+                                                </BbNativeSelect>
+                                            </td>
+                                            <td><BbInput Type="InputType.Number" @bind-Value="row.MaxPlayers" UpdateTiming="UpdateTiming.Immediate" AriaLabel="Players on the map" Class="bb:w-20" autocomplete="off" data-testid="map-players" /></td>
+                                            <td><BbSwitch Checked="@row.Enabled" CheckedChanged="@((bool on) => row.Enabled = on)" AriaLabel="Map enabled" /></td>
+                                            <td>
+                                                <div class="go-row-actions">
+                                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => SaveMapAsync(row))" Disabled="@(m_busy || !row.Dirty)" data-testid="save-map">Save</BbButton>
+                                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => MoveAsync(at, -1))" Disabled="@(m_busy || at == 0)" AriaLabel="Move up" data-testid="map-up">
+                                                        <LucideIcon Name="arrow-up" Class="bb:h-4 bb:w-4" />
+                                                    </BbButton>
+                                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => MoveAsync(at, 1))" Disabled="@(m_busy || at == m_rows.Count - 1)" AriaLabel="Move down" data-testid="map-down">
+                                                        <LucideIcon Name="arrow-down" Class="bb:h-4 bb:w-4" />
+                                                    </BbButton>
+                                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => RemoveMapAsync(row))" Disabled="@m_busy" AriaLabel="Remove map" data-testid="remove-map">
+                                                        <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4" />
+                                                    </BbButton>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                    <tr data-testid="new-map-row">
+                                        <td><span class="go-muted">new</span></td>
+                                        <td><BbInput @bind-Value="m_newMap.Name" UpdateTiming="UpdateTiming.Immediate" MaxLength="128" Placeholder="Map name, as players see it" AriaLabel="New map name" autocomplete="off" data-testid="new-map-name" /></td>
+                                        <td><BbInput @bind-Value="m_newMap.Path" UpdateTiming="UpdateTiming.Immediate" MaxLength="128" Placeholder="File name without .map" AriaLabel="New map file name" autocomplete="off" spellcheck="false" data-testid="new-map-path" /></td>
+                                        <td>
+                                            <BbNativeSelect TValue="string" Value="@(m_newMap.Custom ? "custom" : "retail")" ValueChanged="@((string v) => m_newMap.Custom = v == "custom")" AriaLabel="Kind of the new map">
+                                                <option value="custom">Custom map (players download it)</option>
+                                                <option value="retail">Retail map</option>
+                                            </BbNativeSelect>
+                                        </td>
+                                        <td><BbInput Type="InputType.Number" @bind-Value="m_newMap.MaxPlayers" UpdateTiming="UpdateTiming.Immediate" AriaLabel="Players on the new map" Class="bb:w-20" autocomplete="off" /></td>
+                                        <td><BbSwitch Checked="@m_newMap.Enabled" CheckedChanged="@((bool on) => m_newMap.Enabled = on)" AriaLabel="New map enabled" /></td>
+                                        <td>
+                                            <BbButton Size="ButtonSize.Small" OnClick="AddMapAsync" Disabled="@(m_busy || String.IsNullOrWhiteSpace(m_newMap.Name) || String.IsNullOrWhiteSpace(m_newMap.Path))" data-testid="add-map">
+                                                <LucideIcon Name="plus" Class="bb:h-4 bb:w-4" />
+                                                Add map
+                                            </BbButton>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        @if (m_mapError != null)
+                        {
+                            <p class="bb:text-sm bb:text-destructive" role="alert" data-testid="map-error">@m_mapError</p>
+                        }
+                    </BbCardContent>
+                </BbCard>
+            }
+        </div>
+    }
+
+    <BbDialog @bind-Open="m_confirmDelete">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>Delete the playlist?</BbDialogTitle>
+                <BbDialogDescription>@Selected?.Name and its maps are deleted and players queued in it are sent back to the start. Disable it instead to keep its maps.</BbDialogDescription>
+            </BbDialogHeader>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_confirmDelete = false)" Disabled="@m_busy">Cancel</BbButton>
+                <BbButton Variant="ButtonVariant.Destructive" OnClick="DeleteAsync" Loading="@m_busy" data-testid="confirm-delete-playlist">Delete playlist</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
+}
+
+@code {
+    // One map as the table edits it, Dirty tells whether it differs from the saved map
+    private sealed class MapRow
+    {
+        public PortalPlaylistMap Source { get; }
+        public string Name { get; set; }
+        public string Path { get; set; }
+        public bool Custom { get; set; }
+        public string MaxPlayers { get; set; }
+        public bool Enabled { get; set; }
+
+        public MapRow(PortalPlaylistMap source)
+        {
+            Source = source;
+            Name = source.Name;
+            Path = source.Path;
+            Custom = source.Custom;
+            MaxPlayers = source.MaxPlayers.ToString(CultureInfo.InvariantCulture);
+            Enabled = source.Enabled;
+        }
+
+        public bool Dirty => Name != Source.Name || Path != Source.Path || Custom != Source.Custom || MaxPlayers != Source.MaxPlayers.ToString(CultureInfo.InvariantCulture) || Enabled != Source.Enabled;
+    }
+
+    private sealed class NewMap
+    {
+        public string Name { get; set; } = "";
+        public string Path { get; set; } = "";
+        public bool Custom { get; set; } = true;
+        public string MaxPlayers { get; set; } = "2";
+        public bool Enabled { get; set; } = true;
+    }
+
+    private PortalPlaylistList? m_list;
+    private string? m_error;
+    private int? m_selectedId;
+    private bool m_creating;
+    private bool m_busy;
+    private bool m_confirmDelete;
+    private string? m_formError;
+    private string? m_mapError;
+
+    private string m_name = "";
+    private bool m_enabled;
+    private string m_min = "2";
+    private string m_desired = "2";
+    private string m_minMaps = "1";
+    private string m_grace = "0";
+    private string m_teamSize = "-1";
+    private bool m_allowTeams;
+    private bool m_allowArmy;
+
+    private List<MapRow> m_rows = [];
+    private NewMap m_newMap = new();
+
+    private PortalPlaylist? Selected => m_selectedId is int id ? m_list?.Playlists.FirstOrDefault(p => p.Id == id) : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Api.Session!.Can(PortalPermissions.PlaylistsManage))
+        {
+            await LoadAsync();
+            if (m_list?.Playlists.Count > 0)
+            {
+                Show(m_list.Playlists[0].Id);
+            }
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        PortalAnswer<PortalPlaylistList> answer = await Api.ListPlaylistsAsync();
+        m_error = answer.Ok ? null : answer.Error;
+        m_list = answer.Value ?? m_list ?? new PortalPlaylistList();
+        if (m_selectedId != null && Selected == null)
+        {
+            m_selectedId = null;
+        }
+        if (Selected is PortalPlaylist playlist)
+        {
+            Fill(playlist);
+        }
+    }
+
+    private void Pick(string value)
+    {
+        if (value == "new" || value == "")
+        {
+            return;
+        }
+        Show(Int32.Parse(value, CultureInfo.InvariantCulture));
+    }
+
+    private void Show(int id)
+    {
+        m_creating = false;
+        m_selectedId = id;
+        if (Selected is PortalPlaylist playlist)
+        {
+            Fill(playlist);
+        }
+    }
+
+    private void Fill(PortalPlaylist playlist)
+    {
+        m_name = playlist.Name;
+        m_enabled = playlist.Enabled;
+        m_min = playlist.MinPlayers.ToString(CultureInfo.InvariantCulture);
+        m_desired = playlist.DesiredPlayers.ToString(CultureInfo.InvariantCulture);
+        m_minMaps = playlist.MinSelectedMaps.ToString(CultureInfo.InvariantCulture);
+        m_grace = playlist.GracePeriodS.ToString(CultureInfo.InvariantCulture);
+        m_teamSize = playlist.TeamSize.ToString(CultureInfo.InvariantCulture);
+        m_allowTeams = playlist.AllowTeams;
+        m_allowArmy = playlist.AllowArmySelection;
+        m_rows = playlist.Maps.Select(map => new MapRow(map)).ToList();
+        m_newMap = new NewMap();
+        m_formError = null;
+        m_mapError = null;
+    }
+
+    private void OpenNew()
+    {
+        m_creating = true;
+        m_selectedId = null;
+        m_name = "";
+        m_enabled = false;
+        m_min = "2";
+        m_desired = "2";
+        m_minMaps = "1";
+        m_grace = "0";
+        m_teamSize = "-1";
+        m_allowTeams = false;
+        m_allowArmy = false;
+        m_rows = [];
+        m_formError = null;
+    }
+
+    private void CancelNew()
+    {
+        m_creating = false;
+        if (m_list?.Playlists.Count > 0)
+        {
+            Show(m_list.Playlists[0].Id);
+        }
+    }
+
+    private static bool Whole(string? text, out int value) => Int32.TryParse(text?.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out value);
+
+    private async Task SaveAsync()
+    {
+        if (!Whole(m_min, out int min) || !Whole(m_desired, out int desired) || !Whole(m_minMaps, out int minMaps) || !Whole(m_grace, out int grace) || !Whole(m_teamSize, out int teamSize))
+        {
+            m_formError = "The player counts, the map count and the grace period are whole numbers.";
+            return;
+        }
+
+        var body = new
+        {
+            name = m_name.Trim(),
+            enabled = m_enabled,
+            min_players = min,
+            desired_players = desired,
+            min_selected_maps = minMaps,
+            allow_teams = m_allowTeams,
+            team_size = teamSize,
+            allow_army_selection = m_allowArmy,
+            grace_period_s = grace
+        };
+
+        m_busy = true;
+        PortalFlagOutcome<PortalPlaylist> saved = m_creating
+            ? await Api.CreatePlaylistAsync(body)
+            : await Api.SavePlaylistAsync(Selected!.Id, Selected.Version, body);
+        m_busy = false;
+        if (!saved.Ok)
+        {
+            m_formError = PortalText.PlaylistError(saved.Error, saved.Field);
+            return;
+        }
+
+        Toasts.Show($"{saved.Value!.Name} is saved and in the audit log.", "Done", ToastVariant.Success, 4000);
+        m_creating = false;
+        m_selectedId = saved.Value.Id;
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        PortalPlaylist playlist = Selected!;
+        m_busy = true;
+        PortalOutcome outcome = await Api.DeletePlaylistAsync(playlist.Id, playlist.Version);
+        m_busy = false;
+        m_confirmDelete = false;
+        if (!outcome.Ok)
+        {
+            Toasts.Error(PortalText.PlaylistError(outcome.Error, null), "Not deleted");
+            return;
+        }
+
+        Toasts.Show($"{playlist.Name} is deleted and in the audit log.", "Done", ToastVariant.Success, 4000);
+        m_selectedId = null;
+        await LoadAsync();
+        if (m_list?.Playlists.Count > 0)
+        {
+            Show(m_list.Playlists[0].Id);
+        }
+    }
+
+    private async Task AddMapAsync()
+    {
+        if (!Whole(m_newMap.MaxPlayers, out int players))
+        {
+            m_mapError = "The players on a map are a whole number.";
+            return;
+        }
+        await ChangeMapsAsync(playlist => Api.AddPlaylistMapAsync(playlist.Id, playlist.Version, new { name = m_newMap.Name.Trim(), path = m_newMap.Path.Trim(), custom = m_newMap.Custom, max_players = players, enabled = m_newMap.Enabled }));
+    }
+
+    private async Task SaveMapAsync(MapRow row)
+    {
+        if (!Whole(row.MaxPlayers, out int players))
+        {
+            m_mapError = "The players on a map are a whole number.";
+            return;
+        }
+        await ChangeMapsAsync(playlist => Api.SavePlaylistMapAsync(playlist.Id, row.Source.Id, playlist.Version, new { name = row.Name.Trim(), path = row.Path.Trim(), custom = row.Custom, max_players = players, enabled = row.Enabled }));
+    }
+
+    private Task RemoveMapAsync(MapRow row) => ChangeMapsAsync(playlist => Api.RemovePlaylistMapAsync(playlist.Id, row.Source.Id, playlist.Version));
+
+    private Task MoveAsync(int at, int by)
+    {
+        List<long> order = m_rows.Select(row => row.Source.Id).ToList();
+        (order[at], order[at + by]) = (order[at + by], order[at]);
+        return ChangeMapsAsync(playlist => Api.OrderPlaylistMapsAsync(playlist.Id, playlist.Version, order));
+    }
+
+    private async Task ChangeMapsAsync(Func<PortalPlaylist, Task<PortalFlagOutcome<PortalPlaylist>>> send)
+    {
+        m_busy = true;
+        PortalFlagOutcome<PortalPlaylist> changed = await send(Selected!);
+        m_busy = false;
+        if (!changed.Ok)
+        {
+            m_mapError = PortalText.PlaylistError(changed.Error, changed.Field);
+            return;
+        }
+
+        await LoadAsync();
+    }
+}

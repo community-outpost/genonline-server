@@ -361,5 +361,10 @@ public class PlaylistAccessTests
 
 		Assert.Equal(actions, new[] { ModerationActions.PlaylistCreate, ModerationActions.PlaylistUpdate, ModerationActions.PlaylistDelete, ModerationActions.PlaylistMapChange });
 		Assert.Equal("playlist", AuditTargetKinds.Playlist);
+		Assert.All(actions, action =>
+		{
+			Assert.NotEqual(action, GenOnlineService.Portal.Client.PortalAuditActions.LabelOf(action));
+			Assert.Contains(action, GenOnlineService.Portal.Client.PortalAuditActions.All);
+		});
 	}
 }

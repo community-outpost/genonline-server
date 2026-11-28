@@ -460,6 +460,30 @@ namespace GenOnlineService.Portal.Client
 
 		public Task<PortalOutcome> RevokePartnerTokenAsync(long id, long tokenID) => SendAsync(HttpMethod.Delete, $"{PortalRoutes.ServiceAccounts}/{id}/personal_access_tokens/{tokenID}", new { });
 
+		public Task<PortalAnswer<PortalPlaylistList>> ListPlaylistsAsync(CancellationToken cancellationToken = default) => GetAsync<PortalPlaylistList>(PortalRoutes.Playlists, cancellationToken);
+
+		public Task<PortalFlagOutcome<PortalPlaylist>> CreatePlaylistAsync(object playlist) => SendFlagAsync<PortalPlaylist>(HttpMethod.Post, PortalRoutes.Playlists, playlist, null);
+
+		// version is the If-Match value, so a change made meanwhile is refused (conflict.stale)
+		public Task<PortalFlagOutcome<PortalPlaylist>> SavePlaylistAsync(int id, int version, object change) => SendFlagAsync<PortalPlaylist>(HttpMethod.Put, $"{PortalRoutes.Playlists}/{id}", change, Quoted(version));
+
+		public async Task<PortalOutcome> DeletePlaylistAsync(int id, int version)
+		{
+			(HttpResponseMessage? response, PortalError? failure) = await SendRawAsync(HttpMethod.Delete, $"{PortalRoutes.Playlists}/{id}", new { }, Quoted(version));
+			using (response)
+			{
+				return failure == null ? PortalOutcome.Success : new PortalOutcome(false, failure.Error);
+			}
+		}
+
+		public Task<PortalFlagOutcome<PortalPlaylist>> AddPlaylistMapAsync(int id, int version, object map) => SendFlagAsync<PortalPlaylist>(HttpMethod.Post, $"{PortalRoutes.Playlists}/{id}/maps", map, Quoted(version));
+
+		public Task<PortalFlagOutcome<PortalPlaylist>> SavePlaylistMapAsync(int id, long mapId, int version, object change) => SendFlagAsync<PortalPlaylist>(HttpMethod.Put, $"{PortalRoutes.Playlists}/{id}/maps/{mapId}", change, Quoted(version));
+
+		public Task<PortalFlagOutcome<PortalPlaylist>> RemovePlaylistMapAsync(int id, long mapId, int version) => SendFlagAsync<PortalPlaylist>(HttpMethod.Delete, $"{PortalRoutes.Playlists}/{id}/maps/{mapId}", new { }, Quoted(version));
+
+		public Task<PortalFlagOutcome<PortalPlaylist>> OrderPlaylistMapsAsync(int id, int version, IReadOnlyList<long> mapIds) => SendFlagAsync<PortalPlaylist>(HttpMethod.Put, $"{PortalRoutes.Playlists}/{id}/maps/order", new { map_ids = mapIds }, Quoted(version));
+
 		public Task<PortalAnswer<PortalFlagDraft>> GetFlagsAsync(CancellationToken cancellationToken = default) => GetAsync<PortalFlagDraft>(PortalRoutes.Flags, cancellationToken);
 
 		// One field of the draft; version is the If-Match value, so a change made meanwhile is refused (conflict.stale)

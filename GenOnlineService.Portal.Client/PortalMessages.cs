@@ -53,6 +53,7 @@ namespace GenOnlineService.Portal.Client
 		public const string TextRules = "api/v1/text_rules";
 		public const string StaffInvestigate = "api/v1/admin/investigate";
 		public const string Flags = "api/v1/flags";
+		public const string Playlists = "api/v1/admin/playlists";
 		public const string FlagRevisions = "api/v1/flags/revisions";
 		public const string Rules = "api/v1/rules";
 		public const string RuleMatches = "api/v1/rules/matches";
@@ -80,6 +81,7 @@ namespace GenOnlineService.Portal.Client
 		public const string InvestigatePage = "/admin/investigate";
 		public const string ChatLogsPage = "/admin/chat";
 		public const string ConfigPage = "/admin/config";
+		public const string PlaylistsPage = "/admin/playlists";
 		public const string RulesPage = "/admin/rules";
 		public const string RuleMatchesPage = "/admin/rules/matches";
 		public const string RolesPage = "/admin/roles";
@@ -136,6 +138,7 @@ namespace GenOnlineService.Portal.Client
 		public const string AccountsSupport = "accounts.support";
 		public const string TextRulesManage = "textrules.manage";
 		public const string FlagsManage = "flags.manage";
+		public const string PlaylistsManage = "playlists.manage";
 		public const string RulesManage = "rules.manage";
 	}
 
@@ -209,6 +212,10 @@ namespace GenOnlineService.Portal.Client
 			"flags_rollback" => "Game config rolled back",
 			"flags_import" => "Game config imported",
 			"flags_reset" => "Game config draft reset",
+			"playlist_create" => "Playlist added",
+			"playlist_update" => "Playlist changed",
+			"playlist_delete" => "Playlist deleted",
+			"playlist_map_change" => "Playlist maps changed",
 			"rule_create" => "Automated rule added",
 			"rule_version" => "Automated rule saved",
 			"rule_update" => "Automated rule changed",
@@ -230,6 +237,7 @@ namespace GenOnlineService.Portal.Client
 			"token_revoke", "sa_create", "sa_update", "sa_grant", "sa_revoke", "sa_disable", "sa_enable", "password_reset",
 			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "text_term_add", "text_term_update",
 			"text_term_remove", "text_exception_add", "text_exception_remove", "text_workflow_update", "text_rules_seed", "investigate_search", "flag_create", "flag_update", "flag_archive", "flag_restore", "flags_publish", "flags_rollback", "flags_import", "flags_reset",
+			"playlist_create", "playlist_update", "playlist_delete", "playlist_map_change",
 			"rule_create", "rule_version", "rule_update", "rule_archive", "rule_restore", "rule_breaker", "rule_match_review", "rule_preview", "rule_sweep_start", "rule_sweep_cancel"
 		];
 	}
@@ -1324,6 +1332,61 @@ namespace GenOnlineService.Portal.Client
 		public string Status { get; init; } = "";
 		public string UpdatedBy { get; init; } = "";
 		public DateTime UpdatedAt { get; init; }
+	}
+
+	public sealed record PortalPlaylistMap
+	{
+		public long Id { get; init; }
+
+		// the index the game sends, null while the map is disabled
+		public int? Index { get; init; }
+
+		public string Name { get; init; } = "";
+		public string Path { get; init; } = "";
+		public bool Custom { get; init; }
+		public int MaxPlayers { get; init; }
+		public bool Enabled { get; init; }
+	}
+
+	public sealed record PortalPlaylist
+	{
+		public int Id { get; init; }
+		public string Name { get; init; } = "";
+		public bool Enabled { get; init; }
+		public int MinPlayers { get; init; }
+		public int DesiredPlayers { get; init; }
+		public int MinSelectedMaps { get; init; }
+		public bool AllowTeams { get; init; }
+
+		// -1 means no teams
+		public int TeamSize { get; init; } = -1;
+
+		public bool AllowArmySelection { get; init; }
+		public int GracePeriodS { get; init; }
+		public int Version { get; init; }
+		public string UpdatedBy { get; init; } = "";
+		public DateTime UpdatedAt { get; init; }
+
+		// whether the queue offers it right now
+		public bool Offered { get; init; }
+
+		public IReadOnlyList<PortalPlaylistMap> Maps { get; init; } = [];
+	}
+
+	public sealed record PortalPlaylistRating
+	{
+		public int BaseRating { get; init; }
+		public int KFactor { get; init; }
+		public int ExpansionStep { get; init; }
+		public int ExpansionStepHigh { get; init; }
+		public int ExpansionIntervalS { get; init; }
+		public int HighEloThreshold { get; init; }
+	}
+
+	public sealed record PortalPlaylistList
+	{
+		public PortalPlaylistRating Rating { get; init; } = new();
+		public IReadOnlyList<PortalPlaylist> Playlists { get; init; } = [];
 	}
 
 	public sealed record PortalFlagDraft
