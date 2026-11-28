@@ -1,0 +1,60 @@
+# Imported from "List of Dirty, Naughty, Obscene, and Otherwise Bad Words" (de), by LDNOOBW and contributors,
+# https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words, commit 5faf2ba42d7b1c0977169ec3611df25a3c08eb13, retrieved 2026-11-28.
+# License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), its text in LDNOOBW-LICENSE next to this file.
+# Modified: deduplicated, normalized (trimmed, lower case, NFC, apostrophes of transliterations removed), some entries left out
+# (LICENSE-THIRD-PARTY.md lists them), and given a category, severity and match mode.
+# term	category	severity	match
+analritter	sexual	flag	anywhere
+arsch	profanity	flag	word
+arschficker	insult	flag	anywhere
+arschlecker	insult	flag	anywhere
+arschloch	insult	flag	anywhere
+bimbo	insult	flag	word
+bratze	insult	flag	word
+bumsen	sexual	flag	word
+dödel	insult	flag	word
+fick	sexual	flag	word
+ficken	sexual	flag	word
+flittchen	insult	flag	anywhere
+fotze	insult	flag	word
+hackfresse	insult	flag	anywhere
+hure	insult	flag	word
+hurensohn	insult	flag	anywhere
+ische	insult	flag	word
+kackbratze	insult	flag	anywhere
+kacke	profanity	flag	word
+kacken	profanity	flag	word
+kackwurst	profanity	flag	anywhere
+kampflesbe	slur	block	anywhere
+kanake	slur	block	word
+lümmel	insult	flag	word
+möpse	sexual	flag	word
+morgenlatte	sexual	flag	anywhere
+möse	sexual	flag	word
+muschi	sexual	flag	word
+neger	slur	block	word
+nippel	sexual	flag	word
+nutte	insult	flag	word
+onanieren	sexual	flag	anywhere
+orgasmus	sexual	flag	anywhere
+pimmel	sexual	flag	word
+pimpern	sexual	flag	anywhere
+pissen	profanity	flag	word
+pisser	insult	flag	word
+poppen	sexual	flag	word
+reudig	profanity	flag	word
+schabracke	insult	flag	anywhere
+schlampe	insult	flag	anywhere
+scheiße	profanity	flag	anywhere
+scheisser	insult	flag	anywhere
+schiesser	insult	flag	anywhere
+schnackeln	sexual	flag	anywhere
+schwanzlutscher	insult	flag	anywhere
+schwuchtel	slur	block	anywhere
+tittchen	sexual	flag	anywhere
+titten	sexual	flag	word
+vögeln	sexual	flag	word
+vollpfosten	insult	flag	anywhere
+wichse	sexual	flag	word
+wichsen	sexual	flag	anywhere
+wichser	insult	flag	anywhere

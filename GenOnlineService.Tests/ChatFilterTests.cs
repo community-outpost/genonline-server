@@ -141,6 +141,7 @@ public class ChatFilterTests
 	[InlineData("١٢٣ ۴۵۶ abc")]
 	[InlineData("أإآ ى ة ؤ ک مـرحبا")]
 	[InlineData("plain text 123")]
+	[InlineData("Straße FUẞBALL Größe")]
 	public void ExportedFoldMatchesTheServiceFolding(string text)
 	{
 		ChatFilterFold fold = Set([]).ChatFilter.Fold;

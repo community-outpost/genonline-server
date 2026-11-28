@@ -71,10 +71,22 @@ namespace GenOnlineService.TextRules
 			['\u06A9'] = '\u0643', ['\u06AA'] = '\u0643'
 		};
 
-		// Leetspeak: the reading of digits and symbols inside Latin words. 1 reads as i, the alternative reading as l
+		// Letters that fold to several characters, which the map of the filter list holds as strings
+		private static readonly Dictionary<char, string> s_expansions = new()
+		{
+			['\u00DF'] = "ss"
+		};
+
+		// Leetspeak reads digits and symbols inside words, 1 as i, 3 as e and 4 as a, their alternative readings as l, the Cyrillic ze and
+		// che, and 6 as the Cyrillic be, which costs English nothing because no Latin word lists a Cyrillic letter
 		private static readonly Dictionary<char, char> s_leet = new()
 		{
-			['0'] = 'o', ['1'] = 'i', ['3'] = 'e', ['4'] = 'a', ['5'] = 's', ['7'] = 't', ['@'] = 'a', ['$'] = 's', ['!'] = 'i', ['|'] = 'l'
+			['0'] = 'o', ['1'] = 'i', ['3'] = 'e', ['4'] = 'a', ['5'] = 's', ['6'] = '\u0431', ['7'] = 't', ['@'] = 'a', ['$'] = 's', ['!'] = 'i', ['|'] = 'l'
+		};
+
+		private static readonly Dictionary<char, char> s_leetAlt = new()
+		{
+			['1'] = 'l', ['3'] = '\u0437', ['4'] = '\u0447'
 		};
 
 		private static readonly Dictionary<char, char> s_arabiziDigits = new()
@@ -92,6 +104,10 @@ namespace GenOnlineService.TextRules
 			{
 				table[from.ToString()] = to.ToString();
 			}
+			foreach ((char from, string to) in s_expansions)
+			{
+				table[from.ToString()] = to;
+			}
 			for (int digit = 0; digit < 10; digit++)
 			{
 				table[((char)('٠' + digit)).ToString()] = digit.ToString(CultureInfo.InvariantCulture);
@@ -102,7 +118,7 @@ namespace GenOnlineService.TextRules
 
 		public static IReadOnlyDictionary<string, string> LeetTable() => s_leet.OrderBy(p => p.Key).ToDictionary(p => p.Key.ToString(), p => p.Value.ToString());
 
-		public static IReadOnlyDictionary<string, string> LeetAlternativeTable() => new Dictionary<string, string> { ["1"] = "l" };
+		public static IReadOnlyDictionary<string, string> LeetAlternativeTable() => s_leetAlt.OrderBy(p => p.Key).ToDictionary(p => p.Key.ToString(), p => p.Value.ToString());
 
 		private static bool IsWordChar(char c) => Char.IsLetterOrDigit(c) || s_leet.ContainsKey(c);
 
@@ -134,6 +150,11 @@ namespace GenOnlineService.TextRules
 					}
 
 					char c = Char.ToLowerInvariant(raw);
+					if (s_expansions.TryGetValue(c, out string? expanded))
+					{
+						folded.AddRange(expanded.Select(e => new FoldedChar(e, start, end)));
+						continue;
+					}
 					if (c is >= '\u0660' and <= '\u0669')
 					{
 						c = (char)('0' + (c - '\u0660'));
@@ -215,14 +236,14 @@ namespace GenOnlineService.TextRules
 			{
 				AppendRuns(runs, word.Select(c =>
 				{
-					char letter = alternative && c.C == '1' ? 'l' : s_leet.TryGetValue(c.C, out char leet) ? leet : c.C;
+					char letter = alternative && s_leetAlt.TryGetValue(c.C, out char second) ? second : s_leet.TryGetValue(c.C, out char leet) ? leet : c.C;
 					return c with { C = letter };
 				}).ToList());
 			}
 			return new TextReading(alternative ? LatinAltReading : LatinReading, runs);
 		}
 
-		public static bool NeedsAlternative(List<List<FoldedChar>> words) => words.Any(w => w.Any(c => c.C == '1'));
+		public static bool NeedsAlternative(List<List<FoldedChar>> words) => words.Any(w => w.Any(c => s_leetAlt.ContainsKey(c.C)));
 
 		// Arabizi: a Latin word with Arabizi digits (3ars, m3ras) read as an Arabic consonant skeleton. Only those words are
 		// read, so plain English never reads as Arabic. Null when no word qualifies.

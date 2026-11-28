@@ -138,14 +138,15 @@ namespace GenOnlineService.TextRules
 		public const int Version = 3;
 
 		// The seed words added after a seed version; a word in more than one list keeps its first entry, so the service's own wins
-		public static IReadOnlyList<TextRuleTerm> Terms(int after = 0)
+		public static IReadOnlyList<TextRuleTerm> Terms(int after = 0, Func<string, Stream?>? open = null)
 		{
+			open ??= Embedded;
 			var terms = new List<(TextRuleTerm Term, int Since)>();
 			foreach (string language in TextLanguages.All)
 			{
-				foreach (string[] fields in Lines(language + ".txt"))
+				foreach (string[] fields in Lines(language + ".txt", open, !IsOriginal(language)))
 				{
-					terms.Add((new TextRuleTerm { Term = fields[0], Language = language, Category = fields[1], Severity = fields[2], Match = fields[3], Level = TextLevels.OfCategory(fields[1]), Source = TextRuleSources.Seed }, 1));
+					terms.Add((new TextRuleTerm { Term = fields[0], Language = language, Category = fields[1], Severity = fields[2], Match = fields[3], Level = TextLevels.OfCategory(fields[1]), Source = TextRuleSources.Seed }, IsOriginal(language) ? 1 : 3));
 				}
 			}
 			// the plugin's list: a word with anything but letters keeps the plugin's literal rule, as folding would read it otherwise
@@ -164,9 +165,9 @@ namespace GenOnlineService.TextRules
 			// the LDNOOBW lists (CC BY 4.0, LICENSE-THIRD-PARTY.md), as flag words
 			foreach (string language in TextLanguages.All)
 			{
-				foreach (string[] fields in Lines("ldnoobw-" + language + ".txt"))
+				foreach (string[] fields in Lines("ldnoobw-" + language + ".txt", open, !IsOriginal(language)))
 				{
-					terms.Add((new TextRuleTerm { Term = fields[0], Language = language, Category = fields[1], Severity = fields[2], Match = fields[3], Level = TextLevels.OfCategory(fields[1]), Source = TextRuleSources.Ldnoobw }, 2));
+					terms.Add((new TextRuleTerm { Term = fields[0], Language = language, Category = fields[1], Severity = fields[2], Match = fields[3], Level = TextLevels.OfCategory(fields[1]), Source = TextRuleSources.Ldnoobw }, IsOriginal(language) ? 2 : 3));
 				}
 			}
 			return terms.DistinctBy(t => (t.Term.Language, t.Term.Term)).Where(t => t.Since > after).Select(t => t.Term).ToList();
@@ -174,14 +175,22 @@ namespace GenOnlineService.TextRules
 
 		// The seed exceptions added after a seed version; the third field is the version that added one, 1 when left out
 		public static IReadOnlyList<TextRuleException> Exceptions(int after = 0) =>
-			Lines("exceptions.txt")
+			Lines("exceptions.txt", Embedded, false)
 				.Where(f => (f.Length > 2 ? Int32.Parse(f[2], System.Globalization.CultureInfo.InvariantCulture) : 1) > after)
 				.Select(f => new TextRuleException { Term = f[0], Language = f[1], Source = TextRuleSources.Seed }).ToList();
 
-		private static IEnumerable<string[]> Lines(string file)
+		// The German and Russian lists are added when their files are, English and Arabic must be embedded
+		private static bool IsOriginal(string language) => language is TextLanguages.English or TextLanguages.Arabic;
+
+		private static Stream? Embedded(string file) => typeof(TextRuleSeeds).Assembly.GetManifestResourceStream(ResourcePrefix + file);
+
+		private static IEnumerable<string[]> Lines(string file, Func<string, Stream?> open, bool optional)
 		{
-			using Stream stream = typeof(TextRuleSeeds).Assembly.GetManifestResourceStream(ResourcePrefix + file)
-				?? throw new InvalidOperationException("The text rules seed " + file + " is not embedded");
+			using Stream? stream = open(file);
+			if (stream == null)
+			{
+				return optional ? [] : throw new InvalidOperationException("The text rules seed " + file + " is not embedded");
+			}
 			using var reader = new StreamReader(stream, Encoding.UTF8);
 			var lines = new List<string[]>();
 			while (reader.ReadLine() is string line)

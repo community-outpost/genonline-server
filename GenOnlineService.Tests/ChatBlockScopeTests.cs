@@ -94,6 +94,13 @@ public class ChatBlockScopeTests
 	}
 
 	[Fact]
+	public void TheRussianSlurMatchesOnlyTheWholeWord()
+	{
+		Assert.NotNull(TextChecks.ChatRefusal("хохол"));
+		Assert.Null(TextChecks.ChatRefusal("хохолок"));
+	}
+
+	[Fact]
 	public void AStaffBlockWordRefusesChatWithTheCustomCategory()
 	{
 		TextRuleSet set = Set(Term("heck", TextCategories.Insult, source: TextRuleSources.Staff));

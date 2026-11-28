@@ -7,11 +7,15 @@ The service ships the data below under its own license. The rest of this reposit
 - Title: "List of Dirty, Naughty, Obscene, and Otherwise Bad Words", by LDNOOBW and contributors
 - Source: https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words, commit `5faf2ba42d7b1c0977169ec3611df25a3c08eb13`, retrieved 2026-11-18
 - License: Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/; the license text is in `GenOnlineService/data/textrules/LDNOOBW-LICENSE`
-- Used in: `GenOnlineService/data/textrules/ldnoobw-en.txt` (from `en`) and `GenOnlineService/data/textrules/ldnoobw-ar.txt` (from `ar`), the seed words of the text rules
+- Used in: `GenOnlineService/data/textrules/ldnoobw-en.txt` (from `en`) and `GenOnlineService/data/textrules/ldnoobw-ar.txt` (from `ar`), retrieved 2026-11-18, and `GenOnlineService/data/textrules/ldnoobw-de.txt` (from `de`) and `GenOnlineService/data/textrules/ldnoobw-ru.txt` (from `ru`) of the same commit, retrieved 2026-11-28, the seed words of the text rules
 - Modified: deduplicated and normalized. Entries are trimmed, lower case and NFC; entries the service's own lists already hold were dropped (the service's entry wins); every entry got category `profanity`, severity `flag` and a match mode (`word` for phrases and for English words under 7 letters and Arabic words under 5, `anywhere` otherwise). Left out:
   - entries the text folding cannot read as written (digits read as leetspeak, symbols part words): `2g1c`, `2 girls 1 cup`, `rosy palm and her 5 sisters`, `s&m`, the middle finger emoji, and `xx`
   - entries game chat uses innocently: `escort`, `domination`, `hardcore`, `hard core`, `snowballing`, `suck`, `sucks`, `big black`, `girl on`, `huge fat`, `how to kill`, `how to murder`, `hot chick`, `tied up`, `taste my`, `tongue in a`, `tight white`, `tainted love`, `jelly donut`, `make me come`, `wrapping men`
   - Arabic entries that are common innocent words: فرج (also a given name), مبادل, بيضان
+- Modified for `de` and `ru`: the same normalization and match modes (`word` for phrases, for Latin words under 7 letters and for Cyrillic words under 5, `anywhere` otherwise, except хохол, which matches the whole word so хохолок stays allowed), apostrophes and backticks of the Latin transliterations removed, and a category per entry (slurs `slur` with severity `block`, insults `insult`, sexual terms `sexual`, the rest `profanity`, all three with severity `flag`). Left out:
+  - entries the English lists already hold: `milf`, `nigger`, `penis`, `porno`
+  - German entries that are common innocent words: `bonze`, `fratze`, `kimme`, `mufti`, `nackt`, `pinkeln`, `popel`, `rosette`
+  - Russian entries that are common innocent words or mild: `byk`, `gol`, `uboy`, бугор, голый, другой дразнится, какая разница, мент, на фиг, обнаженный, офигеть, половое сношение, секс, фига, хапать, хрен
 
 ## IEEE OUI registry (`GenOnlineService/data/oui.tsv`)
 

@@ -1251,7 +1251,7 @@ namespace GenOnlineService.Portal.Client
 	public static class PortalTextChoices
 	{
 		public static readonly IReadOnlyList<(string Value, string Title)> Kinds = [("display_name", "Player name"), ("lobby_name", "Lobby name"), ("chat", "Chat message")];
-		public static readonly IReadOnlyList<(string Value, string Title)> Languages = [("en", "English"), ("ar", "Arabic")];
+		public static readonly IReadOnlyList<(string Value, string Title)> Languages = [("en", "English"), ("ar", "Arabic"), ("de", "German"), ("ru", "Russian")];
 		public static readonly IReadOnlyList<string> Categories = ["slur", "sexual", "profanity", "insult", "impersonation", "reserved"];
 		public static readonly IReadOnlyList<string> Severities = ["block", "flag"];
 		public static readonly IReadOnlyList<string> Levels = ["extreme", "standard", "strict"];

@@ -1,0 +1,141 @@
+# Imported from "List of Dirty, Naughty, Obscene, and Otherwise Bad Words" (ru), by LDNOOBW and contributors,
+# https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words, commit 5faf2ba42d7b1c0977169ec3611df25a3c08eb13, retrieved 2026-11-28.
+# License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), its text in LDNOOBW-LICENSE next to this file.
+# Modified: deduplicated, normalized (trimmed, lower case, NFC, apostrophes of transliterations removed), some entries left out
+# (LICENSE-THIRD-PARTY.md lists them), and given a category, severity and match mode.
+# term	category	severity	match
+bychara	insult	flag	anywhere
+chernozhopyi	slur	block	anywhere
+dolboyeb	insult	flag	anywhere
+ebalnik	profanity	flag	anywhere
+ebalo	profanity	flag	word
+ebalom schelkat	profanity	flag	word
+mudack	insult	flag	word
+opizdenet	profanity	flag	anywhere
+ostoeblo	profanity	flag	anywhere
+ostokhuitelno	profanity	flag	anywhere
+otebis	profanity	flag	word
+otmudohat	profanity	flag	anywhere
+otpizdit	profanity	flag	anywhere
+otsosi	sexual	flag	word
+padlo	insult	flag	word
+pedik	slur	block	word
+perdet	profanity	flag	word
+petuh	insult	flag	word
+pidar gnoinyj	slur	block	word
+pizda	profanity	flag	word
+pizdato	profanity	flag	anywhere
+pizdatyi	profanity	flag	anywhere
+pizdet	profanity	flag	word
+pizdetc	profanity	flag	anywhere
+pizdoi nakrytsja	profanity	flag	word
+pizduk	profanity	flag	word
+pizdyulina	profanity	flag	anywhere
+podi kuevo	profanity	flag	word
+poeben	profanity	flag	word
+poimat na konchik	sexual	flag	word
+poiti posrat	profanity	flag	word
+po khuy	profanity	flag	word
+poluchit pizdy	profanity	flag	word
+pososi moyu konfetku	sexual	flag	word
+prissat	profanity	flag	anywhere
+proebat	profanity	flag	anywhere
+promudobladsksya pizdoproebina	profanity	flag	word
+propezdoloch	insult	flag	anywhere
+prosrat	profanity	flag	anywhere
+raspeezdeyi	insult	flag	anywhere
+raspizdatyi	profanity	flag	anywhere
+razyebuy	profanity	flag	anywhere
+razyoba	profanity	flag	anywhere
+sebatsya	profanity	flag	anywhere
+shalava	insult	flag	anywhere
+styervo	insult	flag	anywhere
+sukin syn	insult	flag	word
+svodit posrat	profanity	flag	word
+svoloch	insult	flag	anywhere
+trakhatsya	sexual	flag	anywhere
+trimandoblydskiy pizdoproyob	profanity	flag	word
+ublyudok	insult	flag	anywhere
+uebitsche	profanity	flag	anywhere
+vafla	sexual	flag	word
+vafli lovit	sexual	flag	word
+v pizdu	profanity	flag	word
+vyperdysh	insult	flag	anywhere
+vzdrochennyi	sexual	flag	anywhere
+yeb vas	profanity	flag	word
+zaebat	profanity	flag	word
+zaebis	profanity	flag	word
+zalupa	profanity	flag	word
+zalupat	profanity	flag	anywhere
+zasranetc	insult	flag	anywhere
+zassat	profanity	flag	word
+zloebuchy	profanity	flag	anywhere
+бздёнок	insult	flag	anywhere
+блядки	sexual	flag	anywhere
+блядовать	sexual	flag	anywhere
+блядство	sexual	flag	anywhere
+блядь	sexual	flag	anywhere
+во пизду	profanity	flag	word
+встать раком	sexual	flag	word
+выёбываться	profanity	flag	anywhere
+гандон	insult	flag	anywhere
+говно	profanity	flag	anywhere
+говнюк	insult	flag	anywhere
+дать пизды	profanity	flag	word
+дерьмо	profanity	flag	anywhere
+дрочить	sexual	flag	anywhere
+ёбарь	sexual	flag	anywhere
+ебать	profanity	flag	anywhere
+ебать-копать	profanity	flag	anywhere
+ебло	profanity	flag	word
+ебнуть	profanity	flag	anywhere
+ёб твою мать	profanity	flag	word
+жопа	profanity	flag	word
+жополиз	insult	flag	anywhere
+играть на кожаной флейте	sexual	flag	word
+измудохать	profanity	flag	anywhere
+каждый дрочит как он хочет	sexual	flag	word
+как два пальца обоссать	profanity	flag	word
+курите мою трубку	profanity	flag	word
+лысого в кулаке гонять	sexual	flag	word
+малофья	sexual	flag	anywhere
+манда	sexual	flag	anywhere
+мандавошка	insult	flag	anywhere
+муда	profanity	flag	word
+мудило	insult	flag	anywhere
+мудозвон	insult	flag	anywhere
+наебать	profanity	flag	anywhere
+наебениться	profanity	flag	anywhere
+наебнуться	profanity	flag	anywhere
+на хуй	profanity	flag	word
+на хую вертеть	profanity	flag	word
+на хуя	profanity	flag	word
+нахуячиться	profanity	flag	anywhere
+невебенный	profanity	flag	anywhere
+не ебет	profanity	flag	word
+ни за хуй собачу	profanity	flag	word
+ни хуя	profanity	flag	word
+обоссаться можно	profanity	flag	word
+один ебётся	sexual	flag	word
+опесдол	insult	flag	anywhere
+охуеть	profanity	flag	anywhere
+охуительно	profanity	flag	anywhere
+сиськи	sexual	flag	anywhere
+спиздить	profanity	flag	anywhere
+срать	profanity	flag	anywhere
+ссать	profanity	flag	anywhere
+траxать	sexual	flag	anywhere
+ты мне ваньку не валяй	profanity	flag	word
+хер с ней	profanity	flag	word
+хер с ним	profanity	flag	word
+хохол	slur	block	word
+хуёво	profanity	flag	anywhere
+хуёвый	profanity	flag	anywhere
+хуем груши околачивать	profanity	flag	word
+хуеплет	insult	flag	anywhere
+хуило	insult	flag	anywhere
+хуиней страдать	profanity	flag	word
+хуиня	profanity	flag	anywhere
+хуй	profanity	flag	word
+хуйнуть	profanity	flag	anywhere
+хуй пинать	profanity	flag	word

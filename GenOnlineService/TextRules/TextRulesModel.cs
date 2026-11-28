@@ -36,8 +36,10 @@ namespace GenOnlineService.TextRules
 	{
 		public const string English = "en";
 		public const string Arabic = "ar";
+		public const string German = "de";
+		public const string Russian = "ru";
 
-		public static readonly IReadOnlyList<string> All = [English, Arabic];
+		public static readonly IReadOnlyList<string> All = [English, Arabic, German, Russian];
 	}
 
 	public static class TextCategories
