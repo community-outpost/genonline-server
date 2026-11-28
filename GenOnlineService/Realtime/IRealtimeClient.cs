@@ -25,6 +25,7 @@ namespace GenOnlineService.Realtime
 		Task FeaturesUpdate(FeaturesUpdateEvent e);
 		Task ChatFilterUpdate(ChatFilterUpdateEvent e);
 		Task MotdUpdate(MotdUpdateEvent e);
+		Task ChannelsUpdate(ChannelsUpdateEvent e);
 		Task Notice(NoticeEvent e);
 		Task ModerationNotice(ModerationNoticeEvent e);
 		Task ServerSwitching(ServerSwitchingEvent e);

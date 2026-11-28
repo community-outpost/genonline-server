@@ -689,6 +689,43 @@ namespace GenOnlineService.Migrations.Postgres
                     b.ToTable("chat_read_markers", (string)null);
                 });
 
+            modelBuilder.Entity("ChatRoomRow", b =>
+                {
+                    b.Property<short>("ID")
+                        .HasColumnType("smallint")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("name");
+
+                    b.Property<short?>("ParentID")
+                        .HasColumnType("smallint")
+                        .HasColumnName("parent_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<bool>("ShowAllMatches")
+                        .HasColumnType("boolean")
+                        .HasColumnName("show_all_matches");
+
+                    b.HasKey("ID");
+
+                    b.ToTable("chat_rooms", (string)null);
+                });
+
             modelBuilder.Entity("Client", b =>
                 {
                     b.Property<long>("ID")

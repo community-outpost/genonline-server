@@ -690,6 +690,43 @@ namespace GenOnlineService.Migrations.MySql
                     b.ToTable("chat_read_markers", (string)null);
                 });
 
+            modelBuilder.Entity("ChatRoomRow", b =>
+                {
+                    b.Property<short>("ID")
+                        .HasColumnType("smallint")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("enabled");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("is_default");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("name");
+
+                    b.Property<short?>("ParentID")
+                        .HasColumnType("smallint")
+                        .HasColumnName("parent_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("int")
+                        .HasColumnName("position");
+
+                    b.Property<bool>("ShowAllMatches")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("show_all_matches");
+
+                    b.HasKey("ID");
+
+                    b.ToTable("chat_rooms", (string)null);
+                });
+
             modelBuilder.Entity("Client", b =>
                 {
                     b.Property<long>("ID")

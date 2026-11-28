@@ -63,6 +63,7 @@ public static class AuditTargetKinds
 	public const string Role = "role";
 	public const string Flag = "flag";
 	public const string Playlist = "playlist";
+	public const string Room = "room";
 	public const string FlagRevision = "flag_revision";
 	public const string AnticheatReport = "anticheat_report";
 	public const string Case = "case";
@@ -95,6 +96,8 @@ public static class ModerationActions
 	public const string CaseView = "case_view";
 	public const string CaseClose = "case_close";
 	public const string SettingUpdate = "setting_update";
+	public const string RoomCreate = "room_create";
+	public const string RoomUpdate = "room_update";
 	public const string Announcement = "announcement";
 	public const string ConnectionLookup = "connection_lookup";
 

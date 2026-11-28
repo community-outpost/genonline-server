@@ -526,6 +526,12 @@ namespace GenOnlineService.Realtime
 		public string? Motd { get; init; }
 	}
 
+	// Every enabled room, as Ready lists them
+	public sealed record ChannelsUpdateEvent
+	{
+		public IReadOnlyList<ChannelInfo> Channels { get; init; } = [];
+	}
+
 	public sealed record ReadyEvent
 	{
 		public int ProtocolVersion { get; init; }

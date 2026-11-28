@@ -2754,3 +2754,11 @@ select.gp-input { width: auto; min-width: 240px; }
 .go-thread-meta { display: flex; gap: var(--go-space-2); font-size: var(--go-font-size-xs); color: var(--go-color-text-muted); }
 .go-thread-reported { background: var(--go-color-accent-tint-14); box-shadow: inset 3px 0 0 var(--go-color-accent-default); }
 .go-thread-deleted { text-decoration: line-through; color: var(--go-color-text-muted); }
+
+.go-rooms { list-style: none; margin: 0; padding: 0; }
+.go-room-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--go-space-2); padding-block: var(--go-space-2); padding-inline-end: var(--go-space-3); border-bottom: 1px solid var(--go-color-border-default); }
+.go-room-row:last-child { border-bottom: 0; }
+.go-room-name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--go-space-2); }
+.go-room-disabled { color: var(--go-color-text-muted); text-decoration: line-through; }
+.go-room-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--go-space-2); }
+.go-room-switch { display: inline-flex; align-items: center; gap: var(--go-space-1); font-size: var(--go-font-size-sm); }

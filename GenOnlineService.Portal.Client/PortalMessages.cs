@@ -44,6 +44,7 @@ namespace GenOnlineService.Portal.Client
 		public const string ServiceAccounts = "api/v1/service_accounts";
 		public const string MatchSearch = "api/v1/matches/search";
 		public const string Settings = "api/v1/application/settings";
+		public const string Rooms = "api/v1/admin/rooms";
 		public const string Announcements = "api/v1/announcements";
 		public const string Messages = "api/v1/messages";
 		public const string ChatLogs = "api/v1/admin/chat";
@@ -85,6 +86,7 @@ namespace GenOnlineService.Portal.Client
 		public const string RulesPage = "/admin/rules";
 		public const string RuleMatchesPage = "/admin/rules/matches";
 		public const string RolesPage = "/admin/roles";
+		public const string RoomsPage = "/admin/rooms";
 
 		public static string PlayerPage(long id) => PlayersPage + "/" + id;
 
@@ -140,6 +142,7 @@ namespace GenOnlineService.Portal.Client
 		public const string FlagsManage = "flags.manage";
 		public const string PlaylistsManage = "playlists.manage";
 		public const string RulesManage = "rules.manage";
+		public const string ChannelsManage = "channels.manage";
 	}
 
 	public static class PortalPartnerPermissions
@@ -182,6 +185,8 @@ namespace GenOnlineService.Portal.Client
 			"anticheat_review" => "Anti-cheat row reviewed",
 			"announcement" => "Announcement",
 			"setting_update" => "Setting changed",
+			"room_create" => "Chat room added",
+			"room_update" => "Chat room changed",
 			"token_mint" => "Token created",
 			"token_rotate" => "Token rotated",
 			"token_revoke" => "Token revoked",
@@ -233,7 +238,7 @@ namespace GenOnlineService.Portal.Client
 		[
 			"appeal_open", "appeal_decide", "role_grant", "role_revoke", "role_create", "role_update", "role_delete", "kick", "mute", "unmute", "ban", "unban", "rename", "name_reset",
 			"message_delete", "message_lookup", "chat_log_view", "staff_message", "report_view", "report_close", "player_inspect",
-			"device_reveal", "connection_lookup", "anticheat_review", "announcement", "setting_update", "token_mint", "token_rotate",
+			"device_reveal", "connection_lookup", "anticheat_review", "announcement", "setting_update", "room_create", "room_update", "token_mint", "token_rotate",
 			"token_revoke", "sa_create", "sa_update", "sa_grant", "sa_revoke", "sa_disable", "sa_enable", "password_reset",
 			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "text_term_add", "text_term_update",
 			"text_term_remove", "text_exception_add", "text_exception_remove", "text_workflow_update", "text_rules_seed", "investigate_search", "flag_create", "flag_update", "flag_archive", "flag_restore", "flags_publish", "flags_rollback", "flags_import", "flags_reset",
@@ -679,6 +684,23 @@ namespace GenOnlineService.Portal.Client
 	public sealed record PortalSettings
 	{
 		public string? Motd { get; init; }
+	}
+
+	public sealed record PortalRoom
+	{
+		public long Id { get; init; }
+		public string Name { get; init; } = "";
+		public long? ParentId { get; init; }
+		public bool IsDefault { get; init; }
+		public int Position { get; init; }
+		public bool Enabled { get; init; }
+		public bool ShowAllMatches { get; init; }
+	}
+
+	// Depth first, the siblings in their order, the disabled rooms included
+	public sealed record PortalRoomList
+	{
+		public IReadOnlyList<PortalRoom> Rooms { get; init; } = [];
 	}
 
 	public sealed record PortalAnnouncementRequest

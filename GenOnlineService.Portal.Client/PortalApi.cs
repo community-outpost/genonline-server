@@ -248,6 +248,18 @@ namespace GenOnlineService.Portal.Client
 			return SendForAsync<PortalSettings>(HttpMethod.Put, PortalRoutes.Settings, body);
 		}
 
+		public Task<PortalAnswer<PortalRoomList>> ListRoomsAsync() => GetAsync<PortalRoomList>(PortalRoutes.Rooms);
+
+		public Task<PortalAnswer<PortalRoomList>> AddRoomAsync(string name, long? parentID) =>
+			SendForAsync<PortalRoomList>(HttpMethod.Post, PortalRoutes.Rooms, new { name, parent_id = parentID });
+
+		// Only the fields in the change are sent
+		public Task<PortalAnswer<PortalRoomList>> UpdateRoomAsync(long id, object change) =>
+			SendForAsync<PortalRoomList>(HttpMethod.Patch, $"{PortalRoutes.Rooms}/{id}", change);
+
+		public Task<PortalAnswer<PortalRoomList>> ReorderRoomsAsync(long? parentID, IReadOnlyList<long> ids) =>
+			SendForAsync<PortalRoomList>(HttpMethod.Post, $"{PortalRoutes.Rooms}/reorder", new { parent_id = parentID, ids });
+
 		public Task<PortalAnswer<PortalAnnouncementResult>> SendAnnouncementAsync(string message)
 		{
 			return SendForAsync<PortalAnnouncementResult>(HttpMethod.Post, PortalRoutes.Announcements, new PortalAnnouncementRequest { Message = message });

@@ -1,0 +1,235 @@
+@page "/admin/rooms"
+@inject PortalApi Api
+@inject ToastService Toasts
+
+<PageTitle>Chat rooms · Generals Online</PageTitle>
+
+<PageHeader Description="The rooms players pick in the chat of the game. A change reaches every player who is online at once. A room is disabled, never deleted, because its old messages and lobbies still point to it. Every change is in the audit log.">
+    <Title>Chat rooms</Title>
+    <Actions>
+        @if (Session.Can(PortalPermissions.ChannelsManage))
+        {
+            <BbButton Size="ButtonSize.Small" OnClick="@(() => OpenAdd(null))" Disabled="@(m_rooms == null || m_busy)" data-testid="new-room">
+                <LucideIcon Name="plus" Class="bb:h-4 bb:w-4" />
+                Add room
+            </BbButton>
+        }
+    </Actions>
+</PageHeader>
+
+@if (!Session.Can(PortalPermissions.ChannelsManage))
+{
+    <Refusal Title="Chat rooms" Description="Managing chat rooms needs the channels.manage permission." Icon="lock" />
+}
+else if (m_error != null)
+{
+    <BbAlert Variant="AlertVariant.Danger">
+        <Icon>
+            <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+        </Icon>
+        <ChildContent>
+            <BbAlertTitle>The chat rooms could not load</BbAlertTitle>
+            <BbAlertDescription>@PortalText.Error(m_error)</BbAlertDescription>
+        </ChildContent>
+    </BbAlert>
+}
+else if (m_rooms == null)
+{
+    <FeedSkeleton />
+}
+else
+{
+    <div class="go-table-frame">
+        <ul class="go-rooms" data-testid="rooms">
+            @foreach (PortalRoom room in m_rooms)
+            {
+                PortalRoom shown = room;
+                IReadOnlyList<PortalRoom> siblings = SiblingsOf(shown);
+                int at = siblings.ToList().FindIndex(r => r.Id == shown.Id);
+                <li class="go-room-row" style="@($"padding-left: {Depth(shown) * 24 + 12}px")" data-testid="room-row">
+                    <span class="go-room-name">
+                        <span class="@(shown.Enabled ? "" : "go-room-disabled")">@shown.Name</span>
+                        <span class="bb:font-mono bb:text-xs bb:text-muted-foreground">@shown.Id</span>
+                        @if (shown.IsDefault)
+                        {
+                            <BbBadge Variant="BadgeVariant.Secondary">Default</BbBadge>
+                        }
+                        @if (!shown.Enabled)
+                        {
+                            <BbBadge Variant="BadgeVariant.SoftDestructive">Disabled</BbBadge>
+                        }
+                        @if (shown.ShowAllMatches)
+                        {
+                            <BbBadge Variant="BadgeVariant.Secondary">Shows all matches</BbBadge>
+                        }
+                    </span>
+                    <span class="go-room-actions">
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => MoveAsync(shown, -1))" Disabled="@(m_busy || at <= 0)" AriaLabel="@($"Move {shown.Name} up")">
+                            <LucideIcon Name="arrow-up" Class="bb:h-4 bb:w-4" />
+                        </BbButton>
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => MoveAsync(shown, 1))" Disabled="@(m_busy || at >= siblings.Count - 1)" AriaLabel="@($"Move {shown.Name} down")">
+                            <LucideIcon Name="arrow-down" Class="bb:h-4 bb:w-4" />
+                        </BbButton>
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => OpenRename(shown))" Disabled="@m_busy" AriaLabel="@($"Rename {shown.Name}")">
+                            <LucideIcon Name="pencil" Class="bb:h-4 bb:w-4" />
+                        </BbButton>
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => OpenAdd(shown))" Disabled="@m_busy" AriaLabel="@($"Add a room inside {shown.Name}")">
+                            <LucideIcon Name="plus" Class="bb:h-4 bb:w-4" />
+                        </BbButton>
+                        @if (shown.ParentId != null)
+                        {
+                            <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => ChangeAsync(shown, new { is_default = true }))" Disabled="@(m_busy || shown.IsDefault || !shown.Enabled)" AriaLabel="@($"Make {shown.Name} the default room")">
+                                <LucideIcon Name="star" Class="bb:h-4 bb:w-4" />
+                            </BbButton>
+                        }
+                        <label class="go-room-switch">
+                            <BbSwitch Id="@($"room-all-{shown.Id}")" Checked="@shown.ShowAllMatches" CheckedChanged="@((bool on) => ChangeAsync(shown, new { show_all_matches = on }))" Disabled="@m_busy" />
+                            <span>All matches</span>
+                        </label>
+                        <label class="go-room-switch">
+                            <BbSwitch Id="@($"room-on-{shown.Id}")" Checked="@shown.Enabled" CheckedChanged="@((bool on) => ChangeAsync(shown, new { enabled = on }))" Disabled="@m_busy" />
+                            <span>Enabled</span>
+                        </label>
+                    </span>
+                </li>
+            }
+        </ul>
+    </div>
+
+    <BbDialog @bind-Open="m_dialogOpen">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>@(m_renaming != null ? "Rename room" : "Add room")</BbDialogTitle>
+                <BbDialogDescription>
+                    @if (m_renaming != null)
+                    {
+                        <text>The new name shows for every player at once. The room keeps its id.</text>
+                    }
+                    else if (m_parent != null)
+                    {
+                        <text>The new room goes at the end of the rooms inside @m_parent.Name. The first room inside a room becomes its default.</text>
+                    }
+                    else
+                    {
+                        <text>The new room goes at the end of the top level rooms.</text>
+                    }
+                </BbDialogDescription>
+            </BbDialogHeader>
+            <div class="bb:space-y-2">
+                <BbLabel For="room-name">Name</BbLabel>
+                <BbInput Id="room-name" @bind-Value="m_name" UpdateTiming="UpdateTiming.Immediate" MaxLength="MaximumNameLength" autocomplete="off" />
+                <p class="bb:text-xs bb:text-muted-foreground">1 to @MaximumNameLength characters.</p>
+            </div>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_dialogOpen = false)" Disabled="@m_busy">Cancel</BbButton>
+                <BbButton OnClick="SaveNameAsync" Loading="@m_busy" Disabled="@(!NameValid)" data-testid="save-room">@(m_renaming != null ? "Rename" : "Add")</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
+}
+
+@code {
+    // RoomRules.MaximumNameLength on the host
+    private const int MaximumNameLength = 32;
+
+    private List<PortalRoom>? m_rooms;
+    private string? m_error;
+    private bool m_busy;
+
+    private bool m_dialogOpen;
+    private PortalRoom? m_renaming;
+    private PortalRoom? m_parent;
+    private string? m_name;
+
+    private PortalSessionInfo Session => Api.Session!;
+
+    private bool NameValid => !String.IsNullOrWhiteSpace(m_name) && m_name.Trim().Length <= MaximumNameLength;
+
+    private IReadOnlyList<PortalRoom> SiblingsOf(PortalRoom room) => m_rooms!.Where(r => r.ParentId == room.ParentId).ToList();
+
+    private int Depth(PortalRoom room)
+    {
+        int depth = 0;
+        long? parent = room.ParentId;
+        while (parent != null && depth <= m_rooms!.Count)
+        {
+            depth++;
+            parent = m_rooms.FirstOrDefault(r => r.Id == parent)?.ParentId;
+        }
+        return depth;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.Can(PortalPermissions.ChannelsManage))
+        {
+            return;
+        }
+
+        PortalAnswer<PortalRoomList> answer = await Api.ListRoomsAsync();
+        m_rooms = answer.Value?.Rooms.ToList();
+        m_error = answer.Ok ? null : answer.Error;
+    }
+
+    private void OpenAdd(PortalRoom? parent)
+    {
+        m_renaming = null;
+        m_parent = parent;
+        m_name = null;
+        m_dialogOpen = true;
+    }
+
+    private void OpenRename(PortalRoom room)
+    {
+        m_renaming = room;
+        m_parent = null;
+        m_name = room.Name;
+        m_dialogOpen = true;
+    }
+
+    private async Task SaveNameAsync()
+    {
+        string name = m_name!.Trim();
+        bool saved = m_renaming != null
+            ? await RunAsync(Api.UpdateRoomAsync(m_renaming.Id, new { name }), "Renamed")
+            : await RunAsync(Api.AddRoomAsync(name, m_parent?.Id), "Added");
+        if (saved)
+        {
+            m_dialogOpen = false;
+        }
+    }
+
+    private Task ChangeAsync(PortalRoom room, object change) => RunAsync(Api.UpdateRoomAsync(room.Id, change), "Saved");
+
+    private Task MoveAsync(PortalRoom room, int step)
+    {
+        List<long> ids = SiblingsOf(room).Select(r => r.Id).ToList();
+        int at = ids.IndexOf(room.Id);
+        int to = at + step;
+        if (at < 0 || to < 0 || to >= ids.Count)
+        {
+            return Task.CompletedTask;
+        }
+
+        (ids[at], ids[to]) = (ids[to], ids[at]);
+        return RunAsync(Api.ReorderRoomsAsync(room.ParentId, ids), "Moved");
+    }
+
+    private async Task<bool> RunAsync(Task<PortalAnswer<PortalRoomList>> request, string done)
+    {
+        m_busy = true;
+        PortalAnswer<PortalRoomList> answer = await request;
+        m_busy = false;
+
+        if (answer.Ok)
+        {
+            m_rooms = answer.Value!.Rooms.ToList();
+            Toasts.Success("Players see the change at once.", done);
+        }
+        else
+        {
+            Toasts.Error(PortalText.Error(answer.Error), "Not saved");
+        }
+        return answer.Ok;
+    }
+}

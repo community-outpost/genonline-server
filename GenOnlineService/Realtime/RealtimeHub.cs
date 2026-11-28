@@ -200,13 +200,7 @@ namespace GenOnlineService.Realtime
 				Features = ClientFeatures.Of(userID),
 				ChatFilterRevision = TextRules.TextChecks.Current.ChatFilter.Revision,
 				Badges = RealtimeBadges.Definitions(StaffRoles.Catalog),
-				Channels = RoomCatalog.Rooms.Select(channel => new ChannelInfo
-				{
-					Id = channel.ID,
-					Name = channel.Name,
-					ParentId = channel.ParentID,
-					ShowAllMatches = channel.ID == 0
-				}).ToArray(),
+				Channels = RoomCatalog.Channels(),
 				Limits = BuildLimits()
 			};
 		}

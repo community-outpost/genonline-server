@@ -1080,7 +1080,6 @@ namespace GenOnlineService
 						options.ParseStateValues = true;
 					});
 			}
-			RoomCatalog.Initialize(Path.Combine(builder.Environment.ContentRootPath, "data", "rooms.json"));
 			GenOnlineService.Catalog.CatalogStartup.DataDirectory = Path.Combine(builder.Environment.ContentRootPath, "data");
 
 			// Add services to the container.

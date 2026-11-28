@@ -190,7 +190,7 @@
                         </BbSidebarMenu>
                     </BbSidebarGroup>
                 }
-                @if (staff.Can(PortalPermissions.AuditRead) || staff.Can(PortalPermissions.TokensManage) || staff.Can(PortalPermissions.FlagsManage) || staff.Can(PortalPermissions.PlaylistsManage) || staff.Can(PortalPermissions.RulesManage) || staff.Can(PortalPermissions.RolesManage))
+                @if (staff.Can(PortalPermissions.AuditRead) || staff.Can(PortalPermissions.TokensManage) || staff.Can(PortalPermissions.FlagsManage) || staff.Can(PortalPermissions.PlaylistsManage) || staff.Can(PortalPermissions.RulesManage) || staff.Can(PortalPermissions.RolesManage) || staff.Can(PortalPermissions.ChannelsManage))
                 {
                     <BbSidebarGroup>
                         <BbSidebarGroupLabel>Administration</BbSidebarGroupLabel>
@@ -210,6 +210,15 @@
                                     <BbSidebarMenuButton Href="@PortalRoutes.PlaylistsPage" Tooltip="Playlists">
                                         <LucideIcon Name="list-ordered" Class="bb:h-4 bb:w-4" />
                                         <span>Playlists</span>
+                                    </BbSidebarMenuButton>
+                                </BbSidebarMenuItem>
+                            }
+                            @if (staff.Can(PortalPermissions.ChannelsManage))
+                            {
+                                <BbSidebarMenuItem>
+                                    <BbSidebarMenuButton Href="@PortalRoutes.RoomsPage" Tooltip="Chat rooms">
+                                        <LucideIcon Name="messages-square" Class="bb:h-4 bb:w-4" />
+                                        <span>Chat rooms</span>
                                     </BbSidebarMenuButton>
                                 </BbSidebarMenuItem>
                             }
