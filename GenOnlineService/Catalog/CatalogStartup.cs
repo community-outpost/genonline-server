@@ -20,13 +20,17 @@ namespace GenOnlineService.Catalog
 {
 	public static partial class CatalogStartup
 	{
+		public static string DataDirectory { get; set; } = "data";
+
 		public static async Task RunAsync(AppDbContext db)
 		{
+			RegisterMotd();
 			RegisterPlaylists();
 			RegisterChannels();
 			RegisterBroadcasts();
 
 			var seeds = new List<Func<AppDbContext, Task>>();
+			AddMotdSeed(seeds);
 			AddPlaylistSeed(seeds);
 			AddChannelSeed(seeds);
 			AddBroadcastSeed(seeds);
@@ -38,6 +42,8 @@ namespace GenOnlineService.Catalog
 			await CatalogSignals.ReloadAllAsync(db);
 		}
 
+		static partial void RegisterMotd();
+		static partial void AddMotdSeed(List<Func<AppDbContext, Task>> seeds);
 		static partial void RegisterPlaylists();
 		static partial void RegisterChannels();
 		static partial void RegisterBroadcasts();

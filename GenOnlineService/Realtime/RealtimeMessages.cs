@@ -519,6 +519,13 @@ namespace GenOnlineService.Realtime
 		public string Revision { get; init; } = "";
 	}
 
+	// Absent motd means no message of the day
+	public sealed record MotdUpdateEvent
+	{
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Motd { get; init; }
+	}
+
 	public sealed record ReadyEvent
 	{
 		public int ProtocolVersion { get; init; }

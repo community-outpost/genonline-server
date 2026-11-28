@@ -29,6 +29,8 @@ namespace GenOnlineService.Catalog
 		public const string Flags = "flags";
 		public const string Playlists = "playlists";
 		public const string Rules = "rules";
+		public const string Motd = "motd";
+		public const string Channels = "channels";
 	}
 
 	public sealed record CatalogChange(string Resource, long Version);

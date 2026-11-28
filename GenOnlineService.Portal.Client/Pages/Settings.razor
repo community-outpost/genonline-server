@@ -48,7 +48,7 @@ else
             <p class="go-motd-hint">
                 At most @MaximumLength characters. {0} stands for the number of players online. A line that starts with a
                 backslash and 8 hex digits, alpha, red, green and blue, takes that colour: pick one with the swatch beside the
-                line. Leave the message empty to show the default message of the service (data/motd.txt).
+                line. Leave the message empty to show no message of the day.
             </p>
         </div>
         <div class="go-motd-editor">
@@ -119,7 +119,7 @@ else
         <div class="go-motd-game" data-testid="motd-preview">
             @if (shown.Count == 0)
             {
-                <p class="go-motd-empty">Players see the default message of the service.</p>
+                <p class="go-motd-empty">Players see no message of the day.</p>
             }
             else
             {
@@ -220,7 +220,7 @@ else
         {
             m_saved = answer.Value;
             m_motd = m_saved!.Motd;
-            Toasts.Success(m_saved.Motd == null ? "Players see the default message of the service." : "Players see the new message the next time their game loads it.", "Saved");
+            Toasts.Success(String.IsNullOrEmpty(m_saved.Motd) ? "Players see no message of the day." : "Players see the new message at once.", "Saved");
         }
         else
         {

@@ -27,7 +27,7 @@ using System.Text.Json.Nodes;
 
 namespace GenOnlineService.Rest
 {
-	// An omitted field keeps its value, null clears it
+	// An omitted field keeps its value, null stores an empty message
 	[ApiFixture("put-application-settings.request")]
 	public sealed record ApplicationSettingsRequest
 	{
@@ -61,7 +61,7 @@ namespace GenOnlineService.Rest
 
 				if (value == null)
 				{
-					changes[key] = null;
+					changes[key] = String.Empty;
 					continue;
 				}
 
@@ -101,7 +101,7 @@ namespace GenOnlineService.Rest
 		}
 
 		[AllowSignInCookie]
-		[EndpointSummary("Changes runtime settings; null clears one.")]
+		[EndpointSummary("Changes runtime settings; null stores an empty message, which shows no message of the day.")]
 		[ProducesResponseType<ApplicationSettingsResponse>(StatusCodes.Status200OK)]
 		[ApiRequestBody(typeof(ApplicationSettingsRequest))]
 		[HttpPut("~/api/v1/application/settings")]
@@ -122,17 +122,15 @@ namespace GenOnlineService.Rest
 				{
 					foreach ((string key, string? value) in changes)
 					{
-						if (value == null)
-						{
-							await Database.Upstream.DeleteSetting(db, key);
-						}
-						else
-						{
-							await Database.Upstream.SetSetting(db, key, JsonSerializer.Serialize(value), actor.Name);
-						}
+						await Database.Upstream.SetSetting(db, key, JsonSerializer.Serialize(value), actor.Name);
 						await Database.Moderation.AddAuditEntry(db, actor, ModerationActions.SettingUpdate, AuditTargetKinds.Setting, null, null, new { key, value });
 					}
 					await tx.CommitAsync();
+				}
+
+				if (changes.ContainsKey(SettingKeys.Motd))
+				{
+					await GenOnlineService.Catalog.CatalogSignals.ChangedAsync(db, GenOnlineService.Catalog.CatalogResources.Motd, DateTime.UtcNow.Ticks);
 				}
 			}
 
@@ -145,7 +143,7 @@ namespace GenOnlineService.Rest
 		}
 
 		// Values are stored as JSON; a row that is not a JSON string reads as unset
-		private static string? ReadString(string key, string? json)
+		internal static string? ReadString(string key, string? json)
 		{
 			if (json == null)
 			{

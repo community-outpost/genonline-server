@@ -34,9 +34,7 @@ namespace GenOnlineService.Rest
 	{
 		private static readonly ILogger s_log = AppLog.For(typeof(ConfigSources));
 
-		private static readonly string s_motdPath = Path.Combine("data", "motd.txt");
-
-		// The motd setting wins over data/motd.txt; {0} is the number of players online
+		// {0} is the number of players online
 		public static async Task<string?> ReadMotdAsync(IDbContextFactory<AppDbContext> dbFactory)
 		{
 			string? stored;
@@ -45,19 +43,18 @@ namespace GenOnlineService.Rest
 				stored = await Database.Upstream.GetSetting(db, SettingKeys.Motd);
 			}
 
-			if (!TryReadMotdSetting(stored, out string? template))
+			if (stored != null && !TryReadMotdSetting(stored, out _))
 			{
-				if (stored != null)
-				{
-					s_log.LogWarning("The motd setting is not a JSON string, data/motd.txt is used instead");
-				}
-				template = await ReadFileAsync(s_motdPath);
+				s_log.LogWarning("The motd setting is not a JSON string, no message of the day is sent");
 			}
 
-			return template == null ? null : FormatMotd(template, WebSocketManager.GetNumberOfUsersOnline());
+			return MotdFrom(stored, WebSocketManager.GetNumberOfUsersOnline());
 		}
 
-		// A setting is used when it holds a JSON string; null, another JSON value or no row falls back to the file
+		public static string? MotdFrom(string? stored, int playersOnline) =>
+			TryReadMotdSetting(stored, out string? template) && template != null ? FormatMotd(template, playersOnline) : null;
+
+		// A setting is used when it holds a JSON string, and no row or another JSON value means no message
 		public static bool TryReadMotdSetting(string? stored, out string? motd)
 		{
 			motd = null;
@@ -97,18 +94,6 @@ namespace GenOnlineService.Rest
 			catch (FormatException)
 			{
 				return template;
-			}
-		}
-
-		private static async Task<string?> ReadFileAsync(string path)
-		{
-			try
-			{
-				return await File.ReadAllTextAsync(path);
-			}
-			catch (Exception ex) when (ex is FileNotFoundException || ex is DirectoryNotFoundException)
-			{
-				return null;
 			}
 		}
 	}
