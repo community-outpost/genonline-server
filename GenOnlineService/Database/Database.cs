@@ -134,6 +134,8 @@ public abstract partial class AppDbContext : DbContext
 	public DbSet<PlayerPreference> PlayerPreferences => Set<PlayerPreference>();
 	public DbSet<PlayerNetwork> PlayerNetwork => Set<PlayerNetwork>();
 	public DbSet<Device> Devices => Set<Device>();
+	public DbSet<Machine> Machines => Set<Machine>();
+	public DbSet<MachineAddress> MachineAddresses => Set<MachineAddress>();
 	public DbSet<SessionEvent> SessionEvents => Set<SessionEvent>();
 
 	public DbSet<Match> Matches => Set<Match>();
@@ -278,6 +280,8 @@ public abstract partial class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new PlayerPreferenceConfiguration());
 		modelBuilder.ApplyConfiguration(new PlayerNetworkConfiguration());
 		modelBuilder.ApplyConfiguration(new DeviceConfiguration());
+		modelBuilder.ApplyConfiguration(new MachineConfiguration());
+		modelBuilder.ApplyConfiguration(new MachineAddressConfiguration());
 		modelBuilder.ApplyConfiguration(new SessionEventConfiguration());
 		modelBuilder.ApplyConfiguration(new MatchConfiguration(this is PostgresAppDbContext));
 		modelBuilder.ApplyConfiguration(new MatchPlayerConfiguration());

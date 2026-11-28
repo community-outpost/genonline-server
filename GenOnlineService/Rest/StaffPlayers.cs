@@ -399,6 +399,7 @@ namespace GenOnlineService.Rest
 					new { devices = devices.Count(d => d.ValueRaw != null) });
 			}
 			List<Database.InspectedAddress> addresses = await Database.StaffInspection.GetAddresses(db, userID, cancellationToken);
+			List<Database.InspectedMachine> machines = await Database.StaffInspection.GetMachines(db, userID, cancellationToken);
 			List<Database.DuplicateAccount> duplicates = await Database.StaffInspection.GetDuplicates(db, userID, cancellationToken);
 
 			return Result.Success(new PortalInspection
@@ -420,11 +421,24 @@ namespace GenOnlineService.Rest
 					Fingerprint = d.Fingerprint,
 					FirstSeenAt = d.FirstSeenAt,
 					LastSeenAt = d.LastSeenAt,
-					LastIp = d.LastIp,
 					Key = d.Key,
 					Vendor = enrichment.VendorOf(d.Kind, d.ValueRaw),
 					HasValue = d.ValueRaw != null,
 					Value = raw ? d.ValueRaw : null
+				}).ToList(),
+				Machines = machines.Select(m => new PortalMachine
+				{
+					Keys = m.Keys,
+					FirstSeenAt = m.FirstSeenAt,
+					LastSeenAt = m.LastSeenAt,
+					Addresses = m.Addresses.Select(a => new PortalMachineAddress
+					{
+						Ip = a.Ip,
+						Country = addresses.FirstOrDefault(s => s.Ip == a.Ip)?.Country ?? enrichment.Addresses.Lookup(a.Ip)?.Country,
+						FirstSeenAt = a.FirstSeenAt,
+						LastSeenAt = a.LastSeenAt,
+						SignIns = a.SignIns
+					}).ToList()
 				}).ToList(),
 				Addresses = addresses.Select(a =>
 				{

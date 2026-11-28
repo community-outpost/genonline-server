@@ -569,7 +569,6 @@ namespace GenOnlineService.Portal.Client
 		public string Fingerprint { get; init; } = "";
 		public DateTime FirstSeenAt { get; init; }
 		public DateTime LastSeenAt { get; init; }
-		public string? LastIp { get; init; }
 
 		// The whole keyed hash, the investigation search finds the other accounts of the device with it
 		public string Key { get; init; } = "";
@@ -581,6 +580,24 @@ namespace GenOnlineService.Portal.Client
 
 		// The value the client sent, only with ?raw=true (audited as device_reveal); null otherwise or when never kept
 		public string? Value { get; init; }
+	}
+
+	// The identifiers one sign-in sent together, by device key, with every address the machine signed in from
+	public sealed record PortalMachine
+	{
+		public IReadOnlyList<string> Keys { get; init; } = [];
+		public DateTime FirstSeenAt { get; init; }
+		public DateTime LastSeenAt { get; init; }
+		public IReadOnlyList<PortalMachineAddress> Addresses { get; init; } = [];
+	}
+
+	public sealed record PortalMachineAddress
+	{
+		public string Ip { get; init; } = "";
+		public string? Country { get; init; }
+		public DateTime FirstSeenAt { get; init; }
+		public DateTime LastSeenAt { get; init; }
+		public int SignIns { get; init; }
 	}
 
 	public sealed record PortalAddress
@@ -632,6 +649,8 @@ namespace GenOnlineService.Portal.Client
 			("country", "Country", "Two letter code, such as NL")
 		];
 
+		public static string LabelOf(string kind) => Kinds.FirstOrDefault(k => k.Kind == kind).Label ?? kind;
+
 		public string Kind { get; init; } = "";
 		public string Value { get; init; } = "";
 		public string? Vendor { get; init; }
@@ -664,6 +683,7 @@ namespace GenOnlineService.Portal.Client
 		public DateTime? LastSeenAt { get; init; }
 		public IReadOnlyList<PortalIdentity> Identities { get; init; } = [];
 		public IReadOnlyList<PortalDevice> Devices { get; init; } = [];
+		public IReadOnlyList<PortalMachine> Machines { get; init; } = [];
 		public IReadOnlyList<PortalAddress> Addresses { get; init; } = [];
 		public IReadOnlyList<PortalDuplicate> Duplicates { get; init; } = [];
 	}

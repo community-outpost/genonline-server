@@ -719,7 +719,7 @@ else
                     <BbCard>
                         <BbCardHeader>
                             <BbCardTitle As="h2">Devices</BbCardTitle>
-                            <BbCardDescription>Device values are stored as keyed hashes. The fingerprint is the start of the hash, enough to compare two rows. Show values reveals what the clients sent, where the service kept it; every reveal is in the audit log. A MAC address shows its vendor from the IEEE registry; virtual adapters and randomized addresses read locally administered. Open a fingerprint to find every account of the device.</BbCardDescription>
+                            <BbCardDescription>Identifiers the game sent together at one sign-in form one device, listed with every address that device signed in from. A fingerprint is the start of the keyed hash the service stores. Open one to find every account that used it. Show values reveals what the clients sent, and every reveal is in the audit log.</BbCardDescription>
                             @if (m_devicesRevealed)
                             {
                                 <p class="bb:text-sm go-muted" data-testid="devices-revealed">The values the clients sent are shown; this reveal is in the audit log.</p>
@@ -735,42 +735,66 @@ else
                             }
                         </BbCardHeader>
                         <BbCardContent>
-                            <BbDataTable TData="PortalDevice" Data="@inspection.Devices" ShowToolbar="false" ShowPagination="@(inspection.Devices.Count > 10)" InitialPageSize="10" AriaLabel="Devices">
-                                <Columns>
-                                    <BbDataTableColumn TData="PortalDevice" TValue="string" Property="@(d => d.Kind)" Header="Kind" />
-                                    <BbDataTableColumn TData="PortalDevice" TValue="string" Property="@(d => d.Fingerprint)" Header="Fingerprint">
-                                        <CellTemplate Context="device">
-                                            @if (device.Key.Length > 0)
-                                            {
-                                                <BbLink Href="@PortalRoutes.InvestigateDevice(device.Kind, device.Key)" data-testid="device-investigate"><span class="bb:font-mono">@device.Fingerprint</span></BbLink>
-                                            }
-                                            else
-                                            {
-                                                <span class="bb:font-mono">@device.Fingerprint</span>
-                                            }
-                                            @if (device.Value != null)
-                                            {
-                                                <div class="bb:font-mono bb:text-xs" data-testid="device-value">@device.Value</div>
-                                            }
-                                        </CellTemplate>
-                                    </BbDataTableColumn>
-                                    <BbDataTableColumn TData="PortalDevice" TValue="string" Property="@(d => d.Vendor ?? "")" Header="Vendor" />
-                                    <BbDataTableColumn TData="PortalDevice" TValue="DateTime" Property="@(d => d.FirstSeenAt)" Header="First seen">
-                                        <CellTemplate Context="device">
-                                            <When Value="@device.FirstSeenAt" />
-                                        </CellTemplate>
-                                    </BbDataTableColumn>
-                                    <BbDataTableColumn TData="PortalDevice" TValue="DateTime" Property="@(d => d.LastSeenAt)" Header="Last seen">
-                                        <CellTemplate Context="device">
-                                            <When Value="@device.LastSeenAt" />
-                                        </CellTemplate>
-                                    </BbDataTableColumn>
-                                    <BbDataTableColumn TData="PortalDevice" TValue="string" Property="@(d => d.LastIp)" Header="Last address" CellClass="bb:font-mono" />
-                                </Columns>
-                                <EmptyTemplate>
-                                    <BbEmpty Size="EmptySize.Small" Title="No device on record" />
-                                </EmptyTemplate>
-                            </BbDataTable>
+                            @if (inspection.Devices.Count == 0)
+                            {
+                                <BbEmpty Size="EmptySize.Small" Title="No device on record" />
+                            }
+                            @for (int i = 0; i < inspection.Machines.Count; i++)
+                            {
+                                int number = i + 1;
+                                PortalMachine machine = inspection.Machines[i];
+                                <section class="go-machine" aria-label="@("Device " + number)" data-testid="device-machine">
+                                    <h3 class="go-machine-title">Device @number</h3>
+                                    <p class="go-muted bb:text-sm">First seen <When Value="@machine.FirstSeenAt" />, last seen <When Value="@machine.LastSeenAt" /></p>
+                                    @IdentifierTable(machine.Keys.Select(k => inspection.Devices.FirstOrDefault(d => d.Key == k)).OfType<PortalDevice>().ToList())
+                                    <BbDataTable TData="PortalMachineAddress" Data="@machine.Addresses" ShowToolbar="false" ShowPagination="@(machine.Addresses.Count > 10)" InitialPageSize="10" AriaLabel="@("Addresses of device " + number)">
+                                        <Columns>
+                                            <BbDataTableColumn TData="PortalMachineAddress" TValue="string" Property="@(a => a.Ip)" Header="Address">
+                                                <CellTemplate Context="address">
+                                                    @if (address.Ip.Length > 0)
+                                                    {
+                                                        <BbLink Href="@PortalRoutes.InvestigateOf("ip", address.Ip)"><span class="bb:font-mono">@address.Ip</span></BbLink>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="go-muted">Unknown</span>
+                                                    }
+                                                </CellTemplate>
+                                            </BbDataTableColumn>
+                                            <BbDataTableColumn TData="PortalMachineAddress" TValue="string" Property="@(a => a.Country)" Header="Country">
+                                                <CellTemplate Context="address">
+                                                    @if (address.Country != null)
+                                                    {
+                                                        <CountryFlag Country="@address.Country" /><BbLink Href="@PortalRoutes.InvestigateOf("country", address.Country)">@address.Country</BbLink>
+                                                    }
+                                                </CellTemplate>
+                                            </BbDataTableColumn>
+                                            <BbDataTableColumn TData="PortalMachineAddress" TValue="DateTime" Property="@(a => a.FirstSeenAt)" Header="First seen">
+                                                <CellTemplate Context="address">
+                                                    <When Value="@address.FirstSeenAt" />
+                                                </CellTemplate>
+                                            </BbDataTableColumn>
+                                            <BbDataTableColumn TData="PortalMachineAddress" TValue="DateTime" Property="@(a => a.LastSeenAt)" Header="Last seen">
+                                                <CellTemplate Context="address">
+                                                    <When Value="@address.LastSeenAt" />
+                                                </CellTemplate>
+                                            </BbDataTableColumn>
+                                            <BbDataTableColumn TData="PortalMachineAddress" TValue="int" Property="@(a => a.SignIns)" Header="Sign-ins" />
+                                        </Columns>
+                                    </BbDataTable>
+                                </section>
+                            }
+                            @if (Ungrouped(inspection).Count > 0)
+                            {
+                                <section class="go-machine" aria-label="Identifiers not grouped" data-testid="device-ungrouped">
+                                    @if (inspection.Machines.Count > 0)
+                                    {
+                                        <h3 class="go-machine-title">Other identifiers</h3>
+                                        <p class="go-muted bb:text-sm">Identifiers whose device is past the list above or was removed.</p>
+                                    }
+                                    @IdentifierTable(Ungrouped(inspection))
+                                </section>
+                            }
                         </BbCardContent>
                     </BbCard>
 
@@ -1072,6 +1096,46 @@ else
         await LoadCasesAsync();
         await LoadConnectionsAsync();
     }
+
+    private static List<PortalDevice> Ungrouped(PortalInspection inspection)
+    {
+        var grouped = inspection.Machines.SelectMany(m => m.Keys).ToHashSet();
+        return inspection.Devices.Where(d => !grouped.Contains(d.Key)).ToList();
+    }
+
+    private RenderFragment IdentifierTable(IReadOnlyList<PortalDevice> devices) =>
+        @<BbDataTable TData="PortalDevice" Data="@devices" ShowToolbar="false" ShowPagination="@(devices.Count > 10)" InitialPageSize="10" AriaLabel="Identifiers">
+            <Columns>
+                <BbDataTableColumn TData="PortalDevice" TValue="string" Property="@(d => PortalInvestigation.LabelOf(d.Kind))" Header="Identifier" />
+                <BbDataTableColumn TData="PortalDevice" TValue="string" Property="@(d => d.Fingerprint)" Header="Fingerprint">
+                    <CellTemplate Context="device">
+                        @if (device.Key.Length > 0)
+                        {
+                            <BbLink Href="@PortalRoutes.InvestigateDevice(device.Kind, device.Key)" data-testid="device-investigate"><span class="bb:font-mono">@device.Fingerprint</span></BbLink>
+                        }
+                        else
+                        {
+                            <span class="bb:font-mono">@device.Fingerprint</span>
+                        }
+                        @if (device.Value != null)
+                        {
+                            <div class="bb:font-mono bb:text-xs" data-testid="device-value">@device.Value</div>
+                        }
+                    </CellTemplate>
+                </BbDataTableColumn>
+                <BbDataTableColumn TData="PortalDevice" TValue="string" Property="@(d => d.Vendor ?? "")" Header="Vendor" />
+                <BbDataTableColumn TData="PortalDevice" TValue="DateTime" Property="@(d => d.FirstSeenAt)" Header="First seen">
+                    <CellTemplate Context="device">
+                        <When Value="@device.FirstSeenAt" />
+                    </CellTemplate>
+                </BbDataTableColumn>
+                <BbDataTableColumn TData="PortalDevice" TValue="DateTime" Property="@(d => d.LastSeenAt)" Header="Last seen">
+                    <CellTemplate Context="device">
+                        <When Value="@device.LastSeenAt" />
+                    </CellTemplate>
+                </BbDataTableColumn>
+            </Columns>
+        </BbDataTable>;
 
     private async Task RevealDevicesAsync()
     {

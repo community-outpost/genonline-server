@@ -894,11 +894,6 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("varchar(16)")
                         .HasColumnName("kind");
 
-                    b.Property<string>("LastIp")
-                        .HasMaxLength(45)
-                        .HasColumnType("varchar(45)")
-                        .HasColumnName("last_ip");
-
                     b.Property<DateTime>("LastSeenAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("last_seen_at");
@@ -1724,6 +1719,94 @@ namespace GenOnlineService.Migrations.MySql
                             ID = 1,
                             NextID = 1L
                         });
+                });
+
+            modelBuilder.Entity("Machine", b =>
+                {
+                    b.Property<long>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("ID"));
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<string>("IdentifiersKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("identifiers_key");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<long?>("MacID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("mac_id");
+
+                    b.Property<long?>("MachineGuidID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("machine_guid_id");
+
+                    b.Property<long>("UserID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.Property<long?>("VolumeSerialID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("volume_serial_id");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("LastSeenAt")
+                        .HasDatabaseName("ix_machines_last_seen_at");
+
+                    b.HasIndex("MacID");
+
+                    b.HasIndex("MachineGuidID");
+
+                    b.HasIndex("VolumeSerialID");
+
+                    b.HasIndex("UserID", "IdentifiersKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_machines_user_identifiers");
+
+                    b.ToTable("machines", (string)null);
+                });
+
+            modelBuilder.Entity("MachineAddress", b =>
+                {
+                    b.Property<long>("MachineID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("machine_id");
+
+                    b.Property<string>("Ip")
+                        .HasMaxLength(45)
+                        .HasColumnType("varchar(45)")
+                        .HasColumnName("ip");
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<int>("SignIns")
+                        .HasColumnType("int")
+                        .HasColumnName("sign_ins");
+
+                    b.HasKey("MachineID", "Ip");
+
+                    b.HasIndex("LastSeenAt")
+                        .HasDatabaseName("ix_machine_addresses_last_seen_at");
+
+                    b.ToTable("machine_addresses", (string)null);
                 });
 
             modelBuilder.Entity("Match", b =>
@@ -3551,6 +3634,33 @@ namespace GenOnlineService.Migrations.MySql
                     b.HasOne("GenOnlineService.Playlists.PlaylistRow", null)
                         .WithMany()
                         .HasForeignKey("PlaylistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Machine", b =>
+                {
+                    b.HasOne("Device", null)
+                        .WithMany()
+                        .HasForeignKey("MacID")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Device", null)
+                        .WithMany()
+                        .HasForeignKey("MachineGuidID")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Device", null)
+                        .WithMany()
+                        .HasForeignKey("VolumeSerialID")
+                        .OnDelete(DeleteBehavior.Cascade);
+                });
+
+            modelBuilder.Entity("MachineAddress", b =>
+                {
+                    b.HasOne("Machine", null)
+                        .WithMany()
+                        .HasForeignKey("MachineID")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

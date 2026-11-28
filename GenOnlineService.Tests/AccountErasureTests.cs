@@ -59,7 +59,7 @@ public class AccountErasureTests
 		db.PlayerPreferences.Add(new PlayerPreference { UserID = id, Color = 3 });
 		db.UserRoles.Add(new UserRole { UserID = id, Role = "moderator", Source = AuthoritySources.Local, GrantedAt = now });
 		db.SessionEvents.Add(new SessionEvent { UserID = id, Kind = "start", Result = SessionEventResults.Ok, Ip = "192.0.2.7", CreatedAt = now });
-		db.Devices.Add(new Device { UserID = id, Kind = "mac", ValueHmac = Enumerable.Repeat((byte)9, Device.ValueHmacLength).ToArray(), ValueRaw = "AA-BB", FirstSeenAt = now, LastSeenAt = now, LastIp = "192.0.2.7" });
+		db.Devices.Add(new Device { UserID = id, Kind = "mac", ValueHmac = Enumerable.Repeat((byte)9, Device.ValueHmacLength).ToArray(), ValueRaw = "AA-BB", FirstSeenAt = now, LastSeenAt = now });
 		db.ChatMessages.Add(new ChatMessage { Kind = ChatMessageKinds.Channel, ChannelID = 1, SenderID = id, Type = ChatMessageTypes.Chat, Content = "hello", CreatedAt = now });
 		db.ChatMessages.Add(new ChatMessage { Kind = ChatMessageKinds.Channel, ChannelID = 1, SenderID = otherID, Type = ChatMessageTypes.Chat, Content = "hi", CreatedAt = now });
 		db.PlayerRatings.Add(new PlayerRating { UserID = id, Rating = 1600, MatchesPlayed = 10, UpdatedAt = now });

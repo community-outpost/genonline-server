@@ -132,6 +132,7 @@ namespace GenOnlineService.Identity
 			await db.PlayerPreferences.Where(p => p.UserID == userID).ExecuteDeleteAsync(cancellationToken);
 			await db.PlayerNetwork.Where(p => p.UserID == userID).ExecuteDeleteAsync(cancellationToken);
 			await db.SessionEvents.Where(e => e.UserID == userID).ExecuteDeleteAsync(cancellationToken);
+			await db.MachineAddresses.Where(a => db.Machines.Where(m => m.UserID == userID).Select(m => m.ID).Contains(a.MachineID)).ExecuteDeleteAsync(cancellationToken);
 			await Database.Chat.DeleteUserData(db, userID, cancellationToken);
 
 			if (banned)
@@ -209,7 +210,7 @@ namespace GenOnlineService.Identity
 			db.ChangeTracker.Clear();
 
 			await db.Devices.Where(d => d.UserID == userID)
-				.ExecuteUpdateAsync(s => s.SetProperty(d => d.ValueRaw, (string?)null).SetProperty(d => d.LastIp, (string?)null), cancellationToken);
+				.ExecuteUpdateAsync(s => s.SetProperty(d => d.ValueRaw, (string?)null), cancellationToken);
 		}
 	}
 }

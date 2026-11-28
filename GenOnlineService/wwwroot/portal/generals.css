@@ -1162,6 +1162,26 @@ table a:hover {
   color: var(--go-color-text-muted);
 }
 
+.go-machine + .go-machine {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.go-machine > p {
+  margin: 0.125rem 0 0.75rem;
+}
+
+.go-machine > .bb\:w-full + .bb\:w-full,
+.go-machine > div + div {
+  margin-top: 0.75rem;
+}
+
+.go-machine-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
 .go-title-value {
   display: flex;
   flex-wrap: wrap;

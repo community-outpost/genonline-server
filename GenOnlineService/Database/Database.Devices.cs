@@ -55,7 +55,33 @@ public class Device
 	public string? ValueRaw { get; set; }
 	public DateTime FirstSeenAt { get; set; } = DateTime.UnixEpoch;
 	public DateTime LastSeenAt { get; set; } = DateTime.UnixEpoch;
-	public string? LastIp { get; set; }
+}
+
+// The identifiers one sign-in sent together, one physical computer as far as the service can tell
+public class Machine
+{
+	public const int IdentifiersKeyLength = 64;
+
+	public Int64 ID { get; set; }
+	public Int64 UserID { get; set; }
+	public Int64? MachineGuidID { get; set; }
+	public Int64? MacID { get; set; }
+	public Int64? VolumeSerialID { get; set; }
+	// The three device ids joined by dots, empty for an identifier the client did not send, unique per account
+	public string IdentifiersKey { get; set; } = String.Empty;
+	public DateTime FirstSeenAt { get; set; } = DateTime.UnixEpoch;
+	public DateTime LastSeenAt { get; set; } = DateTime.UnixEpoch;
+
+	public static string KeyOf(long? machineGuidID, long? macID, long? volumeSerialID) => $"{machineGuidID}.{macID}.{volumeSerialID}";
+}
+
+public class MachineAddress
+{
+	public Int64 MachineID { get; set; }
+	public string Ip { get; set; } = String.Empty;
+	public DateTime FirstSeenAt { get; set; } = DateTime.UnixEpoch;
+	public DateTime LastSeenAt { get; set; } = DateTime.UnixEpoch;
+	public int SignIns { get; set; }
 }
 
 public class SessionEvent
@@ -90,7 +116,48 @@ public class DeviceConfiguration : IEntityTypeConfiguration<Device>
 		builder.Property(e => e.ValueRaw).HasColumnName("value_raw").HasMaxLength(Device.ValueRawLength);
 		builder.Property(e => e.FirstSeenAt).HasColumnName("first_seen_at");
 		builder.Property(e => e.LastSeenAt).HasColumnName("last_seen_at");
-		builder.Property(e => e.LastIp).HasColumnName("last_ip").HasMaxLength(45);
+	}
+}
+
+public class MachineConfiguration : IEntityTypeConfiguration<Machine>
+{
+	public void Configure(EntityTypeBuilder<Machine> builder)
+	{
+		builder.ToTable("machines");
+
+		builder.HasKey(e => e.ID);
+		builder.HasIndex(e => new { e.UserID, e.IdentifiersKey }).IsUnique().HasDatabaseName("ux_machines_user_identifiers");
+		builder.HasIndex(e => e.LastSeenAt).HasDatabaseName("ix_machines_last_seen_at");
+		builder.HasOne<Device>().WithMany().HasForeignKey(e => e.MachineGuidID).OnDelete(DeleteBehavior.Cascade);
+		builder.HasOne<Device>().WithMany().HasForeignKey(e => e.MacID).OnDelete(DeleteBehavior.Cascade);
+		builder.HasOne<Device>().WithMany().HasForeignKey(e => e.VolumeSerialID).OnDelete(DeleteBehavior.Cascade);
+
+		builder.Property(e => e.ID).HasColumnName("id").ValueGeneratedOnAdd();
+		builder.Property(e => e.UserID).HasColumnName("user_id");
+		builder.Property(e => e.MachineGuidID).HasColumnName("machine_guid_id");
+		builder.Property(e => e.MacID).HasColumnName("mac_id");
+		builder.Property(e => e.VolumeSerialID).HasColumnName("volume_serial_id");
+		builder.Property(e => e.IdentifiersKey).HasColumnName("identifiers_key").HasMaxLength(Machine.IdentifiersKeyLength);
+		builder.Property(e => e.FirstSeenAt).HasColumnName("first_seen_at");
+		builder.Property(e => e.LastSeenAt).HasColumnName("last_seen_at");
+	}
+}
+
+public class MachineAddressConfiguration : IEntityTypeConfiguration<MachineAddress>
+{
+	public void Configure(EntityTypeBuilder<MachineAddress> builder)
+	{
+		builder.ToTable("machine_addresses");
+
+		builder.HasKey(e => new { e.MachineID, e.Ip });
+		builder.HasIndex(e => e.LastSeenAt).HasDatabaseName("ix_machine_addresses_last_seen_at");
+		builder.HasOne<Machine>().WithMany().HasForeignKey(e => e.MachineID).OnDelete(DeleteBehavior.Cascade);
+
+		builder.Property(e => e.MachineID).HasColumnName("machine_id");
+		builder.Property(e => e.Ip).HasColumnName("ip").HasMaxLength(45);
+		builder.Property(e => e.FirstSeenAt).HasColumnName("first_seen_at");
+		builder.Property(e => e.LastSeenAt).HasColumnName("last_seen_at");
+		builder.Property(e => e.SignIns).HasColumnName("sign_ins");
 	}
 }
 
@@ -254,8 +321,9 @@ namespace Database
 
 				foreach (var (kind, value, raw) in seen)
 				{
-					await Touch(db, userId, kind, value, raw, ipAddr);
+					await Touch(db, userId, kind, value, raw);
 				}
+				await Machines.SignIn(db, userId, seen.Select(s => (s.Kind, s.Value)).ToList(), ipAddr);
 			}
 			catch (Exception ex)
 			{
@@ -263,16 +331,14 @@ namespace Database
 			}
 		}
 
-		private static async Task Touch(AppDbContext db, long userId, string kind, byte[] value, string? raw, string ipAddr)
+		private static async Task Touch(AppDbContext db, long userId, string kind, byte[] value, string? raw)
 		{
 			DateTime now = DateTime.UtcNow;
-			string? ip = String.IsNullOrEmpty(ipAddr) ? null : TextSanitizer.Clean(ipAddr, 45);
 
 			int updated = await db.Devices
 				.Where(d => d.UserID == userId && d.Kind == kind && d.ValueHmac == value)
 				.ExecuteUpdateAsync(s => s
 					.SetProperty(d => d.LastSeenAt, now)
-					.SetProperty(d => d.LastIp, ip)
 					// Fills rows stored before raw values were kept
 					.SetProperty(d => d.ValueRaw, d => d.ValueRaw ?? raw));
 
@@ -281,7 +347,7 @@ namespace Database
 				return;
 			}
 
-			db.Devices.Add(new Device { UserID = userId, Kind = kind, ValueHmac = value, ValueRaw = raw, FirstSeenAt = now, LastSeenAt = now, LastIp = ip });
+			db.Devices.Add(new Device { UserID = userId, Kind = kind, ValueHmac = value, ValueRaw = raw, FirstSeenAt = now, LastSeenAt = now });
 
 			try
 			{
@@ -290,6 +356,85 @@ namespace Database
 			catch (DbUpdateException ex) when (DbHelpers.IsUniqueViolation(ex))
 			{
 				// A concurrent sign-in inserted the row first
+			}
+			finally
+			{
+				db.ChangeTracker.Clear();
+			}
+		}
+	}
+
+	public static class Machines
+	{
+		// Finds or adds the machine of the identifiers a sign-in sent, after their device rows, and counts the sign-in on its address
+		public static async Task SignIn(AppDbContext db, long userId, IReadOnlyList<(string Kind, byte[] Value)> seen, string ipAddr)
+		{
+			if (seen.Count == 0)
+			{
+				return;
+			}
+
+			List<byte[]> hashes = seen.Select(s => s.Value).ToList();
+			var rows = await db.Devices.AsNoTracking()
+				.Where(d => d.UserID == userId && hashes.Contains(d.ValueHmac))
+				.Select(d => new { d.ID, d.Kind, d.ValueHmac })
+				.ToListAsync();
+			long? IdOf(string kind) => seen.Where(s => s.Kind == kind)
+				.Select(s => rows.FirstOrDefault(r => r.Kind == kind && r.ValueHmac.AsSpan().SequenceEqual(s.Value))?.ID).FirstOrDefault();
+			long? guid = IdOf(DeviceKinds.MachineGuid), mac = IdOf(DeviceKinds.Mac), volume = IdOf(DeviceKinds.VolumeSerial);
+			if (guid == null && mac == null && volume == null)
+			{
+				return;
+			}
+
+			DateTime now = DateTime.UtcNow;
+			string key = Machine.KeyOf(guid, mac, volume);
+			long? machineID = await IdOfMachine(db, userId, key, now);
+			if (machineID == null)
+			{
+				db.Machines.Add(new Machine { UserID = userId, MachineGuidID = guid, MacID = mac, VolumeSerialID = volume, IdentifiersKey = key, FirstSeenAt = now, LastSeenAt = now });
+				await AddOnce(db);
+				machineID = await IdOfMachine(db, userId, key, now);
+				if (machineID == null)
+				{
+					return;
+				}
+			}
+
+			string ip = TextSanitizer.Clean(ipAddr ?? "", 45);
+			if (ip.Length == 0)
+			{
+				return;
+			}
+			int updated = await db.MachineAddresses
+				.Where(a => a.MachineID == machineID && a.Ip == ip)
+				.ExecuteUpdateAsync(s => s.SetProperty(a => a.LastSeenAt, now).SetProperty(a => a.SignIns, a => a.SignIns + 1));
+			if (updated == 0)
+			{
+				db.MachineAddresses.Add(new MachineAddress { MachineID = machineID.Value, Ip = ip, FirstSeenAt = now, LastSeenAt = now, SignIns = 1 });
+				await AddOnce(db);
+			}
+		}
+
+		private static async Task<long?> IdOfMachine(AppDbContext db, long userId, string key, DateTime now)
+		{
+			long? id = await db.Machines.AsNoTracking().Where(m => m.UserID == userId && m.IdentifiersKey == key).Select(m => (long?)m.ID).FirstOrDefaultAsync();
+			if (id != null)
+			{
+				await db.Machines.Where(m => m.ID == id).ExecuteUpdateAsync(s => s.SetProperty(m => m.LastSeenAt, now));
+			}
+			return id;
+		}
+
+		// A concurrent sign-in may insert the same row first
+		private static async Task AddOnce(AppDbContext db)
+		{
+			try
+			{
+				await db.SaveChangesAsync();
+			}
+			catch (DbUpdateException ex) when (DbHelpers.IsUniqueViolation(ex))
+			{
 			}
 			finally
 			{
@@ -327,7 +472,12 @@ namespace Database
 
 	// A stored device as staff see it: a short fingerprint of the keyed hash. Key is the whole keyed hash for the
 	// investigation search; ValueRaw looks up a MAC vendor and leaves the host only on an audited reveal (inspection ?raw=true)
-	public sealed record InspectedDevice(string Kind, string Fingerprint, DateTime FirstSeenAt, DateTime LastSeenAt, string? LastIp, string Key, string? ValueRaw);
+	public sealed record InspectedDevice(string Kind, string Fingerprint, DateTime FirstSeenAt, DateTime LastSeenAt, string Key, string? ValueRaw);
+
+	public sealed record InspectedMachineAddress(string Ip, DateTime FirstSeenAt, DateTime LastSeenAt, int SignIns);
+
+	// The device keys of one machine, with every address it signed in from, latest first
+	public sealed record InspectedMachine(IReadOnlyList<string> Keys, DateTime FirstSeenAt, DateTime LastSeenAt, IReadOnlyList<InspectedMachineAddress> Addresses);
 
 	public sealed record InspectedAddress(string Ip, string? Country, DateTime FirstSeenAt, DateTime LastSeenAt, int Events);
 
@@ -362,7 +512,32 @@ namespace Database
 				.ThenBy(d => d.ID)
 				.Take(MaximumRows)
 				.ToListAsync(cancellationToken);
-			return rows.Select(d => new InspectedDevice(d.Kind, FingerprintOf(d.ValueHmac), d.FirstSeenAt, d.LastSeenAt, d.LastIp, KeyOf(d.ValueHmac), d.ValueRaw)).ToList();
+			return rows.Select(d => new InspectedDevice(d.Kind, FingerprintOf(d.ValueHmac), d.FirstSeenAt, d.LastSeenAt, KeyOf(d.ValueHmac), d.ValueRaw)).ToList();
+		}
+
+		public static async Task<List<InspectedMachine>> GetMachines(AppDbContext db, long userID, CancellationToken cancellationToken = default)
+		{
+			List<Machine> machines = await db.Machines.AsNoTracking()
+				.Where(m => m.UserID == userID)
+				.OrderByDescending(m => m.LastSeenAt)
+				.ThenBy(m => m.ID)
+				.Take(MaximumRows)
+				.ToListAsync(cancellationToken);
+			List<long> ids = machines.Select(m => m.ID).ToList();
+			ILookup<long, MachineAddress> addresses = (await db.MachineAddresses.AsNoTracking()
+				.Where(a => ids.Contains(a.MachineID))
+				.ToListAsync(cancellationToken))
+				.ToLookup(a => a.MachineID);
+			List<long> deviceIDs = machines.SelectMany(m => new[] { m.MachineGuidID, m.MacID, m.VolumeSerialID }).OfType<long>().Distinct().ToList();
+			Dictionary<long, string> keys = (await db.Devices.AsNoTracking().Where(d => deviceIDs.Contains(d.ID)).Select(d => new { d.ID, d.ValueHmac }).ToListAsync(cancellationToken))
+				.ToDictionary(d => d.ID, d => KeyOf(d.ValueHmac));
+
+			return machines.Select(m => new InspectedMachine(
+				new[] { m.MachineGuidID, m.MacID, m.VolumeSerialID }.OfType<long>().Where(keys.ContainsKey).Select(id => keys[id]).ToList(),
+				m.FirstSeenAt,
+				m.LastSeenAt,
+				addresses[m.ID].OrderByDescending(a => a.LastSeenAt).Take(MaximumRows).Select(a => new InspectedMachineAddress(a.Ip, a.FirstSeenAt, a.LastSeenAt, a.SignIns)).ToList()))
+				.ToList();
 		}
 
 		public static async Task<List<InspectedAddress>> GetAddresses(AppDbContext db, long userID, CancellationToken cancellationToken = default)
@@ -430,7 +605,7 @@ namespace Database
 	}
 
 	// Devices are kept 90 days after they were last seen, or for as long as a ban on their account lasts (to find ban
-	// evasion); session events 90 days (Privacy Policy)
+	// evasion), and so are the machines that group them; session events and machine addresses 90 days (Privacy Policy)
 	public static class Retention
 	{
 		public static readonly TimeSpan DeviceRetention = TimeSpan.FromDays(90);
@@ -443,7 +618,9 @@ namespace Database
 
 			IQueryable<Int64> banned = Moderation.ActiveSanctions(db, SanctionTypes.Ban, utcNow).Select(s => s.UserID);
 			int devices = await db.Devices.Where(d => d.LastSeenAt < deviceCutoff && !banned.Contains(d.UserID)).ExecuteDeleteAsync(cancellationToken);
+			await db.Machines.Where(m => m.LastSeenAt < deviceCutoff && !banned.Contains(m.UserID)).ExecuteDeleteAsync(cancellationToken);
 			int events = await db.SessionEvents.Where(e => e.CreatedAt < eventCutoff).ExecuteDeleteAsync(cancellationToken);
+			await db.MachineAddresses.Where(a => a.LastSeenAt < eventCutoff).ExecuteDeleteAsync(cancellationToken);
 
 			return (devices, events);
 		}

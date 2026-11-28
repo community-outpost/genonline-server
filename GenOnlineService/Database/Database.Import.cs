@@ -253,7 +253,7 @@ namespace Database
 		// matches has no identity: the service sets every match id (snowflakes since MatchIdsWithoutIdentity), the import keeps the old ids
 		private static readonly string[] IdentityTables =
 		{
-			"users", "user_username_history", "identities", "sanctions", "audit_log", "devices", "session_events",
+			"users", "user_username_history", "identities", "sanctions", "audit_log", "devices", "machines", "session_events",
 			"anticheat_module_reports", "anticheat_new_account_games", "anticheat_probe_reports"
 		};
 
@@ -793,11 +793,14 @@ namespace Database
 			{
 				var line = Line("user_devices.hwid_0..5, ip_addr", "devices");
 				var seen = new Dictionary<(long, string, string), Device>();
+				// each source row is one sign-in: the devices it sent form a machine seen from its address
+				var sightings = new List<(long UserID, List<Device> Devices, string Ip)>();
 
 				await foreach (var r in Rows(_source, "SELECT user_id, hwid_0, hwid_1, hwid_2, hwid_3, hwid_4, hwid_5, ip_addr FROM user_devices ORDER BY user_id, hwid_0, hwid_1, hwid_2, ip_addr"))
 				{
 					long userId = r.Long("user_id");
 					string ip = r.String("ip_addr") ?? string.Empty;
+					var sent = new List<Device>();
 
 					// hwid_3..5 hold the raw values of hwid_0..2
 					foreach (var (column, rawColumn, kind) in new[] { ("hwid_0", "hwid_3", DeviceKinds.MachineGuid), ("hwid_1", "hwid_4", DeviceKinds.Mac), ("hwid_2", "hwid_5", DeviceKinds.VolumeSerial) })
@@ -816,12 +819,12 @@ namespace Database
 						string? raw = DeviceHasher.NormalizeRaw(r.String(rawColumn));
 						raw = raw == null ? null : Clamp(raw, Device.ValueRawLength, "devices", "value_raw");
 
-						// Rows differed by IP address; one device row per user, kind and value keeps the last IP
+						// Rows differed by IP address; one device row per user, kind and value
 						if (seen.TryGetValue((userId, kind, md5), out Device? existing))
 						{
 							line.Drop("same device on another IP");
 							existing.ValueRaw ??= raw;
-							existing.LastIp = string.IsNullOrEmpty(ip) ? existing.LastIp : Clamp(ip, 45, "devices", "last_ip");
+							sent.Add(existing);
 							continue;
 						}
 
@@ -833,19 +836,76 @@ namespace Database
 							ValueHmac = DeviceHasher.HashLegacyMd5(md5),
 							ValueRaw = raw,
 							FirstSeenAt = lastSeen,
-							LastSeenAt = lastSeen,
-							LastIp = string.IsNullOrEmpty(ip) ? null : Clamp(ip, 45, "devices", "last_ip")
+							LastSeenAt = lastSeen
 						};
 
 						seen[(userId, kind, md5)] = device;
+						sent.Add(device);
+					}
+
+					if (sent.Count > 0)
+					{
+						sightings.Add((userId, sent, string.IsNullOrEmpty(ip) ? string.Empty : Clamp(ip, 45, "machine_addresses", "ip")));
 					}
 				}
 
-				// Written after the scan, once the last IP of every device is known
+				// Written after the scan, once the raw value of every device is known
 				foreach (Device device in seen.Values)
 				{
 					Write(line, device);
 					_writer?.MaybeFlush();
+				}
+				if (_writer == null)
+				{
+					return;
+				}
+				// the machines point at the device ids, which exist once the devices are written
+				await _writer.FlushAll();
+
+				var machineLine = Line("user_devices.hwid_0..2, ip_addr", "machines");
+				var addressLine = Line("user_devices.ip_addr", "machine_addresses");
+				var machines = new Dictionary<(long, string), Machine>();
+				var addresses = new HashSet<(long, string, string)>();
+				foreach ((long userId, List<Device> sent, string ip) in sightings)
+				{
+					long? IdOf(string kind) => sent.FirstOrDefault(d => d.Kind == kind)?.ID;
+					long? guid = IdOf(DeviceKinds.MachineGuid), mac = IdOf(DeviceKinds.Mac), volume = IdOf(DeviceKinds.VolumeSerial);
+					string key = Machine.KeyOf(guid, mac, volume);
+					DateTime lastSeen = sent.Max(d => d.LastSeenAt);
+					machineLine.Source++;
+					if (!machines.ContainsKey((userId, key)))
+					{
+						machines[(userId, key)] = new Machine { UserID = userId, MachineGuidID = guid, MacID = mac, VolumeSerialID = volume, IdentifiersKey = key, FirstSeenAt = lastSeen, LastSeenAt = lastSeen };
+					}
+					else
+					{
+						machineLine.Drop("same machine on another IP");
+					}
+				}
+				foreach (Machine machine in machines.Values)
+				{
+					Write(machineLine, machine);
+					_writer.MaybeFlush();
+				}
+				await _writer.FlushAll();
+
+				foreach ((long userId, List<Device> sent, string ip) in sightings)
+				{
+					addressLine.Source++;
+					string key = Machine.KeyOf(sent.FirstOrDefault(d => d.Kind == DeviceKinds.MachineGuid)?.ID, sent.FirstOrDefault(d => d.Kind == DeviceKinds.Mac)?.ID, sent.FirstOrDefault(d => d.Kind == DeviceKinds.VolumeSerial)?.ID);
+					if (ip.Length == 0)
+					{
+						addressLine.Drop("address missing");
+						continue;
+					}
+					if (!addresses.Add((userId, key, ip)))
+					{
+						addressLine.Drop("same address twice");
+						continue;
+					}
+					Machine machine = machines[(userId, key)];
+					Write(addressLine, new MachineAddress { MachineID = machine.ID, Ip = ip, FirstSeenAt = machine.FirstSeenAt, LastSeenAt = machine.LastSeenAt, SignIns = 1 });
+					_writer.MaybeFlush();
 				}
 			}
 
