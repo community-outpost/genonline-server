@@ -120,7 +120,7 @@ namespace GenOnlineService
 
 		public bool IsKnown(string role) => role != Everyone && Roles.ContainsKey(role);
 
-		public bool IsStaff(string role) => IsKnown(role) && Roles[role].Permissions.Count > 0;
+		public bool IsStaff(string role) => IsKnown(role) && Permissions.AnyStaff(Roles[role].Permissions);
 
 		public int RankOf(IEnumerable<string> roles)
 		{

@@ -109,28 +109,31 @@ namespace GenOnlineService
 			return true;
 		}
 
-		public static IReadOnlyList<string> For(IReadOnlyDictionary<string, string[]> featuresByRole, IEnumerable<string> roles)
+		// Holding any local_api permission grants the feature on top of the Features:roles map
+		public static IReadOnlyList<string> For(IReadOnlyDictionary<string, string[]> featuresByRole, RoleCatalog catalog, IEnumerable<string> roles)
 		{
-			return roles
+			List<string> held = roles.ToList();
+			return held
 				.SelectMany(role => featuresByRole.TryGetValue(role, out string[]? features) ? features : Array.Empty<string>())
+				.Concat(catalog.PermissionsFor(held).Any(Permissions.IsLocalApi) ? new[] { LocalApi } : Array.Empty<string>())
 				.Distinct(StringComparer.Ordinal)
 				.OrderBy(feature => feature, StringComparer.Ordinal)
 				.ToArray();
 		}
 
-		public static IReadOnlyList<string> Of(Int64 userID) => For(s_featuresByRole, StaffRoles.RolesOf(userID));
+		public static IReadOnlyList<string> Of(Int64 userID) => For(s_featuresByRole, StaffRoles.Catalog, StaffRoles.RolesOf(userID));
 
 		public static bool Has(Int64 userID, string feature) => Of(userID).Contains(feature, StringComparer.Ordinal);
 
 		public static IReadOnlyList<(Int64 UserID, IReadOnlyList<string> Features)> Changes(IReadOnlyDictionary<string, string[]> featuresByRole,
-			IReadOnlyDictionary<Int64, HashSet<string>> before, IReadOnlyDictionary<Int64, HashSet<string>> after)
+			RoleCatalog beforeCatalog, IReadOnlyDictionary<Int64, HashSet<string>> before, RoleCatalog afterCatalog, IReadOnlyDictionary<Int64, HashSet<string>> after)
 		{
 			List<(Int64, IReadOnlyList<string>)> result = new();
 
 			foreach (Int64 userID in before.Keys.Union(after.Keys).Order())
 			{
-				IReadOnlyList<string> old = For(featuresByRole, before.TryGetValue(userID, out HashSet<string>? a) ? a : Enumerable.Empty<string>());
-				IReadOnlyList<string> next = For(featuresByRole, after.TryGetValue(userID, out HashSet<string>? b) ? b : Enumerable.Empty<string>());
+				IReadOnlyList<string> old = For(featuresByRole, beforeCatalog, before.TryGetValue(userID, out HashSet<string>? a) ? a : Enumerable.Empty<string>());
+				IReadOnlyList<string> next = For(featuresByRole, afterCatalog, after.TryGetValue(userID, out HashSet<string>? b) ? b : Enumerable.Empty<string>());
 				if (!old.SequenceEqual(next, StringComparer.Ordinal))
 				{
 					result.Add((userID, next));
@@ -141,9 +144,9 @@ namespace GenOnlineService
 		}
 
 		// Every copy sees the same role change on its own reload, so each sends only to the session groups of its own connections and no connection hears it twice
-		public static void PublishChanges(IReadOnlyDictionary<Int64, HashSet<string>> before, IReadOnlyDictionary<Int64, HashSet<string>> after)
+		public static void PublishChanges(RoleCatalog beforeCatalog, IReadOnlyDictionary<Int64, HashSet<string>> before, RoleCatalog afterCatalog, IReadOnlyDictionary<Int64, HashSet<string>> after)
 		{
-			foreach ((Int64 userID, IReadOnlyList<string> features) in Changes(s_featuresByRole, before, after))
+			foreach ((Int64 userID, IReadOnlyList<string> features) in Changes(s_featuresByRole, beforeCatalog, before, afterCatalog, after))
 			{
 				// one user's failure never costs the others their update, the role maps are already swapped
 				try

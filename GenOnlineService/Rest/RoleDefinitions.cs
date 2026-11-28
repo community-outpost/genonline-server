@@ -120,7 +120,20 @@ namespace GenOnlineService.Rest
 			(Permissions.SettingsManage, "Server", "Manage settings", "Change application settings such as the message of the day."),
 			(Permissions.FlagsManage, "Server", "Manage game config", "Edit and publish the config and flags the game reads."),
 			(Permissions.PlaylistsManage, "Server", "Manage playlists", "Edit the matchmaking playlists."),
-			(Permissions.LaddersManage, "Server", "Manage ladders", "Edit the ladders.")
+			(Permissions.LaddersManage, "Server", "Manage ladders", "Edit the ladders."),
+			(Permissions.LocalApiMatch, "Local API", "Match info", "Receive the match, match summary and UI state frames."),
+			(Permissions.LocalApiStats, "Local API", "Statistics", "Receive the statistics snapshot and in-view statistics frames."),
+			(Permissions.LocalApiEvents, "Local API", "Game events", "Receive the event frames."),
+			(Permissions.LocalApiInterest, "Local API", "Interest map", "Receive the interest map frames."),
+			(Permissions.LocalApiCameraRead, "Local API", "Read the camera", "Receive the camera frames."),
+			(Permissions.LocalApiChatRead, "Local API", "Read chat", "Receive the chat message frames."),
+			(Permissions.LocalApiChatSend, "Local API", "Send chat", "Send chat messages through the local API."),
+			(Permissions.LocalApiQuery, "Local API", "Run queries", "Ask the catalog, object, objects, player and map queries."),
+			(Permissions.LocalApiCameraControl, "Local API", "Control the camera", "Move and follow with the camera control and camera follow queries."),
+			(Permissions.LocalApiReplayControl, "Local API", "Control replays", "Use the replay control query."),
+			(Permissions.LocalApiObserve, "Local API", "Observe", "Use the observe query."),
+			(Permissions.LocalApiLobbyRead, "Local API", "Read the lobby", "Receive the lobby state frames."),
+			(Permissions.LocalApiLobbyControl, "Local API", "Control the lobby", "Use the lobby control query.")
 		};
 
 		public static IReadOnlyList<PermissionEntry> For(IReadOnlySet<string> held) =>

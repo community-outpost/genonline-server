@@ -57,7 +57,7 @@ namespace GenOnlineService.Rest
 				return denied;
 			}
 
-			return StaffRoles.PermissionsOf(Me).Count > 0 ? null : RestResults.Fail(ErrorCodes.Forbidden);
+			return Permissions.AnyStaff(StaffRoles.PermissionsOf(Me)) ? null : RestResults.Fail(ErrorCodes.Forbidden);
 		}
 
 		protected static async Task<IActionResult> Answer(Func<Task<IActionResult>> action)

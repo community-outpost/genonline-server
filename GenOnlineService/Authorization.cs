@@ -60,6 +60,22 @@ namespace GenOnlineService
 
 		public const string AppealsReview = "appeals.review";
 
+		// What the game's local API allows, held by players and never a mark of staff
+		public const string LocalApiPrefix = "local_api.";
+		public const string LocalApiMatch = "local_api.match";
+		public const string LocalApiStats = "local_api.stats";
+		public const string LocalApiEvents = "local_api.events";
+		public const string LocalApiInterest = "local_api.interest";
+		public const string LocalApiCameraRead = "local_api.camera.read";
+		public const string LocalApiChatRead = "local_api.chat.read";
+		public const string LocalApiChatSend = "local_api.chat.send";
+		public const string LocalApiQuery = "local_api.query";
+		public const string LocalApiCameraControl = "local_api.camera.control";
+		public const string LocalApiReplayControl = "local_api.replay.control";
+		public const string LocalApiObserve = "local_api.observe";
+		public const string LocalApiLobbyRead = "local_api.lobby.read";
+		public const string LocalApiLobbyControl = "local_api.lobby.control";
+
 		// Machine permissions are held only by service accounts, never by a staff role
 		public const string UsersRevoke = "users.revoke";
 		public const string OpsDatabase = "ops.database";
@@ -68,7 +84,8 @@ namespace GenOnlineService
 
 		public static readonly IReadOnlySet<string> Human = new HashSet<string>(StringComparer.Ordinal)
 		{
-			ModerationKick, ModerationBan, ModerationMute, ModerationRename, ChatDeleteAny, ChatMessageAnyone, ChatStaffBadge, NamesProtected, NamesUnrestricted, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage, AuditRead, SettingsManage, AnticheatReview, PlayersInspect, AccountsSupport, TextRulesManage, RulesManage, AppealsReview, FlagsManage, PlaylistsManage, LaddersManage, ChannelsManage, BroadcastsManage
+			ModerationKick, ModerationBan, ModerationMute, ModerationRename, ChatDeleteAny, ChatMessageAnyone, ChatStaffBadge, NamesProtected, NamesUnrestricted, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage, AuditRead, SettingsManage, AnticheatReview, PlayersInspect, AccountsSupport, TextRulesManage, RulesManage, AppealsReview, FlagsManage, PlaylistsManage, LaddersManage, ChannelsManage, BroadcastsManage,
+			LocalApiMatch, LocalApiStats, LocalApiEvents, LocalApiInterest, LocalApiCameraRead, LocalApiChatRead, LocalApiChatSend, LocalApiQuery, LocalApiCameraControl, LocalApiReplayControl, LocalApiObserve, LocalApiLobbyRead, LocalApiLobbyControl
 		};
 
 		public static readonly IReadOnlySet<string> Machine = new HashSet<string>(StringComparer.Ordinal)
@@ -89,6 +106,11 @@ namespace GenOnlineService
 		};
 
 		public static IEnumerable<string> All => Human.Concat(Machine);
+
+		public static bool IsLocalApi(string permission) => permission.StartsWith(LocalApiPrefix, StringComparison.Ordinal);
+
+		// Local API permissions only switch on a client feature, so holding them alone never makes a user staff
+		public static bool AnyStaff(IEnumerable<string> permissions) => permissions.Any(p => !IsLocalApi(p));
 
 		public static bool IsKnown(string permission) => Human.Contains(permission) || Machine.Contains(permission);
 
@@ -194,7 +216,7 @@ namespace GenOnlineService
 			s_permissionsByUser = next;
 
 			// every role source writes user_roles, so this swap is the one place a feature list changes
-			ClientFeatures.PublishChanges(previousRoles, s_rolesByUser);
+			ClientFeatures.PublishChanges(previousCatalog, previousRoles, s_catalog, s_rolesByUser);
 			RealtimeBadges.PublishChanges(previousCatalog, s_catalog);
 		}
 	}
