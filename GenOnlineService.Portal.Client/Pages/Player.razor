@@ -962,19 +962,13 @@ else
                         <BbInput Id="new-name" @bind-Value="m_name" autocomplete="off" spellcheck="false" />
                     </div>
                 }
-                @if (m_action == "mute" || m_action == "ban")
+                @if (UsesDecision)
                 {
-                    <div class="bb:space-y-2">
-                        <BbLabel For="duration">Duration</BbLabel>
-                        <BbNativeSelect TValue="string" Id="duration" @bind-Value="m_duration" Class="bb:w-full">
-                            @foreach ((string seconds, string text) in m_action == "mute" ? s_muteDurations : s_banDurations)
-                            {
-                                <option value="@seconds">@text</option>
-                            }
-                        </BbNativeSelect>
-                    </div>
+                    <SanctionDecision Type="@m_action" IdPrefix="player" Duration="@(m_duration ?? "")" DurationChanged="@((string? v) => m_duration = v)"
+                                      Reason="@m_reason" ReasonChanged="@((string? v) => m_reason = v)" Open="@m_confirming" OpenChanged="@((bool open) => m_confirming = open)"
+                                      OnConfirm="ConfirmAsync" Saving="@m_saving" PlayerName="@player.FullName" />
                 }
-                @if (m_action != "revoke_role")
+                @if (m_action != "revoke_role" && !UsesDecision)
                 {
                     <div class="bb:space-y-2">
                         <BbLabel For="reason">Reason@(ReasonRequired ? " (required)" : " (optional)")</BbLabel>
@@ -991,7 +985,7 @@ else
             </div>
             <BbDialogFooter>
                 <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_dialogOpen = false)" Disabled="@m_saving">Cancel</BbButton>
-                <BbButton Variant="@(m_action is "ban" or "delete_sanction" or "revoke_role" or "reset_name" or "password_reset" or "two_factor_reset" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="ConfirmAsync" Loading="@m_saving" Disabled="@NeedsReason" title="@(NeedsReason ? ReasonNeededText : null)" aria-describedby="@(NeedsReason ? "reason-needed" : null)" data-testid="confirm">Confirm</BbButton>
+                <BbButton Variant="@(m_action is "ban" or "delete_sanction" or "revoke_role" or "reset_name" or "password_reset" or "two_factor_reset" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="StartConfirmAsync" Loading="@m_saving" Disabled="@NeedsReason" title="@(NeedsReason ? ReasonNeededText : null)" aria-describedby="@(NeedsReason && !UsesDecision ? "reason-needed" : null)" data-testid="confirm">Confirm</BbButton>
             </BbDialogFooter>
         </BbDialogContent>
     </BbDialog>
@@ -1028,17 +1022,6 @@ else
 }
 
 @code {
-    private static readonly (string Seconds, string Text)[] s_muteDurations =
-    {
-        ("3600", "1 hour"), ("86400", "1 day"), ("604800", "7 days"), ("2592000", "30 days"), ("7776000", "90 days")
-    };
-
-    // An empty value is a ban without an end
-    private static readonly (string Seconds, string Text)[] s_banDurations =
-    {
-        ("86400", "1 day"), ("604800", "7 days"), ("2592000", "30 days"), ("", "Permanent")
-    };
-
     [Parameter]
     public long Id { get; set; }
 
@@ -1066,6 +1049,7 @@ else
     private string? m_name;
     private string? m_duration;
     private string? m_reason;
+    private bool m_confirming;
     private string? m_role;
     private string? m_grantRole;
     private string m_discordID = "";
@@ -1074,7 +1058,7 @@ else
 
     private string? m_password;
 
-    private bool ReasonRequired => m_action is "ban" or "delete_sanction" or "password_reset" or "two_factor_reset";
+    private bool ReasonRequired => SanctionDecision.ReasonRequired(m_action) || m_action is "delete_sanction" or "password_reset" or "two_factor_reset";
 
     private static readonly int[] s_matchPageSizes = { 10, 20 };
     private string? m_matchesError;
@@ -1285,9 +1269,22 @@ else
         m_action = action;
         m_lifting = sanction;
         m_name = m_player?.Name;
-        m_duration = action == "mute" ? s_muteDurations[0].Seconds : s_banDurations[0].Seconds;
+        m_duration = SanctionDecision.DefaultDuration(action);
+        m_confirming = false;
         m_reason = null;
         m_dialogOpen = true;
+    }
+
+    private bool UsesDecision => m_action is "kick" or "mute" or "ban";
+
+    private async Task StartConfirmAsync()
+    {
+        if (SanctionDecision.NeedsConfirm(m_action))
+        {
+            m_confirming = true;
+            return;
+        }
+        await ConfirmAsync();
     }
 
     private async Task ConfirmAsync()
@@ -1325,6 +1322,7 @@ else
         };
         m_saving = false;
         m_dialogOpen = false;
+        m_confirming = false;
 
         if (outcome.Ok)
         {

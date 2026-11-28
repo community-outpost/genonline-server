@@ -1,12 +1,14 @@
 @page "/admin/cases"
 @inject PortalApi Api
 @inject NavigationManager Navigation
+@inject ToastService Toasts
 
 <PageTitle>Review queue · Generals Online</PageTitle>
 
 <PageHeader Description="One row per player with something waiting. Open a row to see the reports, anti-cheat findings and rule matches together, then decide them in one go. Anti-cheat signals come first.">
     <Title>Review queue</Title>
     <Actions>
+        <BbButton Size="ButtonSize.Small" OnClick="OpenNextAsync" Loading="@m_opening" data-testid="case-open-next">Open next</BbButton>
         <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="LoadAsync">
             <LucideIcon Name="refresh-cw" Class="bb:h-4 bb:w-4" />
             Refresh
@@ -69,7 +71,7 @@ else
                         <BbDataTableColumn TData="PortalCaseRow" TValue="string" Property="@(r => r.Player.FullName)" Header="Player">
                             <CellTemplate Context="row">
                                 <div class="bb:space-y-1">
-                                    <BbLink Href="@PortalRoutes.PlayerCasePage(row.Player.Id)" data-testid="case-open">@row.Player.FullName</BbLink>
+                                    <BbLink Href="@PortalRoutes.PlayerCasePage(row.Player.Id, m_kind, m_claimed)" data-testid="case-open">@row.Player.FullName</BbLink>
                                     <div class="bb:flex bb:flex-wrap bb:gap-1 bb:text-xs bb:text-muted-foreground">
                                         <span>joined <When Value="@row.AccountCreatedAt" /></span>
                                         @if (row.Banned)
@@ -162,6 +164,7 @@ else
     private string m_kind = "";
     private string m_claimed = "all";
     private bool m_loadingMore;
+    private bool m_opening;
 
     private PortalSessionInfo Session => Api.Session!;
 
@@ -197,6 +200,19 @@ else
         m_error = answer.Error;
         m_rows = (answer.Value?.Cases ?? []).ToList();
         m_total = answer.Value?.Total;
+    }
+
+    private async Task OpenNextAsync()
+    {
+        m_opening = true;
+        PortalAnswer<PortalCaseList> next = await Api.ListCasesAsync(m_kind.Length == 0 ? null : [m_kind], PortalRoutes.NextClaimed(m_claimed), 0, 1);
+        m_opening = false;
+        if (next.Value?.Cases.FirstOrDefault() is PortalCaseRow row)
+        {
+            Navigation.NavigateTo(PortalRoutes.PlayerCasePage(row.Player.Id, m_kind, m_claimed));
+            return;
+        }
+        Toasts.Show("No case waits in the queue with these filters.", "Queue is empty", ToastVariant.Default, 4000);
     }
 
     private async Task MoreAsync()

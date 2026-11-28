@@ -91,6 +91,28 @@ namespace GenOnlineService.Portal.Client
 		public static string PlayerPage(long id) => PlayersPage + "/" + id;
 
 		public static string PlayerCasePage(long userID) => PlayersPage + "/" + userID + "/case";
+
+		// The queue filters travel in the query string so that the case page can open the next row of the same queue
+		public static string PlayerCasePage(long userID, string? kind, string? claimed) => PlayerCasePage(userID) + FilterQuery(kind, claimed);
+
+		public static string CasesQueue(string? kind, string? claimed) => CasesPage + FilterQuery(kind, claimed);
+
+		// The next case is one nobody holds, except when the queue lists the cases the caller holds
+		public static string NextClaimed(string? claimed) => claimed == "mine" ? "mine" : "unclaimed";
+
+		private static string FilterQuery(string? kind, string? claimed)
+		{
+			List<string> parts = [];
+			if (!String.IsNullOrEmpty(kind))
+			{
+				parts.Add("kind=" + Uri.EscapeDataString(kind));
+			}
+			if (claimed is "mine" or "unclaimed")
+			{
+				parts.Add("claimed=" + claimed);
+			}
+			return parts.Count == 0 ? "" : "?" + String.Join("&", parts);
+		}
 		public static string DecidedCasePage(long caseID) => CasesPage + "/" + caseID;
 
 		public static string RulePage(long id) => RulesPage + "/" + id;

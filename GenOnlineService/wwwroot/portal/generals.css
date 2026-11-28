@@ -2780,6 +2780,9 @@ select.gp-input { width: auto; min-width: 240px; }
 .go-case-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px var(--go-space-3); margin: 0; font-size: var(--go-font-size-sm); }
 .go-case-facts dt { color: var(--go-color-text-muted); }
 .go-case-facts dd { margin: 0; }
+.go-standing { display: flex; flex-wrap: wrap; align-items: center; gap: var(--go-space-3); margin-bottom: var(--go-space-4); }
+.go-standing-item { display: inline-flex; align-items: center; gap: var(--go-space-2); }
+.go-standing-reason { max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .go-check { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--go-color-accent-default); }
 
 .go-thread { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; font-size: var(--go-font-size-sm); }

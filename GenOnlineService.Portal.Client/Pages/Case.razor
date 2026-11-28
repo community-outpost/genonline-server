@@ -73,6 +73,11 @@ else
         }
     </div>
 
+    @if (m_player != null)
+    {
+        <PlayerStanding UserId="@found.Player.Id" Sanctions="@m_player.Sanctions" CanInspect="@Session.Can(PortalPermissions.PlayersInspect)" />
+    }
+
     @if (!Waiting && found.Case is PortalCaseSummary decided)
     {
         <BbAlert Variant="@(decided.Outcome == "sanctioned" ? AlertVariant.Warning : AlertVariant.Default)" Class="bb:mb-4">
@@ -253,31 +258,22 @@ else
                                     }
                                 </BbNativeSelect>
                             </div>
-                            @if (m_outcome is "mute" or "ban")
-                            {
-                                <div class="bb:space-y-2">
-                                    <BbLabel For="case-duration">Duration</BbLabel>
-                                    <BbNativeSelect TValue="string" Id="case-duration" @bind-Value="m_duration" Class="bb:w-full">
-                                        @foreach ((string seconds, string text) in m_outcome == "mute" ? s_muteDurations : s_banDurations)
-                                        {
-                                            <option value="@seconds">@text</option>
-                                        }
-                                    </BbNativeSelect>
-                                </div>
-                            }
                             @if (m_outcome != "no_action")
                             {
-                                <div class="bb:space-y-2">
-                                    <BbLabel For="case-reason">Reason the player sees@(m_outcome == "ban" ? " (required)" : "")</BbLabel>
-                                    <BbTextarea Id="case-reason" @bind-Value="m_reason" UpdateTiming="UpdateTiming.Immediate" autocomplete="off" />
-                                </div>
+                                <SanctionDecision Type="@m_outcome" IdPrefix="case" Duration="@m_duration" DurationChanged="@((string? v) => m_duration = v ?? "")"
+                                                  Reason="@m_reason" ReasonChanged="@((string? v) => m_reason = v)" Open="@m_confirming" OpenChanged="@((bool open) => m_confirming = open)"
+                                                  OnConfirm="@(() => CloseAsync(m_openNext))" Saving="@m_saving" PlayerName="@found.Player.FullName" />
                             }
                             <div class="bb:space-y-2">
                                 <BbLabel For="case-note">Note for staff</BbLabel>
                                 <BbTextarea Id="case-note" @bind-Value="m_note" UpdateTiming="UpdateTiming.Immediate" Placeholder="Why, for the case history…" autocomplete="off" data-testid="case-note" />
                             </div>
-                            <BbButton Variant="@(m_outcome == "ban" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="CloseAsync" Loading="@m_saving"
-                                      Disabled="@(m_selected.Count == 0 || (m_outcome == "ban" && String.IsNullOrWhiteSpace(m_reason)))" Class="bb:w-full" data-testid="case-close">
+                            <BbButton Variant="@(m_outcome == "ban" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="@(() => StartClose(true))" Loading="@m_saving"
+                                      Disabled="@CloseBlocked" Class="bb:w-full" data-testid="case-close-next">
+                                Close and open next
+                            </BbButton>
+                            <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => StartClose(false))" Loading="@m_saving"
+                                      Disabled="@CloseBlocked" Class="bb:w-full" data-testid="case-close">
                                 @(m_outcome == "no_action" ? "Close with no action" : "Close and " + m_outcome)
                             </BbButton>
                         </div>
@@ -350,22 +346,17 @@ else
 }
 
 @code {
-    private static readonly (string Seconds, string Text)[] s_muteDurations =
-    {
-        ("3600", "1 hour"), ("86400", "1 day"), ("604800", "7 days"), ("2592000", "30 days"), ("7776000", "90 days")
-    };
-
-    // An empty value is a ban without an end
-    private static readonly (string Seconds, string Text)[] s_banDurations =
-    {
-        ("86400", "1 day"), ("604800", "7 days"), ("2592000", "30 days"), ("", "Permanent")
-    };
-
     [Parameter]
     public long? Id { get; set; }
 
     [Parameter]
     public long? CaseId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "kind")]
+    public string? Kind { get; set; }
+
+    [SupplyParameterFromQuery(Name = "claimed")]
+    public string? Claimed { get; set; }
 
     private PortalCase? m_case;
     private string? m_error;
@@ -376,10 +367,15 @@ else
     private string? m_note;
     private bool m_saving;
     private bool m_claiming;
+    private bool m_confirming;
+    private bool m_openNext;
+    private PortalPlayer? m_player;
 
     private PortalSessionInfo Session => Api.Session!;
 
     private bool Waiting => CaseId == null;
+
+    private bool CloseBlocked => m_selected.Count == 0 || SanctionDecision.Blocked(m_outcome, m_reason);
 
     private static string KeyOf(PortalCaseSignal signal) => signal.Kind + ":" + signal.Id;
 
@@ -398,6 +394,11 @@ else
         PortalAnswer<PortalCase> answer = CaseId is long caseID ? await Api.GetDecidedCaseAsync(caseID) : await Api.GetWaitingCaseAsync(Id ?? 0);
         m_error = answer.Error;
         m_case = answer.Value;
+        m_player = null;
+        if (m_case != null)
+        {
+            m_player = (await Api.GetPlayerAsync(m_case.Player.Id)).Value;
+        }
         m_selected.Clear();
         foreach (PortalCaseSignal signal in m_case?.Signals ?? [])
         {
@@ -420,7 +421,7 @@ else
     private void ChooseOutcome(string? outcome)
     {
         m_outcome = outcome is "kick" or "mute" or "ban" ? outcome : "no_action";
-        m_duration = m_outcome == "mute" ? s_muteDurations[0].Seconds : m_outcome == "ban" ? s_banDurations[0].Seconds : "";
+        m_duration = SanctionDecision.DefaultDuration(m_outcome);
     }
 
     private static string HeaderText(PortalCase found)
@@ -466,8 +467,20 @@ else
         m_case = m_case with { Case = null };
     }
 
-    private async Task CloseAsync()
+    private async Task StartClose(bool openNext)
     {
+        m_openNext = openNext;
+        if (SanctionDecision.NeedsConfirm(m_outcome))
+        {
+            m_confirming = true;
+            return;
+        }
+        await CloseAsync(openNext);
+    }
+
+    private async Task CloseAsync(bool openNext)
+    {
+        m_confirming = false;
         if (m_case == null || m_selected.Count == 0)
         {
             return;
@@ -499,6 +512,18 @@ else
         }
 
         Toasts.Success($"The case of {found.Player.FullName} is closed, {PortalText.Count(answer.Value!.Decided)} {(answer.Value.Decided == 1 ? "signal" : "signals")} decided.", "Case closed");
-        Navigation.NavigateTo(PortalRoutes.CasesPage);
+        if (!openNext)
+        {
+            Navigation.NavigateTo(PortalRoutes.CasesQueue(Kind, Claimed));
+            return;
+        }
+        PortalAnswer<PortalCaseList> next = await Api.ListCasesAsync(Kind is { Length: > 0 } ? [Kind] : null, PortalRoutes.NextClaimed(Claimed), 0, 1);
+        if (next.Value?.Cases.FirstOrDefault() is PortalCaseRow row)
+        {
+            Navigation.NavigateTo(PortalRoutes.PlayerCasePage(row.Player.Id, Kind, Claimed));
+            return;
+        }
+        Toasts.Show("No case waits in the queue with these filters.", "Queue is empty", ToastVariant.Default, 4000);
+        Navigation.NavigateTo(PortalRoutes.CasesQueue(Kind, Claimed));
     }
 }

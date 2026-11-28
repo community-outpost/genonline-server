@@ -1,0 +1,34 @@
+@* The standing of a player in a few lines: the last sanctions and the way to the duplicates *@
+<div class="go-standing" data-testid="player-standing">
+    @if (Sanctions.Count == 0)
+    {
+        <span class="bb:text-sm bb:text-muted-foreground">No sanction on record.</span>
+    }
+    @foreach (PortalSanction sanction in Sanctions.OrderByDescending(s => s.CreatedAt).Take(3))
+    {
+        <span class="go-standing-item" data-testid="standing-sanction">
+            <BbBadge Variant="@PortalBadges.OfSanction(sanction.Active)">@sanction.Type @(sanction.Active ? "active" : sanction.LiftedAt != null ? "lifted" : "ended")</BbBadge>
+            <span class="bb:text-xs bb:text-muted-foreground"><When Value="@sanction.CreatedAt" /></span>
+            @if (!String.IsNullOrEmpty(sanction.Reason))
+            {
+                <span class="bb:text-sm go-standing-reason" title="@sanction.Reason">@sanction.Reason</span>
+            }
+        </span>
+    }
+    @if (CanInspect)
+    {
+        <BbLink Href="@PortalRoutes.PlayerTab(UserId, "duplicates")" data-testid="check-duplicates">Check duplicates</BbLink>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public long UserId { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<PortalSanction> Sanctions { get; set; } = [];
+
+    // The count needs the inspection call, which writes an audit row, so the strip only links to the tab
+    [Parameter]
+    public bool CanInspect { get; set; }
+}

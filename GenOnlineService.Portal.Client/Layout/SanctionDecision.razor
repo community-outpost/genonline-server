@@ -1,0 +1,89 @@
+@* The duration and reason of a kick, mute or ban and the confirm step of a ban, shared by the pages that decide a player *@
+@if (Type is "mute" or "ban")
+{
+    <div class="bb:space-y-2">
+        <BbLabel For="@(IdPrefix + "-duration")">Duration</BbLabel>
+        <BbNativeSelect TValue="string" Id="@(IdPrefix + "-duration")" Value="@Duration" ValueChanged="@DurationChanged" Class="bb:w-full">
+            @foreach ((string seconds, string text) in Durations(Type))
+            {
+                <option value="@seconds">@text</option>
+            }
+        </BbNativeSelect>
+    </div>
+}
+<div class="bb:space-y-2">
+    <BbLabel For="@(IdPrefix + "-reason")">Reason@(ReasonRequired(Type) ? " (required)" : " (optional)")</BbLabel>
+    <BbTextarea Id="@(IdPrefix + "-reason")" Value="@Reason" ValueChanged="@ReasonChanged" UpdateTiming="UpdateTiming.Immediate" Placeholder="@(Type == "ban" ? "Shown to the player and kept in the audit log…" : "Kept in the audit log…")" autocomplete="off" />
+</div>
+
+<BbDialog Open="@Open" OpenChanged="@OpenChanged">
+    <BbDialogContent>
+        <BbDialogHeader>
+            <BbDialogTitle>Ban @PlayerName?</BbDialogTitle>
+            <BbDialogDescription>@(String.IsNullOrEmpty(Duration) ? "The ban has no end." : "The ban ends after " + DurationText() + ".") The player cannot sign in to the game while it lasts. It is in the audit log and the reason is shown to the player.</BbDialogDescription>
+        </BbDialogHeader>
+        <BbDialogFooter>
+            <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => OpenChanged.InvokeAsync(false))" Disabled="@Saving">Cancel</BbButton>
+            <BbButton Variant="ButtonVariant.Destructive" OnClick="OnConfirm" Loading="@Saving" data-testid="decision-confirm">Ban</BbButton>
+        </BbDialogFooter>
+    </BbDialogContent>
+</BbDialog>
+
+@code {
+    private static readonly (string Seconds, string Text)[] s_muteDurations =
+    {
+        ("3600", "1 hour"), ("86400", "1 day"), ("604800", "7 days"), ("2592000", "30 days"), ("7776000", "90 days")
+    };
+
+    // An empty value is a ban without an end
+    private static readonly (string Seconds, string Text)[] s_banDurations =
+    {
+        ("86400", "1 day"), ("604800", "7 days"), ("2592000", "30 days"), ("", "Permanent")
+    };
+
+    public static (string Seconds, string Text)[] Durations(string type) => type == "mute" ? s_muteDurations : s_banDurations;
+
+    public static string DefaultDuration(string type) => type is "mute" or "ban" ? Durations(type)[0].Seconds : "";
+
+    public static bool ReasonRequired(string type) => type == "ban";
+
+    public static bool NeedsConfirm(string type) => type == "ban";
+
+    // Whether the reason rule blocks the decision
+    public static bool Blocked(string type, string? reason) => ReasonRequired(type) && String.IsNullOrWhiteSpace(reason);
+
+    [Parameter]
+    public string Type { get; set; } = "kick";
+
+    [Parameter]
+    public string Duration { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<string?> DurationChanged { get; set; }
+
+    [Parameter]
+    public string? Reason { get; set; }
+
+    [Parameter]
+    public EventCallback<string?> ReasonChanged { get; set; }
+
+    [Parameter]
+    public bool Open { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OpenChanged { get; set; }
+
+    [Parameter]
+    public EventCallback OnConfirm { get; set; }
+
+    [Parameter]
+    public bool Saving { get; set; }
+
+    [Parameter]
+    public string PlayerName { get; set; } = "";
+
+    [Parameter]
+    public string IdPrefix { get; set; } = "decision";
+
+    private string DurationText() => Durations(Type).FirstOrDefault(d => d.Seconds == Duration).Text ?? Duration + " seconds";
+}

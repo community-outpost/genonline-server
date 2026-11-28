@@ -49,7 +49,7 @@ namespace GenOnlineService.Tests
 
 		[Theory]
 		[InlineData("Pages/Player.razor", "Id=\"reason\"")]
-		[InlineData("Pages/Case.razor", "Id=\"case-reason\"")]
+		[InlineData("Layout/SanctionDecision.razor", "Id=\"@(IdPrefix + \"-reason\")\"")]
 		[InlineData("Pages/Case.razor", "Id=\"case-note\"")]
 		public void AReasonThatGatesConfirmUpdatesWhileTyping(string page, string field)
 		{
