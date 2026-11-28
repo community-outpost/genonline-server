@@ -64,7 +64,7 @@ else
         }
         @foreach (PortalCaseSanction active in found.Standing.ActiveSanctions)
         {
-            <BbBadge Variant="BadgeVariant.SoftDestructive" title="@active.Reason">@active.Type @(active.ExpiresAt is DateTime until ? "until " + PortalText.Date(until) : "without end")</BbBadge>
+            <BbBadge Variant="BadgeVariant.SoftDestructive" title="@active.Reason">@PortalWords.SanctionType(active.Type) @(active.ExpiresAt is DateTime until ? "until " + PortalText.Date(until) : "without end")</BbBadge>
         }
         <BbBadge Variant="BadgeVariant.Outline">@PortalText.Count(found.Standing.Sanctions) @(found.Standing.Sanctions == 1 ? "sanction" : "sanctions") on record</BbBadge>
         @if (found.Standing.OpenAppeals > 0)
@@ -201,9 +201,9 @@ else
                                 break;
                             case "illegal_requests":
                                 <dl class="go-case-facts">
-                                    <dt>Request</dt><dd>@signal.Request</dd>
+                                    <dt>Request</dt><dd>@PortalWords.CaseMethod(signal.Request)</dd>
                                     <dt>Attempted</dt><dd>@signal.Detail</dd>
-                                    <dt>State</dt><dd>@signal.State</dd>
+                                    <dt>State</dt><dd>@PortalWords.RequestState(signal.State)</dd>
                                 </dl>
                                 break;
                             case PortalCaseKinds.RuleMatch:
@@ -213,7 +213,7 @@ else
                                         {
                                             <BbLink Href="@PortalRoutes.RulePage(ruleID)">@(signal.RuleName ?? "Rule " + ruleID)</BbLink>
                                         }
-                                        <span class="bb:text-muted-foreground"> version @signal.RuleVersion, on @signal.Trigger: @signal.RuleOutcome@(String.IsNullOrEmpty(signal.Actions) ? "" : " (" + signal.Actions + ")")</span>
+                                        <span class="bb:text-muted-foreground"> version @signal.RuleVersion, on @PortalWords.RuleTrigger(signal.Trigger): @PortalWords.RuleOutcome(signal.RuleOutcome)@(String.IsNullOrEmpty(signal.Actions) ? "" : " (" + PortalWords.RuleActions(signal.Actions) + ")")</span>
                                     </div>
                                     @if (signal.Facts is System.Text.Json.JsonElement facts)
                                     {
@@ -306,7 +306,7 @@ else
                                     </div>
                                     @foreach (PortalMatchFile file in slot.Files.Where(f => f.Url != null))
                                     {
-                                        <a href="@file.Url" target="_blank" rel="noopener noreferrer" class="bb:mr-3 bb:text-xs">@file.Type</a>
+                                        <a href="@file.Url" target="_blank" rel="noopener noreferrer" class="bb:mr-3 bb:text-xs">@PortalWords.FileType(file.Type)</a>
                                     }
                                 </li>
                             }

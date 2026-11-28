@@ -169,7 +169,7 @@ namespace GenOnlineService.Portal.Client
 			"flag.in_use" => "The service itself reads this field, so it cannot be archived or moved out of the service.",
 			"flag.exists" => "A field with this key exists already.",
 			"playlist.last_enabled" => "This is the only enabled playlist. Disable it to pause the quick match instead of deleting it.",
-			_ => "The service answered: " + code
+			_ => "Something went wrong. The service gave the code " + code + "."
 		};
 
 		public static string RoleError(string? code, string? field) => code != "invalid_argument" || field == null ? Error(code) : field switch

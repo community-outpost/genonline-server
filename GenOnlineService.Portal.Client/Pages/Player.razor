@@ -50,7 +50,7 @@ else
         </Title>
         <Below>
             <div class="bb:flex bb:flex-wrap bb:items-center bb:gap-2 bb:pt-1">
-                <BbBadge Variant="@PortalBadges.OfPlayerState(player.State)">@player.State</BbBadge>
+                <BbBadge Variant="@PortalBadges.OfPlayerState(player.State)">@PortalWords.PlayerState(player.State)</BbBadge>
                 @if (player.Online)
                 {
                     <BbBadge Variant="@PortalBadges.Live" Class="go-badge-live"><span class="go-dot" aria-hidden="true"></span>online</BbBadge>
@@ -206,7 +206,7 @@ else
                                 {
                                     <div class="go-list-item">
                                         <LucideIcon Name="@(session.Kind == "game" ? "gamepad-2" : session.Kind == "chat" ? "message-square" : "rocket")" Class="bb:h-4 bb:w-4 bb:text-muted-foreground" />
-                                        <span class="bb:flex-1 bb:text-sm"><span class="go-capitalize">@session.Kind</span> <span class="bb:font-mono bb:text-xs bb:text-muted-foreground">@session.ClientId</span></span>
+                                        <span class="bb:flex-1 bb:text-sm">@PortalWords.SessionKind(session.Kind) <span class="bb:font-mono bb:text-xs bb:text-muted-foreground">@session.ClientId</span></span>
                                         <span class="bb:text-xs bb:text-muted-foreground">since <When Value="@session.RegisteredAt" /></span>
                                     </div>
                                 }
@@ -278,7 +278,7 @@ else
                                 <CellTemplate Context="sanction">
                                     <span class="bb:inline-flex bb:items-center bb:gap-2 go-capitalize">
                                         <LucideIcon Name="@PortalBadges.IconOfSanction(sanction.Type)" Class="bb:h-4 bb:w-4 bb:text-muted-foreground" />
-                                        @sanction.Type
+                                        @PortalWords.SanctionType(sanction.Type)
                                     </span>
                                 </CellTemplate>
                             </BbDataTableColumn>
@@ -905,7 +905,7 @@ else
                                 </BbDataTableColumn>
                                 <BbDataTableColumn TData="PortalDuplicate" TValue="string" Property="@(d => d.State)" Header="State">
                                     <CellTemplate Context="duplicate">
-                                        <BbBadge Variant="@PortalBadges.OfPlayerState(duplicate.State)">@duplicate.State</BbBadge>
+                                        <BbBadge Variant="@PortalBadges.OfPlayerState(duplicate.State)">@PortalWords.PlayerState(duplicate.State)</BbBadge>
                                     </CellTemplate>
                                 </BbDataTableColumn>
                                 <BbDataTableColumn TData="PortalDuplicate" TValue="string" Property="@(d => d.Match == "device" ? $"{d.Shared} shared device value(s)" : $"{d.Shared} shared address(es)")" Header="Match" />

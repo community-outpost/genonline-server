@@ -1258,7 +1258,7 @@ namespace GenOnlineService.Portal.Client
 		public DateTime UpdatedAt { get; init; }
 
 		[JsonIgnore]
-		public string Timeline => String.Join(", ", Events.Select(e => $"{e.State}@{e.TMs}ms"));
+		public string Timeline => String.Join(", ", Events.Select(e => $"{PortalWords.ConnectionState(e.State)} at {e.TMs} ms"));
 	}
 
 	public sealed record PortalConnectionEvent

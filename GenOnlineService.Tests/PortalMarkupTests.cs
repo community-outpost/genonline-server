@@ -56,5 +56,13 @@ namespace GenOnlineService.Tests
 			var bad = PortalLines().Where(l => l.Text.Contains("go-filterbar-hint") && !l.Text.Contains("role=\"alert\"")).Select(l => l.File + ":" + l.Line).ToList();
 			Assert.Empty(bad);
 		}
+
+		// Staff read the labels of PortalWords, never the code the service sends
+		[Fact]
+		public void NoPageShowsARawStateCode()
+		{
+			var bad = PortalLines().Where(l => Regex.IsMatch(l.Text, @">@\w+\.(State|ReviewState|Severity|Transport|SanctionType|RosterType)<")).Select(l => l.File + ":" + l.Line).ToList();
+			Assert.Empty(bad);
+		}
 	}
 }

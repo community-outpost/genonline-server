@@ -94,11 +94,11 @@ else
                                         <span class="bb:font-mono" dir="auto" data-testid="word-row">@row.Term</span>
                                     </CellTemplate>
                                 </BbDataTableColumn>
-                                <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Language)" Header="Language" CellClass="go-nowrap" />
-                                <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Category)" Header="Category" CellClass="go-nowrap" />
+                                <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => PortalWords.TextLanguage(t.Language))" Header="Language" CellClass="go-nowrap" />
+                                <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => PortalWords.TextCategory(t.Category))" Header="Category" CellClass="go-nowrap" />
                                 <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Severity)" Header="Severity">
                                     <CellTemplate Context="row">
-                                        <BbBadge Variant="@(row.Severity == "block" ? BadgeVariant.SoftDestructive : BadgeVariant.Secondary)">@row.Severity</BbBadge>
+                                        <BbBadge Variant="@(row.Severity == "block" ? BadgeVariant.SoftDestructive : BadgeVariant.Secondary)">@PortalWords.TextSeverity(row.Severity)</BbBadge>
                                     </CellTemplate>
                                 </BbDataTableColumn>
                                 <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Level ?? "")" Header="Level" CellClass="go-nowrap" />
@@ -164,7 +164,7 @@ else
                         <BbDataTable TData="PortalTextException" Data="@m_exceptions" ShowToolbar="false" ShowPagination="false" AriaLabel="Exception words">
                             <Columns>
                                 <BbDataTableColumn TData="PortalTextException" TValue="string" Property="@(e => e.Term)" Header="Word" CellClass="bb:font-mono" />
-                                <BbDataTableColumn TData="PortalTextException" TValue="string" Property="@(e => e.Language)" Header="Language" CellClass="go-nowrap" />
+                                <BbDataTableColumn TData="PortalTextException" TValue="string" Property="@(e => PortalWords.TextLanguage(e.Language))" Header="Language" CellClass="go-nowrap" />
                                 <BbDataTableColumn TData="PortalTextException" TValue="string" Property="@(e => e.Source)" Header="Source" CellClass="bb:text-muted-foreground" />
                                 <BbDataTableColumn TData="PortalTextException" TValue="string" Property="@(e => PortalText.Date(e.UpdatedAt))" Header="Changed" CellClass="go-nowrap" />
                                 <BbDataTableColumn TData="PortalTextException" TValue="string" Property="@(e => "")" Header="">
@@ -289,12 +289,12 @@ else
                     @if (m_test != null)
                     {
                         <BbCardContent Class="bb:space-y-4">
-                            <BbBadge Variant="@(m_test.Outcome == "allow" ? BadgeVariant.Secondary : BadgeVariant.SoftDestructive)" data-testid="test-outcome">@m_test.Outcome</BbBadge>
+                            <BbBadge Variant="@(m_test.Outcome == "allow" ? BadgeVariant.Secondary : BadgeVariant.SoftDestructive)" data-testid="test-outcome">@PortalWords.TextOutcome(m_test.Outcome)</BbBadge>
                             <div class="go-list">
                                 @foreach (PortalTextTestReading reading in m_test.Readings)
                                 {
                                     <div class="go-list-item">
-                                        <span class="bb:text-xs bb:text-muted-foreground">@reading.Name</span>
+                                        <span class="bb:text-xs bb:text-muted-foreground">@PortalWords.TextReading(reading.Name)</span>
                                         <span class="bb:flex-1 bb:text-sm bb:font-mono" dir="auto">@reading.Text</span>
                                     </div>
                                 }
@@ -311,9 +311,9 @@ else
                                         <div class="go-list-item">
                                             <span class="bb:flex-1 bb:text-sm" dir="auto">@hit.Text → <span class="bb:font-mono">@hit.Term</span></span>
                                             <span class="go-cell-badges">
-                                                <BbBadge Variant="BadgeVariant.Outline">@hit.Category</BbBadge>
-                                                <BbBadge Variant="@(hit.Severity == "block" ? BadgeVariant.SoftDestructive : BadgeVariant.Secondary)">@hit.Severity</BbBadge>
-                                                <BbBadge Variant="BadgeVariant.Outline">@hit.Reading</BbBadge>
+                                                <BbBadge Variant="BadgeVariant.Outline">@PortalWords.TextCategory(hit.Category)</BbBadge>
+                                                <BbBadge Variant="@(hit.Severity == "block" ? BadgeVariant.SoftDestructive : BadgeVariant.Secondary)">@PortalWords.TextSeverity(hit.Severity)</BbBadge>
+                                                <BbBadge Variant="BadgeVariant.Outline">@PortalWords.TextReading(hit.Reading)</BbBadge>
                                             </span>
                                         </div>
                                     }

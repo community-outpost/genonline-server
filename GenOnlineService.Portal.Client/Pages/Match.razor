@@ -65,7 +65,7 @@ else
         }
         @if (match.RosterType.Length > 0)
         {
-            <BbBadge Variant="BadgeVariant.Outline">@match.RosterType</BbBadge>
+            <BbBadge Variant="BadgeVariant.Outline">@PortalWords.RosterType(match.RosterType)</BbBadge>
         }
         <BbBadge Variant="@(match.FinishedAt == null ? BadgeVariant.Secondary : BadgeVariant.Outline)">@(match.FinishedAt == null ? "running" : "finished")</BbBadge>
         <span class="bb:text-xs bb:text-muted-foreground">
@@ -105,7 +105,7 @@ else
                             }
                         </CellTemplate>
                     </BbDataTableColumn>
-                    <BbDataTableColumn TData="PortalMatchSlot" TValue="string" Property="@(s => s.State)" Header="Slot" />
+                    <BbDataTableColumn TData="PortalMatchSlot" TValue="string" Property="@(s => PortalWords.SlotState(s.State))" Header="Slot" />
                     <BbDataTableColumn TData="PortalMatchSlot" TValue="string" Property="@(s => PortalText.Side(s.Side))" Header="Side" />
                     <BbDataTableColumn TData="PortalMatchSlot" TValue="string" Property="@(s => s.Team is int team ? team.ToString() : "none")" Header="Team" />
                     <BbDataTableColumn TData="PortalMatchSlot" TValue="string" Property="@(s => s.Desynced ? "desynced" : s.Won ? "won" : "lost")" Header="Result">
@@ -163,11 +163,11 @@ else
                                 <div class="bb:text-xs">
                                     @if (file.Url != null)
                                     {
-                                        <a href="@file.Url" target="_blank" rel="noopener noreferrer" class="bb:underline go-capitalize">@file.Type</a>
+                                        <a href="@file.Url" target="_blank" rel="noopener noreferrer" class="bb:underline">@PortalWords.FileType(file.Type)</a>
                                     }
                                     else
                                     {
-                                        <span class="bb:text-muted-foreground">@file.Type</span>
+                                        <span class="bb:text-muted-foreground">@PortalWords.FileType(file.Type)</span>
                                     }
                                     <span class="bb:font-mono">@file.Name</span>
                                     @if (file.Status != null && file.Status != "uploaded")

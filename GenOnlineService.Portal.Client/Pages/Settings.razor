@@ -73,7 +73,7 @@ else
                                 string pick = used;
                                 <BbDropdownMenuItem OnClick="@(_ => SetCode(at, pick))">
                                     <span class="go-motd-chip" style="@($"--swatch: {PortalMotd.ParseLine("\\" + pick + "x").Css}")" aria-hidden="true"></span>
-                                    <span class="go-motd-code">@pick</span>
+                                    <span class="go-motd-code" title="@pick">@PortalWords.ColourHex(pick)</span>
                                     @if (pick == code)
                                     {
                                         <LucideIcon Name="check" Class="bb:h-4 bb:w-4 bb:ms-auto" />

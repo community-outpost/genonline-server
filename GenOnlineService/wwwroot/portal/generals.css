@@ -1096,9 +1096,7 @@ table a:hover {
 .go-audit-details {
   display: inline-block;
   max-width: 22rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   vertical-align: bottom;
   color: var(--go-color-text-secondary);
 }

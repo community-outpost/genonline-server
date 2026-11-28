@@ -123,11 +123,11 @@ else
                         </BbDataTableColumn>
                         <BbDataTableColumn TData="PortalAuditEvent" TValue="string" Property="@(e => DetailsOf(e))" Header="Details">
                             <CellTemplate Context="entry">
-                                <span class="go-audit-details bb:font-mono bb:text-xs" title="@DetailsOf(entry)">@DetailsOf(entry)</span>
+                                <span class="go-audit-details bb:text-xs" title="@RawDetailsOf(entry)">@DetailsOf(entry)</span>
                             </CellTemplate>
                         </BbDataTableColumn>
                         <BbDataTableColumn TData="PortalAuditEvent" TValue="string" Property="@(e => e.Reason)" Header="Reason" />
-                        <BbDataTableColumn TData="PortalAuditEvent" TValue="string" Property="@(e => e.Source)" Header="Source" CellClass="bb:text-muted-foreground" />
+                        <BbDataTableColumn TData="PortalAuditEvent" TValue="string" Property="@(e => PortalWords.AuditSource(e.Source))" Header="Source" CellClass="bb:text-muted-foreground" />
                     </Columns>
                     <EmptyTemplate>
                         <BbEmpty Size="EmptySize.Small" Title="Nothing on record" Description="@(m_query.IsFiltered ? "No audit row matches these filters. A player filter needs a whole name, Name#tag or an id." : "The audit log is empty.")">
@@ -260,6 +260,8 @@ else
             return "";
         }
         // a role row lists only what changed: no false flags, nulls or empty lists; other rows show every field
-        return String.Join(", ", details.EnumerateObject().Where(p => entry.TargetKind != "role" || p.Value.ValueKind is not (System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.False) && !(p.Value.ValueKind == System.Text.Json.JsonValueKind.Array && p.Value.GetArrayLength() == 0)).Select(p => p.Name.Replace('_', ' ') + " " + (p.Value.ValueKind == System.Text.Json.JsonValueKind.String ? p.Value.GetString() : p.Value.GetRawText())));
+        return String.Join(", ", PortalWords.AuditDetails(details, (name, value) => entry.TargetKind != "role" || value.ValueKind is not (System.Text.Json.JsonValueKind.Null or System.Text.Json.JsonValueKind.False) && !(value.ValueKind == System.Text.Json.JsonValueKind.Array && value.GetArrayLength() == 0)).Select(d => d.Label + ": " + d.Value));
     }
+
+    private static string RawDetailsOf(PortalAuditEvent entry) => entry.Details is System.Text.Json.JsonElement details && details.ValueKind == System.Text.Json.JsonValueKind.Object ? details.GetRawText() : "";
 }

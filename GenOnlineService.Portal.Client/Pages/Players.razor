@@ -111,7 +111,7 @@
                             }
                             @if (player.State != "active")
                             {
-                                <BbBadge Variant="@PortalBadges.OfPlayerState(player.State)">@player.State</BbBadge>
+                                <BbBadge Variant="@PortalBadges.OfPlayerState(player.State)">@PortalWords.PlayerState(player.State)</BbBadge>
                             }
                             @if (player.Banned)
                             {

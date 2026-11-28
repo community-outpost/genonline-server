@@ -69,7 +69,7 @@ else
                         <BbDataTableColumn TData="PortalAppeal" TValue="string" Property="@(a => a.SanctionType)" Header="Sanction">
                             <CellTemplate Context="row">
                                 <div class="bb:space-y-1">
-                                    <BbBadge Variant="@PortalBadges.OfSanction(row.SanctionLiftedAt == null)">@row.SanctionType</BbBadge>
+                                    <BbBadge Variant="@PortalBadges.OfSanction(row.SanctionLiftedAt == null)">@PortalWords.SanctionType(row.SanctionType)</BbBadge>
                                     <div class="bb:text-xs bb:text-muted-foreground">@(String.IsNullOrEmpty(row.SanctionReason) ? "No reason given" : row.SanctionReason)</div>
                                 </div>
                             </CellTemplate>
@@ -127,7 +127,7 @@ else
             <BbDialogHeader>
                 <BbDialogTitle>Decide the appeal of @m_deciding?.Player.FullName</BbDialogTitle>
                 <BbDialogDescription>
-                    A @m_deciding?.SanctionType@(String.IsNullOrEmpty(m_deciding?.SanctionReason) ? "." : ": " + m_deciding.SanctionReason) The decision is final.
+                    A @PortalWords.SanctionType(m_deciding?.SanctionType)@(String.IsNullOrEmpty(m_deciding?.SanctionReason) ? "." : ": " + m_deciding.SanctionReason) The decision is final.
                 </BbDialogDescription>
             </BbDialogHeader>
             @if (m_deciding != null)
