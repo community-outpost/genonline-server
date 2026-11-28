@@ -34,7 +34,7 @@ else
                         Search
                     </BbButton>
                 </form>
-                <p class="go-filterbar-hint">@HintOf(m_kind). The addresses and countries are those of the sessions of the last 90 days, the devices those seen in the last 90 days, or earlier on an account with an active ban.</p>
+                <p class="go-filterbar-help">The addresses and countries are those of the sessions of the last 90 days, the devices those seen in the last 90 days, or earlier on an account with an active ban.</p>
             </BbCardContent>
         </BbCard>
 
@@ -58,7 +58,7 @@ else
         {
             <BbCard>
                 <BbCardHeader>
-                    <BbCardTitle As="h2">@LabelOf(found.Kind) @if (found.Kind == "country")
+                    <BbCardTitle As="h2" Class="go-title-value"><span>@LabelOf(found.Kind)</span>@if (found.Kind == "country")
                         {
                             <CountryFlag Country="@found.Value" />
                         }<span class="bb:font-mono">@(Key != null ? found.Value[..8] : found.Value)</span></BbCardTitle>

@@ -1156,6 +1156,19 @@ table a:hover {
   color: var(--destructive);
 }
 
+.go-filterbar-help {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.8125rem;
+  color: var(--go-color-text-muted);
+}
+
+.go-title-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .go-cell-player,
 .go-cell-badges,
 .go-cell-players {
