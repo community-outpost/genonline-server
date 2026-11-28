@@ -137,6 +137,10 @@ namespace GenOnlineService.Portal.Client
 
 		public static string ChatLogsOf(string conversation) => ChatLogsPage + "?conversation=" + Uri.EscapeDataString(conversation);
 
+		public static string ChatLogsOfPlayer(long player) => ChatLogsPage + "?player=" + player.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+		public static string PlayerToMute(long id) => PlayerPage(id) + "?action=mute";
+
 		public static string InvestigateOf(string kind, string value) => InvestigatePage + "?kind=" + Uri.EscapeDataString(kind) + "&value=" + Uri.EscapeDataString(value);
 
 		public static string InvestigateDevice(string kind, string key) => InvestigatePage + "?kind=" + Uri.EscapeDataString(kind) + "&key=" + Uri.EscapeDataString(key);

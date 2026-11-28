@@ -85,50 +85,71 @@ else
                     Audit log
                 </BbButton>
             }
+            @if (Session.Can(PortalPermissions.ChatLogs))
+            {
+                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Href="@PortalRoutes.ChatLogsOfPlayer(player.Id)" data-testid="player-chat">
+                    <LucideIcon Name="messages-square" Class="bb:h-4 bb:w-4" />
+                    Chat
+                </BbButton>
+            }
             @if (Session.Can(PortalPermissions.Kick))
             {
-                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("kick"))" Disabled="@(!player.Online)">
+                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("kick"))" Disabled="@(!player.Online)" title="@(player.Online ? null : "Not connected")" data-testid="kick">
                     <LucideIcon Name="log-out" Class="bb:h-4 bb:w-4" />
                     Kick
                 </BbButton>
             }
             @if (Session.Can(PortalPermissions.Mute))
             {
-                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("mute"))">
+                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("mute"))" data-testid="mute">
                     <LucideIcon Name="mic-off" Class="bb:h-4 bb:w-4" />
                     Mute
                 </BbButton>
             }
-            @if (Session.Can(PortalPermissions.Rename))
-            {
-                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("rename"))" Disabled="@(!player.CanRename)">
-                    <LucideIcon Name="pencil" Class="bb:h-4 bb:w-4" />
-                    Rename
-                </BbButton>
-                <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("reset_name"))" Disabled="@(!player.CanRename)" data-testid="reset-name">
-                    <LucideIcon Name="eraser" Class="bb:h-4 bb:w-4" />
-                    Reset name
-                </BbButton>
-            }
-            @if (Session.Can(PortalPermissions.AccountsSupport))
+            @if (Session.Can(PortalPermissions.Rename) || Session.Can(PortalPermissions.AccountsSupport))
             {
                 <BbDropdownMenu>
                     <BbDropdownMenuTrigger>
-                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" data-testid="account-menu">
-                            <LucideIcon Name="key-round" Class="bb:h-4 bb:w-4" />
-                            Account
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" data-testid="more-menu">
+                            More
                             <LucideIcon Name="chevron-down" Class="bb:h-4 bb:w-4" />
                         </BbButton>
                     </BbDropdownMenuTrigger>
                     <BbDropdownMenuContent Align="PopoverAlign.End">
-                        <BbDropdownMenuItem OnClick="@(_ => Open("password_reset"))" data-testid="reset-password">
-                            <LucideIcon Name="key-round" Class="bb:h-4 bb:w-4 bb:me-2" />
-                            Reset password
-                        </BbDropdownMenuItem>
-                        <BbDropdownMenuItem OnClick="@(_ => Open("two_factor_reset"))" data-testid="reset-two-factor">
-                            <LucideIcon Name="shield-off" Class="bb:h-4 bb:w-4 bb:me-2" />
-                            Reset two-factor
-                        </BbDropdownMenuItem>
+                        @if (Session.Can(PortalPermissions.Rename))
+                        {
+                            <BbDropdownMenuItem OnClick="@(_ => Open("rename"))" Disabled="@(!player.CanRename)" title="@(player.CanRename ? null : RenameBlocked)" data-testid="rename">
+                                <LucideIcon Name="pencil" Class="bb:h-4 bb:w-4 bb:me-2" />
+                                Rename
+                                @if (!player.CanRename)
+                                {
+                                    <span class="bb:ms-2 bb:text-xs bb:text-muted-foreground">@RenameBlocked</span>
+                                }
+                            </BbDropdownMenuItem>
+                            <BbDropdownMenuItem OnClick="@(_ => Open("reset_name"))" Disabled="@(!player.CanRename)" title="@(player.CanRename ? null : RenameBlocked)" data-testid="reset-name">
+                                <LucideIcon Name="eraser" Class="bb:h-4 bb:w-4 bb:me-2" />
+                                Reset name
+                                @if (!player.CanRename)
+                                {
+                                    <span class="bb:ms-2 bb:text-xs bb:text-muted-foreground">@RenameBlocked</span>
+                                }
+                            </BbDropdownMenuItem>
+                        }
+                        @if (Session.Can(PortalPermissions.Rename) && Session.Can(PortalPermissions.AccountsSupport))
+                        {
+                            <BbDropdownMenuSeparator />
+                        }
+                        @if (Session.Can(PortalPermissions.AccountsSupport))
+                        {
+                            <BbDropdownMenuItem OnClick="@(_ => Open("password_reset"))" data-testid="reset-password">
+                                <LucideIcon Name="key-round" Class="bb:h-4 bb:w-4 bb:me-2" />
+                                Reset password
+                            </BbDropdownMenuItem>
+                            <BbDropdownMenuItem OnClick="@(_ => Open("two_factor_reset"))" data-testid="reset-two-factor">
+                                <LucideIcon Name="shield-off" Class="bb:h-4 bb:w-4 bb:me-2" />
+                                Reset two-factor
+                            </BbDropdownMenuItem>
+                        }
                     </BbDropdownMenuContent>
                 </BbDropdownMenu>
             }
@@ -1028,6 +1049,11 @@ else
     [SupplyParameterFromQuery(Name = "tab")]
     public string? Tab { get; set; }
 
+    [SupplyParameterFromQuery(Name = "action")]
+    public string? Action { get; set; }
+
+    private const string RenameBlocked = "Name is managed by the sign-in provider";
+
     private static readonly string[] s_tabs = ["activity", "sanctions", "cases", "roles", "matches", "signins", "duplicates", "connections"];
     private string m_tab = "activity";
 
@@ -1094,6 +1120,7 @@ else
         }
         await LoadCasesAsync();
         await LoadConnectionsAsync();
+        OpenFromQuery();
     }
 
     private static List<PortalDevice> Ungrouped(PortalInspection inspection)
@@ -1229,6 +1256,19 @@ else
     private string ReasonNeededText => m_action == "ban"
         ? "Type a reason to confirm the ban. The player sees it, and it is kept on their record and in the audit log."
         : "Type a reason to confirm. It is kept in the audit log.";
+
+    // a chat line links here to mute the sender, the same dialog and reason rules apply
+    private void OpenFromQuery()
+    {
+        if (Action == "mute" && m_player != null && Session.Can(PortalPermissions.Mute))
+        {
+            Open("mute");
+        }
+        if (Action != null)
+        {
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("action", (string?)null), replace: true);
+        }
+    }
 
     private void ShowTab(string tab)
     {

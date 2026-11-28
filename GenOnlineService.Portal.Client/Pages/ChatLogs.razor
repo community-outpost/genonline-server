@@ -115,20 +115,41 @@ else
                                 }
                             </CellTemplate>
                         </BbDataTableColumn>
-                        @if (Session.Can(PortalPermissions.ChatDeleteAny))
-                        {
-                            <BbDataTableColumn TData="PortalChatLogLine" TValue="string" Property="@(l => "")" Header="">
-                                <CellTemplate Context="line">
-                                    @if (!line.Deleted)
-                                    {
-                                        <BbButton Variant="ButtonVariant.Ghost" Size="ButtonSize.Small" OnClick="@(() => m_deleting = line)" data-testid="chat-delete">
-                                            <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4" />
-                                            Delete
+                        <BbDataTableColumn TData="PortalChatLogLine" TValue="string" Property="@(l => "")" Header="Actions">
+                            <CellTemplate Context="line">
+                                <BbDropdownMenu>
+                                    <BbDropdownMenuTrigger>
+                                        <BbButton Variant="ButtonVariant.Ghost" Size="ButtonSize.Small" aria-label="Actions for this line" data-testid="chat-row-menu">
+                                            <LucideIcon Name="ellipsis" Class="bb:h-4 bb:w-4" />
                                         </BbButton>
-                                    }
-                                </CellTemplate>
-                            </BbDataTableColumn>
-                        }
+                                    </BbDropdownMenuTrigger>
+                                    <BbDropdownMenuContent Align="PopoverAlign.End">
+                                        <BbDropdownMenuItem OnClick="@(_ => Navigation.NavigateTo(PortalRoutes.PlayerPage(line.Sender.Id)))" data-testid="chat-open-player">
+                                            <LucideIcon Name="user" Class="bb:h-4 bb:w-4 bb:me-2" />
+                                            Open player
+                                        </BbDropdownMenuItem>
+                                        @if (Session.Can(PortalPermissions.Mute))
+                                        {
+                                            <BbDropdownMenuItem OnClick="@(_ => Navigation.NavigateTo(PortalRoutes.PlayerToMute(line.Sender.Id)))" data-testid="chat-mute">
+                                                <LucideIcon Name="mic-off" Class="bb:h-4 bb:w-4 bb:me-2" />
+                                                Mute
+                                            </BbDropdownMenuItem>
+                                        }
+                                        <BbDropdownMenuItem OnClick="@(_ => Navigation.NavigateTo(PortalRoutes.ChatLogsOf(line.Conversation)))" data-testid="chat-conversation">
+                                            <LucideIcon Name="messages-square" Class="bb:h-4 bb:w-4 bb:me-2" />
+                                            Show conversation
+                                        </BbDropdownMenuItem>
+                                        @if (Session.Can(PortalPermissions.ChatDeleteAny))
+                                        {
+                                            <BbDropdownMenuItem OnClick="@(_ => m_deleting = line)" Disabled="@line.Deleted" title="@(line.Deleted ? "Already deleted" : null)" data-testid="chat-delete">
+                                                <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4 bb:me-2" />
+                                                Delete
+                                            </BbDropdownMenuItem>
+                                        }
+                                    </BbDropdownMenuContent>
+                                </BbDropdownMenu>
+                            </CellTemplate>
+                        </BbDataTableColumn>
                     </Columns>
                     <EmptyTemplate>
                         <BbEmpty Size="EmptySize.Small" Title="Nothing on record" Description="No line matches these filters. Chat is kept 30 days.">
