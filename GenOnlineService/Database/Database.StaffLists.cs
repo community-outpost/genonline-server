@@ -195,11 +195,10 @@ namespace Database
 		private static async Task<HashSet<long>> UnreviewedPlayers(AppDbContext db, long[]? ids, CancellationToken cancellationToken)
 		{
 			IQueryable<long> modules = db.AnticheatModuleReports.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.UserId);
-			IQueryable<long> newAccounts = db.AnticheatNewAccountGames.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.UserId);
 			IQueryable<long> probes = db.AnticheatProbeReports.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.UserId);
 			IQueryable<long> ruleMatches = db.AutomatedRuleMatches.AsNoTracking().Where(m => m.ReviewState == GenOnlineService.Rules.RuleReviewStates.Pending).Select(m => m.UserID);
 			var found = new HashSet<long>();
-			foreach (IQueryable<long> source in new[] { modules, newAccounts, probes, ruleMatches })
+			foreach (IQueryable<long> source in new[] { modules, probes, ruleMatches })
 			{
 				found.UnionWith(await (ids == null ? source : source.Where(id => ids.Contains(id))).Distinct().ToListAsync(cancellationToken));
 			}
@@ -352,10 +351,9 @@ namespace Database
 		private static async Task<HashSet<long>> UnreviewedMatches(AppDbContext db, long[]? ids, CancellationToken cancellationToken)
 		{
 			IQueryable<long> modules = db.AnticheatModuleReports.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.MatchId);
-			IQueryable<long> newAccounts = db.AnticheatNewAccountGames.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.MatchId);
 			IQueryable<long> probes = db.AnticheatProbeReports.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.MatchId);
 			var found = new HashSet<long>();
-			foreach (IQueryable<long> source in new[] { modules, newAccounts, probes })
+			foreach (IQueryable<long> source in new[] { modules, probes })
 			{
 				IQueryable<long> matchIDs = ids == null ? source.Where(id => id != 0) : source.Where(id => ids.Contains(id));
 				found.UnionWith(await matchIDs.Distinct().ToListAsync(cancellationToken));

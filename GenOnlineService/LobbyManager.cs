@@ -1083,7 +1083,7 @@ namespace GenOnlineService
 		public double GetLatitude() { return m_dHostLatitude; }
 		public double GetLongitude() { return m_dHostLongitude; }
 
-		public async Task SetMatchID(UInt64 a_matchID)
+		public Task SetMatchID(UInt64 a_matchID)
 		{
 #if DEBUG
 			MatchID = 123456;
@@ -1104,29 +1104,8 @@ namespace GenOnlineService
 				}
 			}
 
-			// for each member, if this is QM, and they havent played 10 games, flag it for review, its a new user
-			if (LobbyType == ELobbyType.QuickMatch)
-			{
-				foreach (LobbyMember member in Members)
-				{
-					if (member != null)
-					{
-						var shared = GenOnlineService.WebSocketManager.GetSharedDataForUser(member.UserID);
-						if (shared?.GameStats != null)
-						{
-							if (shared.GameStats.EloMatches < 10)
-							{
-								using var scope = ServiceLocator.Services.CreateScope();
-								var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-								await using var db = await factory.CreateDbContextAsync();
-								await Database.AntiCheat.FlagAccountForReview_NewAccount_FirstMatches(db, member.UserID, MatchID);
-							}
-						}
-					}
-				}
-			}
-
 			DirtyRetransmit();
+			return Task.CompletedTask;
 		}
 
 		// NOTE: Do not use Members.Length on a lobby. It will include empty slots. Use NumCurrentPlayers instead
@@ -1189,10 +1168,10 @@ namespace GenOnlineService
 			MarkLiveDirty();
 		}
 
-		// players already kept for staff review for a refused quick match request in this lobby, so a repeat costs no database write
-		private readonly ConcurrentDictionary<Int64, byte> m_QuickMatchRuleReports = new();
+		// player and request pairs already kept for staff review in this lobby, so a repeat costs no database write
+		private readonly ConcurrentDictionary<(Int64 UserID, string Request), byte> m_IllegalRequestReports = new();
 
-		internal bool TryMarkQuickMatchRuleReported(Int64 userID) => m_QuickMatchRuleReports.TryAdd(userID, 0);
+		internal bool TryMarkIllegalRequestReported(Int64 userID, string request) => m_IllegalRequestReports.TryAdd((userID, request), 0);
 
 		public UInt32 ExeCRC { get; private set; } = 0;
 		public UInt32 IniCRC { get; private set; } = 0;

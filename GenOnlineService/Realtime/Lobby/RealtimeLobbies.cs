@@ -56,19 +56,55 @@ namespace GenOnlineService.Realtime
 		public static Failure? RefuseQuickMatchPassword(Lobby lobby) =>
 			lobby.LobbyType == ELobbyType.QuickMatch ? Result.Fail(ErrorCodes.LobbyNotHost) : null;
 
-		public static AnticheatQuickMatchReport QuickMatchRuleReportOf(Lobby lobby, Int64 userID, string method, IEnumerable<int?> sides, DateTime now)
+		public static string RequestStateOf(Lobby lobby) => lobby.State + (lobby.LobbyType == ELobbyType.QuickMatch ? ", quick match" : ", custom game");
+
+		public static AnticheatIllegalRequest IllegalRequestOf(Lobby lobby, Int64 userID, string request, string detail, DateTime now)
 		{
-			string sideList = String.Join(",", sides.OfType<int>().Select(side => side.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-			return new AnticheatQuickMatchReport
+			static string Clamp(string text, int max) => text.Length > max ? text[..max] : text;
+			return new AnticheatIllegalRequest
 			{
 				UserId = userID,
 				MatchId = (Int64)lobby.MatchID,
 				LobbyId = lobby.LobbyID,
-				PlaylistId = lobby.PlaylistID,
-				Method = method.Length > AnticheatQuickMatchReportConfiguration.MethodMaxLength ? method[..AnticheatQuickMatchReportConfiguration.MethodMaxLength] : method,
-				Sides = sideList.Length > AnticheatQuickMatchReportConfiguration.SidesMaxLength ? sideList[..AnticheatQuickMatchReportConfiguration.SidesMaxLength] : sideList,
+				Request = Clamp(request, AnticheatIllegalRequestConfiguration.RequestMaxLength),
+				Detail = Clamp(detail, AnticheatIllegalRequestConfiguration.DetailMaxLength),
+				State = Clamp(RequestStateOf(lobby), AnticheatIllegalRequestConfiguration.StateMaxLength),
 				CreatedAt = now
 			};
+		}
+
+		public static string DescribeEdit(UpdateLobbyRequest request)
+		{
+			List<string> parts = [];
+			if (request.Map != null) parts.Add("map");
+			if (request.Name != null) parts.Add("name");
+			if (request.Visibility != null) parts.Add("visibility");
+			if (request.Settings?.StartingCash != null) parts.Add("starting cash");
+			if (request.Settings?.LimitSuperweapons != null) parts.Add("superweapon limit");
+			if (request.Settings?.MaxCameraHeight != null) parts.Add("camera height");
+			if (request.Settings?.VanillaTeams != null) parts.Add("vanilla teams");
+			if (request.Settings?.AllowObservers != null) parts.Add("observers");
+			return "lobby edit: " + String.Join(", ", parts);
+		}
+
+		public static string DescribeEdit(UpdateMySlotRequest request)
+		{
+			List<string> parts = [];
+			if (request.Side is int side) parts.Add("side " + side);
+			if (request.Color is int color) parts.Add("color " + color);
+			if (request.Team.HasValue) parts.Add("team " + (request.Team.Value ?? -1));
+			if (request.StartPosition is int startPosition) parts.Add("start position " + startPosition);
+			return "own slot: " + String.Join(", ", parts);
+		}
+
+		public static string DescribeEdit(UpdateSlotsRequest request)
+		{
+			List<string> parts = [];
+			if (request.Slots.Any(patch => patch.Side != null)) parts.Add("side");
+			if (request.Slots.Any(patch => patch.Color != null)) parts.Add("color");
+			if (request.Slots.Any(patch => patch.Team.HasValue)) parts.Add("team");
+			if (request.Slots.Any(patch => patch.StartPosition != null)) parts.Add("start position");
+			return "slot edit of " + request.Slots.Count + " slots: " + String.Join(", ", parts);
 		}
 
 		public static SlotState SlotStateOf(EPlayerType type) => type switch

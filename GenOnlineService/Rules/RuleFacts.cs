@@ -125,10 +125,9 @@ namespace GenOnlineService.Rules
 			int count = kind switch
 			{
 				AntiCheatReviewKinds.Modules => await m_db.AnticheatModuleReports.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null),
-				AntiCheatReviewKinds.NewAccounts => await m_db.AnticheatNewAccountGames.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null),
 				AntiCheatReviewKinds.Probes => await m_db.AnticheatProbeReports.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null && r.MatchId != 0),
 				AntiCheatReviewKinds.Devices => await m_db.AnticheatProbeReports.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null && r.MatchId == 0),
-				AntiCheatReviewKinds.QuickMatchRules => await m_db.AnticheatQuickMatchReports.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null),
+				AntiCheatReviewKinds.IllegalRequests => await m_db.AnticheatIllegalRequests.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null),
 				_ => 0
 			};
 			return [(double)count];

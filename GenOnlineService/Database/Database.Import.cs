@@ -254,7 +254,7 @@ namespace Database
 		private static readonly string[] IdentityTables =
 		{
 			"users", "user_username_history", "identities", "sanctions", "audit_log", "devices", "machines", "session_events",
-			"anticheat_module_reports", "anticheat_new_account_games", "anticheat_probe_reports"
+			"anticheat_module_reports", "anticheat_probe_reports"
 		};
 
 		private static string IdentityColumn(string table) => table.StartsWith("anticheat_", StringComparison.Ordinal) ? "report_id" : "id";
@@ -1163,17 +1163,6 @@ namespace Database
 					_writer?.MaybeFlush();
 				}
 
-				var games = Line("ac_reviews_new_account_games", "anticheat_new_account_games");
-				await foreach (var r in Rows(_source, "SELECT report_id, user_id, match_id FROM ac_reviews_new_account_games ORDER BY report_id"))
-				{
-					games.Source++;
-					if (!ValidReport(games, r, "ac_reviews_new_account_games", out long id, out long userId, out long matchId))
-						continue;
-
-					Write(games, new AnticheatNewAccountGame { ReportId = id, UserId = userId, MatchId = matchId });
-					_writer?.MaybeFlush();
-				}
-
 				var probes = Line("ac_reviews_probes", "anticheat_probe_reports");
 				await foreach (var r in Rows(_source, "SELECT report_id, user_id, match_id, reason FROM ac_reviews_probes ORDER BY report_id"))
 				{
@@ -1629,7 +1618,6 @@ namespace Database
 			["leaderboard_monthly"] = new[] { "user_id", "month_of_year", "year", "points", "wins", "losses" },
 			["leaderboard_yearly"] = new[] { "user_id", "year", "points", "wins", "losses" },
 			["ac_reviews_modules"] = new[] { "report_id", "user_id", "match_id", "module_name", "module_path", "module_size" },
-			["ac_reviews_new_account_games"] = new[] { "report_id", "user_id", "match_id" },
 			["ac_reviews_probes"] = new[] { "report_id", "user_id", "match_id", "reason" }
 		};
 

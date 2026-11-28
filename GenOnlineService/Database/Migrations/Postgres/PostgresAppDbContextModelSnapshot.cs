@@ -21,6 +21,79 @@ namespace GenOnlineService.Migrations.Postgres
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AnticheatIllegalRequest", b =>
+                {
+                    b.Property<long>("ReportId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("report_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ReportId"));
+
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Detail")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("detail");
+
+                    b.Property<long>("LobbyId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("lobby_id");
+
+                    b.Property<long>("MatchId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("match_id");
+
+                    b.Property<string>("Request")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("request");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<long?>("ReviewedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("state");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("ReportId");
+
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_anticheat_illegal_requests_case");
+
+                    b.HasIndex("ReviewedAt")
+                        .HasDatabaseName("ix_anticheat_illegal_requests_reviewed_at");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("ix_anticheat_illegal_requests_user_created");
+
+                    b.HasIndex("UserId", "LobbyId", "Request")
+                        .IsUnique()
+                        .HasDatabaseName("ux_anticheat_illegal_requests_user_lobby_request");
+
+                    b.ToTable("anticheat_illegal_requests", (string)null);
+                });
+
             modelBuilder.Entity("AnticheatModuleReport", b =>
                 {
                     b.Property<long>("ReportId")
@@ -85,50 +158,6 @@ namespace GenOnlineService.Migrations.Postgres
                     b.ToTable("anticheat_module_reports", (string)null);
                 });
 
-            modelBuilder.Entity("AnticheatNewAccountGame", b =>
-                {
-                    b.Property<long>("ReportId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("report_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ReportId"));
-
-                    b.Property<long?>("CaseID")
-                        .HasColumnType("bigint")
-                        .HasColumnName("case_id");
-
-                    b.Property<DateTime?>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<long>("MatchId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("match_id");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.Property<long?>("ReviewedBy")
-                        .HasColumnType("bigint")
-                        .HasColumnName("reviewed_by");
-
-                    b.Property<long>("UserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("ReportId");
-
-                    b.HasIndex("CaseID")
-                        .HasDatabaseName("ix_anticheat_new_account_games_case");
-
-                    b.HasIndex("ReviewedAt")
-                        .HasDatabaseName("ix_anticheat_new_account_games_reviewed_at");
-
-                    b.ToTable("anticheat_new_account_games", (string)null);
-                });
-
             modelBuilder.Entity("AnticheatProbeReport", b =>
                 {
                     b.Property<long>("ReportId")
@@ -177,74 +206,6 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasDatabaseName("ix_anticheat_probe_reports_reviewed_at");
 
                     b.ToTable("anticheat_probe_reports", (string)null);
-                });
-
-            modelBuilder.Entity("AnticheatQuickMatchReport", b =>
-                {
-                    b.Property<long>("ReportId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("report_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ReportId"));
-
-                    b.Property<long?>("CaseID")
-                        .HasColumnType("bigint")
-                        .HasColumnName("case_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<long>("LobbyId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("lobby_id");
-
-                    b.Property<long>("MatchId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("match_id");
-
-                    b.Property<string>("Method")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("method");
-
-                    b.Property<int>("PlaylistId")
-                        .HasColumnType("integer")
-                        .HasColumnName("playlist_id");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.Property<long?>("ReviewedBy")
-                        .HasColumnType("bigint")
-                        .HasColumnName("reviewed_by");
-
-                    b.Property<string>("Sides")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("sides");
-
-                    b.Property<long>("UserId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("ReportId");
-
-                    b.HasIndex("CaseID")
-                        .HasDatabaseName("ix_anticheat_quickmatch_reports_case");
-
-                    b.HasIndex("ReviewedAt")
-                        .HasDatabaseName("ix_anticheat_quickmatch_reports_reviewed_at");
-
-                    b.HasIndex("UserId", "LobbyId")
-                        .IsUnique()
-                        .HasDatabaseName("ux_anticheat_quickmatch_reports_user_lobby");
-
-                    b.ToTable("anticheat_quickmatch_reports", (string)null);
                 });
 
             modelBuilder.Entity("ApiToken", b =>

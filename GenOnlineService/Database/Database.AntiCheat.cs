@@ -155,20 +155,6 @@ internal static class AntiCheatModuleAllowList
 	internal static bool IsAllowedByDefault(string moduleFilename, string modulePath) => IsAllowed(moduleFilename, modulePath, null);
 }
 
-public class AnticheatNewAccountGame
-{
-	public Int64 ReportId { get; set; }
-	public Int64 UserId { get; set; }
-	public Int64 MatchId { get; set; }
-	// null for rows stored before the column existed; the lists then show the match start
-	public DateTime? CreatedAt { get; set; }
-	public DateTime? ReviewedAt { get; set; }
-	public Int64? ReviewedBy { get; set; }
-
-	// null while waiting and for rows reviewed before cases existed
-	public Int64? CaseID { get; set; }
-}
-
 public class AnticheatProbeReport
 {
 	public Int64 ReportId { get; set; }
@@ -184,17 +170,23 @@ public class AnticheatProbeReport
 	public Int64? CaseID { get; set; }
 }
 
-public class AnticheatQuickMatchReport
+public class AnticheatIllegalRequest
 {
 	public Int64 ReportId { get; set; }
 	public Int64 UserId { get; set; }
+
+	// 0 when the lobby had no match yet
 	public Int64 MatchId { get; set; }
 	public Int64 LobbyId { get; set; }
-	public int PlaylistId { get; set; }
 
-	public string Method { get; set; } = null!;
+	// the hub method that was refused
+	public string Request { get; set; } = null!;
 
-	public string Sides { get; set; } = null!;
+	// what was attempted, built from fixed words and game numbers, never from free player text
+	public string Detail { get; set; } = null!;
+
+	// the lobby state and whether the lobby is a quick match
+	public string State { get; set; } = null!;
 	public DateTime CreatedAt { get; set; }
 	public DateTime? ReviewedAt { get; set; }
 	public Int64? ReviewedBy { get; set; }
@@ -205,16 +197,15 @@ public class AnticheatQuickMatchReport
 
 public static class AntiCheatReviewKinds
 {
-	public const string NewAccounts = "new_accounts";
 	public const string Modules = "modules";
 
 	public const string Probes = "probes";
 
 	public const string Devices = "devices";
 
-	public const string QuickMatchRules = "quickmatch_rules";
+	public const string IllegalRequests = "illegal_requests";
 
-	public static readonly IReadOnlyList<string> All = [NewAccounts, Modules, Probes, Devices, QuickMatchRules];
+	public static readonly IReadOnlyList<string> All = [Modules, Probes, Devices, IllegalRequests];
 
 	public static bool IsKnown(string? kind) => kind != null && All.Contains(kind);
 }
@@ -264,33 +255,6 @@ public class AnticheatModuleReportConfiguration : IEntityTypeConfiguration<Antic
 	}
 }
 
-public class AnticheatNewAccountGameConfiguration : IEntityTypeConfiguration<AnticheatNewAccountGame>
-{
-	public void Configure(EntityTypeBuilder<AnticheatNewAccountGame> entity)
-	{
-		entity.ToTable("anticheat_new_account_games");
-
-		entity.HasKey(e => e.ReportId);
-
-		entity.Property(e => e.ReportId)
-			.HasColumnName("report_id")
-			.ValueGeneratedOnAdd();
-
-		entity.Property(e => e.UserId)
-			.HasColumnName("user_id");
-
-		entity.Property(e => e.MatchId)
-			.HasColumnName("match_id");
-
-		entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
-		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
-		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_new_account_games_reviewed_at");
-		entity.Property(e => e.CaseID).HasColumnName("case_id");
-		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_new_account_games_case");
-	}
-}
-
 public class AnticheatProbeReportConfiguration : IEntityTypeConfiguration<AnticheatProbeReport>
 {
 	public void Configure(EntityTypeBuilder<AnticheatProbeReport> entity)
@@ -323,14 +287,15 @@ public class AnticheatProbeReportConfiguration : IEntityTypeConfiguration<Antich
 	}
 }
 
-public class AnticheatQuickMatchReportConfiguration : IEntityTypeConfiguration<AnticheatQuickMatchReport>
+public class AnticheatIllegalRequestConfiguration : IEntityTypeConfiguration<AnticheatIllegalRequest>
 {
-	public const int MethodMaxLength = 32;
-	public const int SidesMaxLength = 128;
+	public const int RequestMaxLength = 32;
+	public const int DetailMaxLength = 200;
+	public const int StateMaxLength = 64;
 
-	public void Configure(EntityTypeBuilder<AnticheatQuickMatchReport> entity)
+	public void Configure(EntityTypeBuilder<AnticheatIllegalRequest> entity)
 	{
-		entity.ToTable("anticheat_quickmatch_reports");
+		entity.ToTable("anticheat_illegal_requests");
 
 		entity.HasKey(e => e.ReportId);
 
@@ -341,29 +306,34 @@ public class AnticheatQuickMatchReportConfiguration : IEntityTypeConfiguration<A
 		entity.Property(e => e.UserId).HasColumnName("user_id");
 		entity.Property(e => e.MatchId).HasColumnName("match_id");
 		entity.Property(e => e.LobbyId).HasColumnName("lobby_id");
-		entity.Property(e => e.PlaylistId).HasColumnName("playlist_id");
 
-		entity.Property(e => e.Method)
-			.HasColumnName("method")
-			.HasMaxLength(MethodMaxLength)
+		entity.Property(e => e.Request)
+			.HasColumnName("request")
+			.HasMaxLength(RequestMaxLength)
 			.IsRequired();
 
-		entity.Property(e => e.Sides)
-			.HasColumnName("sides")
-			.HasMaxLength(SidesMaxLength)
+		entity.Property(e => e.Detail)
+			.HasColumnName("detail")
+			.HasMaxLength(DetailMaxLength)
+			.IsRequired();
+
+		entity.Property(e => e.State)
+			.HasColumnName("state")
+			.HasMaxLength(StateMaxLength)
 			.IsRequired();
 
 		entity.Property(e => e.CreatedAt).HasColumnName("created_at");
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
-		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_quickmatch_reports_reviewed_at");
+		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_illegal_requests_reviewed_at");
 		entity.Property(e => e.CaseID).HasColumnName("case_id");
-		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_quickmatch_reports_case");
+		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_illegal_requests_case");
+		entity.HasIndex(e => new { e.UserId, e.CreatedAt }).HasDatabaseName("ix_anticheat_illegal_requests_user_created");
 
-		// one row per player and lobby, so a client that repeats the request does not flood the list
-		entity.HasIndex(e => new { e.UserId, e.LobbyId })
+		// one row per player, lobby and request, so a client that repeats the request does not flood the list
+		entity.HasIndex(e => new { e.UserId, e.LobbyId, e.Request })
 			.IsUnique()
-			.HasDatabaseName("ux_anticheat_quickmatch_reports_user_lobby");
+			.HasDatabaseName("ux_anticheat_illegal_requests_user_lobby_request");
 	}
 }
 
@@ -382,9 +352,9 @@ namespace Database
 		public string? Reason { get; init; }
 
 		public Int64? LobbyID { get; init; }
-		public int? PlaylistID { get; init; }
-		public string? Method { get; init; }
-		public string? Sides { get; init; }
+		public string? Request { get; init; }
+		public string? Detail { get; init; }
+		public string? State { get; init; }
 
 		// null for a row stored before the other kinds kept the time
 		public DateTime? ReportedAt { get; init; }
@@ -400,17 +370,13 @@ namespace Database
 		{
 			return kind switch
 			{
-				AntiCheatReviewKinds.NewAccounts => db.AnticheatNewAccountGames.AsNoTracking().Select(r => new AntiCheatReviewRow
-				{
-					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
-				}),
 				AntiCheatReviewKinds.Modules => db.AnticheatModuleReports.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
 					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				}),
-				AntiCheatReviewKinds.QuickMatchRules => db.AnticheatQuickMatchReports.AsNoTracking().Select(r => new AntiCheatReviewRow
+				AntiCheatReviewKinds.IllegalRequests => db.AnticheatIllegalRequests.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
-					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, LobbyID = r.LobbyId, PlaylistID = r.PlaylistId, Method = r.Method, Sides = r.Sides,
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, LobbyID = r.LobbyId, Request = r.Request, Detail = r.Detail, State = r.State,
 					ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				}),
 				_ => Probes(db, kind).AsNoTracking().Select(r => new AntiCheatReviewRow
@@ -432,13 +398,10 @@ namespace Database
 		{
 			return kind switch
 			{
-				AntiCheatReviewKinds.NewAccounts => await db.AnticheatNewAccountGames
-					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
-					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
 				AntiCheatReviewKinds.Modules => await db.AnticheatModuleReports
 					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
 					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
-				AntiCheatReviewKinds.QuickMatchRules => await db.AnticheatQuickMatchReports
+				AntiCheatReviewKinds.IllegalRequests => await db.AnticheatIllegalRequests
 					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
 					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
 				AntiCheatReviewKinds.Probes or AntiCheatReviewKinds.Devices => await Probes(db, kind)
@@ -578,14 +541,14 @@ namespace Database
 
 
 		// false on a real database error; true when stored or already there
-		public static async Task<bool> FlagAccountForReview_QuickMatchRules(AppDbContext db, AnticheatQuickMatchReport report)
+		public static async Task<bool> FlagAccountForReview_IllegalRequest(AppDbContext db, AnticheatIllegalRequest report)
 		{
 			try
 			{
-				db.AnticheatQuickMatchReports.Add(report);
+				db.AnticheatIllegalRequests.Add(report);
 				await db.SaveChangesAsync();
-				AppMetrics.RecordSecurityAction("anticheat_quickmatch_review", "success");
-				RaiseReport(report.UserId, report.MatchId, AntiCheatReviewKinds.QuickMatchRules);
+				AppMetrics.RecordSecurityAction("anticheat_illegal_request_review", "success");
+				RaiseReport(report.UserId, report.MatchId, AntiCheatReviewKinds.IllegalRequests);
 				return true;
 			}
 			catch (Exception ex)
@@ -595,34 +558,9 @@ namespace Database
 					return true;
 				}
 
-				AppMetrics.RecordSecurityAction("anticheat_quickmatch_review", "error");
-				s_log.LogError(ex, "FlagAccountForReview_QuickMatchRules failed");
+				AppMetrics.RecordSecurityAction("anticheat_illegal_request_review", "error");
+				s_log.LogError(ex, "FlagAccountForReview_IllegalRequest failed");
 				return false;
-			}
-		}
-
-		public static async Task FlagAccountForReview_NewAccount_FirstMatches(
-	AppDbContext db,
-	Int64 userId,
-	ulong matchId)
-		{
-			try
-			{
-				db.AnticheatNewAccountGames.Add(new AnticheatNewAccountGame
-				{
-					UserId = userId,
-					MatchId = (long)matchId,
-					CreatedAt = TruncateToMicroseconds(DateTime.UtcNow)
-				});
-
-				await db.SaveChangesAsync();
-				AppMetrics.RecordSecurityAction("anticheat_new_account_review", "success");
-				RaiseReport(userId, (long)matchId, AntiCheatReviewKinds.NewAccounts);
-			}
-			catch (Exception ex)
-			{
-				AppMetrics.RecordSecurityAction("anticheat_new_account_review", "error");
-				s_log.LogError(ex, "FlagAccountForReview_NewAccount_FirstMatches failed");
 			}
 		}
 

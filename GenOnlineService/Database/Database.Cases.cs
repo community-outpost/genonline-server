@@ -108,9 +108,9 @@ namespace Database
 		public string? ModulePath { get; init; }
 		public Int64? ModuleSize { get; init; }
 		public string? Reason { get; init; }
-		public int? PlaylistID { get; init; }
-		public string? Method { get; init; }
-		public string? Sides { get; init; }
+		public string? Request { get; init; }
+		public string? Detail { get; init; }
+		public string? State { get; init; }
 
 		public PlayerReport? Report { get; init; }
 
@@ -206,7 +206,7 @@ namespace Database
 				signals.AddRange((await rows.ToListAsync(cancellationToken)).Select(r => new CaseSignalRow
 				{
 					Kind = kind, ID = r.ReportID, UserID = r.UserID, MatchID = r.MatchID > 0 ? r.MatchID : null, LobbyID = r.LobbyID, At = r.ReportedAt,
-					ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, Reason = r.Reason, PlaylistID = r.PlaylistID, Method = r.Method, Sides = r.Sides
+					ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, Reason = r.Reason, Request = r.Request, Detail = r.Detail, State = r.State
 				}));
 			}
 			if (kinds.Contains(CaseSignalKinds.RuleMatch))

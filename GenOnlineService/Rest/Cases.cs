@@ -128,11 +128,11 @@ namespace GenOnlineService.Rest
 		public long? ModuleSize { get; init; }
 
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-		public int? PlaylistId { get; init; }
+		public string? Request { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-		public string? Method { get; init; }
+		public string? Detail { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-		public IReadOnlyList<int>? Sides { get; init; }
+		public string? State { get; init; }
 
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public long? RuleId { get; init; }
@@ -219,8 +219,7 @@ namespace GenOnlineService.Rest
 			[AntiCheatReviewKinds.Modules] = 50,
 			[AntiCheatReviewKinds.Probes] = 40,
 			[AntiCheatReviewKinds.Devices] = 30,
-			[AntiCheatReviewKinds.QuickMatchRules] = 30,
-			[AntiCheatReviewKinds.NewAccounts] = 5,
+			[AntiCheatReviewKinds.IllegalRequests] = 30,
 			[CaseSignalKinds.RuleMatch] = 20,
 			[CaseSignalKinds.Report] = 10
 		};
@@ -398,10 +397,9 @@ namespace GenOnlineService.Rest
 				ModuleName = row.ModuleName,
 				ModulePath = row.ModulePath,
 				ModuleSize = row.ModuleSize,
-				PlaylistId = row.PlaylistID,
-				Method = row.Method,
-				Sides = row.Sides?.Split(',', StringSplitOptions.RemoveEmptyEntries)
-					.Select(text => int.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int side) ? (int?)side : null).OfType<int>().ToArray()
+				Request = row.Request,
+				Detail = row.Detail,
+				State = row.State
 			};
 		}
 

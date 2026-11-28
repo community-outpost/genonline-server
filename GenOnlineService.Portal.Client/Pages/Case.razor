@@ -194,15 +194,12 @@ else
                                     <dt>Size</dt><dd>@PortalText.Bytes(signal.ModuleSize)</dd>
                                 </dl>
                                 break;
-                            case "quickmatch_rules":
+                            case "illegal_requests":
                                 <dl class="go-case-facts">
-                                    <dt>Asked for</dt><dd>@signal.Method</dd>
-                                    <dt>Sides</dt><dd>@signal.SideList</dd>
-                                    <dt>Playlist</dt><dd>@signal.PlaylistId</dd>
+                                    <dt>Request</dt><dd>@signal.Request</dd>
+                                    <dt>Attempted</dt><dd>@signal.Detail</dd>
+                                    <dt>State</dt><dd>@signal.State</dd>
                                 </dl>
-                                break;
-                            case "new_accounts":
-                                <p class="bb:text-sm">A new account played a quick match game. Check the match for play that looks like a returning cheater.</p>
                                 break;
                             case PortalCaseKinds.RuleMatch:
                                 <div class="bb:space-y-2">

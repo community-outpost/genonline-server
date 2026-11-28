@@ -301,11 +301,12 @@ namespace GenOnlineService.Realtime
 			if (request.Visibility is LobbyVisibility visibility && !Enum.IsDefined(visibility)) return Invalid("visibility");
 			if (request.Name != null && LobbyNameFailure(request.Name) is Failure badName) return Task.FromResult<Result<Empty>>(badName);
 
-			return ChangeLobbyAsync(hostOnly: true, resetsReady: ChangesGameTerms(request), async (lobby, member) =>
+			string detail = RealtimeLobbies.DescribeEdit(request);
+			return ChangeLobbyAsync(nameof(UpdateLobby), detail, hostOnly: true, resetsReady: ChangesGameTerms(request), async (lobby, member) =>
 			{
 				if (RealtimeLobbies.RefuseQuickMatchSettings(lobby, request) is Failure locked)
 				{
-					await ReportQuickMatchRuleAsync(lobby, nameof(UpdateLobby), []);
+					await ReportIllegalRequestAsync(lobby, nameof(UpdateLobby), detail);
 					return locked;
 				}
 				if (request.Map != null || request.Settings?.StartingCash != null || request.Settings?.LimitSuperweapons != null)
@@ -363,11 +364,13 @@ namespace GenOnlineService.Realtime
 			if (request.Password != null && !IsValidText(request.Password, LobbyPasswordMaxLength)) return Invalid("password");
 
 			// a password is no game term, so it keeps the ready flags and a pending start
-			return ChangeLobbyAsync(hostOnly: true, resetsReady: false, (lobby, member) =>
+			string detail = request.Password == null ? "remove password" : "set password";
+			return ChangeLobbyAsync(nameof(SetLobbyPassword), detail, hostOnly: true, resetsReady: false, async (lobby, member) =>
 			{
 				if (RealtimeLobbies.RefuseQuickMatchPassword(lobby) is Failure locked)
 				{
-					return Task.FromResult<Failure?>(locked);
+					await ReportIllegalRequestAsync(lobby, nameof(SetLobbyPassword), detail);
+					return locked;
 				}
 				if (request.Password == null)
 				{
@@ -378,7 +381,7 @@ namespace GenOnlineService.Realtime
 					lobby.AddPassword(request.Password);
 				}
 				lobby.DirtyRetransmit();
-				return Task.FromResult<Failure?>(null);
+				return null;
 			});
 		}
 
@@ -391,11 +394,12 @@ namespace GenOnlineService.Realtime
 			if (SlotFieldFailure(request.Side, request.Color, request.Team, request.StartPosition, "") is Failure badSlot) return Task.FromResult<Result<Empty>>(badSlot);
 
 			bool changes = request.Side != null || request.Color != null || request.StartPosition != null || request.Team.HasValue;
-			return ChangeLobbyAsync(hostOnly: false, resetsReady: changes, async (lobby, member) =>
+			string detail = RealtimeLobbies.DescribeEdit(request);
+			return ChangeLobbyAsync(nameof(UpdateMySlot), detail, hostOnly: false, resetsReady: changes, async (lobby, member) =>
 			{
 				if (RealtimeLobbies.RefuseArmySelection(lobby, [request.Side]) is Failure locked)
 				{
-					await ReportQuickMatchRuleAsync(lobby, nameof(UpdateMySlot), [request.Side]);
+					await ReportIllegalRequestAsync(lobby, nameof(UpdateMySlot), detail);
 					return locked;
 				}
 				// the observer seat follows the host's setting, as in the original game
@@ -438,7 +442,7 @@ namespace GenOnlineService.Realtime
 			{
 				return Task.FromResult<Result<Empty>>(moving);
 			}
-			return ChangeLobbyAsync(hostOnly: false, resetsReady: false, (lobby, member) =>
+			return ChangeLobbyAsync(nameof(SetHasMap), "map ownership", hostOnly: false, resetsReady: false, (lobby, member) =>
 			{
 				member.UpdateHasMap(request.HasMap);
 				return Task.FromResult<Failure?>(null);
@@ -451,7 +455,7 @@ namespace GenOnlineService.Realtime
 			{
 				return Task.FromResult<Result<Empty>>(moving);
 			}
-			return ChangeLobbyAsync(hostOnly: false, resetsReady: false, (lobby, member) =>
+			return ChangeLobbyAsync(nameof(SetReady), "ready flag", hostOnly: false, resetsReady: false, (lobby, member) =>
 			{
 				member.SetReadyState(request.Ready);
 				return Task.FromResult<Failure?>(null);
@@ -467,7 +471,7 @@ namespace GenOnlineService.Realtime
 			if (request.Index < 0 || request.Index >= Lobby.MaxLobbySize) return Invalid("index");
 			if (!Enum.IsDefined(request.State) || request.State == SlotState.Player) return Invalid("state");
 
-			return ChangeLobbyAsync(hostOnly: true, resetsReady: true, (lobby, member) =>
+			return ChangeLobbyAsync(nameof(SetSlotState), "slot " + request.Index + " to " + request.State, hostOnly: true, resetsReady: true, (lobby, member) =>
 			{
 				// human slots are left alone, kicking is how a host removes a player
 				LobbyMember? target = lobby.GetMemberFromSlot(request.Index);
@@ -493,12 +497,13 @@ namespace GenOnlineService.Realtime
 				if (SlotFieldFailure(patch.Side, patch.Color, patch.Team, patch.StartPosition, "slots.") is Failure badSlot) return Task.FromResult<Result<Empty>>(badSlot);
 			}
 
-			return ChangeLobbyAsync(hostOnly: true, resetsReady: request.Slots.Count > 0, async (lobby, member) =>
+			string detail = RealtimeLobbies.DescribeEdit(request);
+			return ChangeLobbyAsync(nameof(UpdateSlots), detail, hostOnly: true, resetsReady: request.Slots.Count > 0, async (lobby, member) =>
 			{
 				// sides and observer seats are checked for every slot first, so a refused patch changes nothing
 				if (RealtimeLobbies.RefuseArmySelection(lobby, request.Slots.Select(patch => patch.Side)) is Failure locked)
 				{
-					await ReportQuickMatchRuleAsync(lobby, nameof(UpdateSlots), request.Slots.Select(patch => patch.Side));
+					await ReportIllegalRequestAsync(lobby, nameof(UpdateSlots), detail);
 					return locked;
 				}
 				foreach (SlotPatch patch in request.Slots.Where(p => p.Side == ClientFeatures.ObserverSide))
@@ -634,7 +639,7 @@ namespace GenOnlineService.Realtime
 			{
 				return Task.FromResult<Result<Empty>>(moving);
 			}
-			return ChangeLobbyAsync(hostOnly: true, resetsReady: false, (lobby, member) =>
+			return ChangeLobbyAsync(nameof(ForceReady), "force ready", hostOnly: true, resetsReady: false, (lobby, member) =>
 			{
 				lobby.ForceReady();
 				return Task.FromResult<Failure?>(null);
@@ -661,11 +666,16 @@ namespace GenOnlineService.Realtime
 			// the matchmaker starts quick match lobbies
 			if (lobby.LobbyType == ELobbyType.QuickMatch)
 			{
+				await ReportIllegalRequestAsync(lobby, nameof(StartGame), "start");
 				return Result.Fail(ErrorCodes.LobbyAlreadyStarted);
 			}
 
 			// the mesh check and countdown run after this answer, a failed mesh check arrives as CountdownCancelled
 			(Lobby.EStartResult started, IReadOnlyList<Int64> missing) = await lobby.BeginStartAsync(UserID);
+			if (started is Lobby.EStartResult.NotHost or Lobby.EStartResult.AlreadyStarted)
+			{
+				await ReportIllegalRequestAsync(lobby, nameof(StartGame), "start");
+			}
 			return started switch
 			{
 				Lobby.EStartResult.Begun => Result.Success(),
@@ -813,11 +823,13 @@ namespace GenOnlineService.Realtime
 			// the matchmaker runs the mesh check of quick match lobbies
 			if (lobby.LobbyType == ELobbyType.QuickMatch || lobby.Owner != UserID)
 			{
+				await ReportIllegalRequestAsync(lobby, nameof(BeginMeshCheck), "mesh check");
 				return Result.Fail(ErrorCodes.LobbyNotHost);
 			}
 
 			if (lobby.State != ELobbyState.GAME_SETUP)
 			{
+				await ReportIllegalRequestAsync(lobby, nameof(BeginMeshCheck), "mesh check");
 				return Result.Fail(ErrorCodes.LobbyNotInSetup);
 			}
 
@@ -945,7 +957,7 @@ namespace GenOnlineService.Realtime
 			return lobby != null && source != null && target != null;
 		}
 
-		private async Task<Result<Empty>> ChangeLobbyAsync(bool hostOnly, bool resetsReady, Func<Lobby, LobbyMember, Task<Failure?>> change)
+		private async Task<Result<Empty>> ChangeLobbyAsync(string request, string detail, bool hostOnly, bool resetsReady, Func<Lobby, LobbyMember, Task<Failure?>> change)
 		{
 			if (RequireAccess(ESessionAccessType.Gameplay) is Failure denied)
 			{
@@ -968,10 +980,12 @@ namespace GenOnlineService.Realtime
 				}
 				if (hostOnly && lobby.Owner != userID)
 				{
+					await ReportIllegalRequestAsync(lobby, request, detail);
 					return Result.Fail(ErrorCodes.LobbyNotHost);
 				}
 				if (lobby.State != ELobbyState.GAME_SETUP && lobby.State != ELobbyState.COUNTDOWN)
 				{
+					await ReportIllegalRequestAsync(lobby, request, detail);
 					return Result.Fail(ErrorCodes.LobbyAlreadyStarted);
 				}
 
@@ -988,22 +1002,22 @@ namespace GenOnlineService.Realtime
 			return failure is Failure failed ? failed : Result.Success();
 		}
 
-		// Keeps a refused quick match request for staff review, once per player and lobby; the caller is not told
-		private async Task ReportQuickMatchRuleAsync(Lobby lobby, string method, IEnumerable<int?> sides)
+		// Keeps a refused request the lobby state does not allow for staff review, once per player, lobby and request, without telling the caller
+		private async Task ReportIllegalRequestAsync(Lobby lobby, string request, string detail)
 		{
 			Int64 userID = UserID;
-			if (!lobby.TryMarkQuickMatchRuleReported(userID))
+			if (!lobby.TryMarkIllegalRequestReported(userID, request))
 			{
 				return;
 			}
 			try
 			{
 				await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
-				await Database.AntiCheat.FlagAccountForReview_QuickMatchRules(db, RealtimeLobbies.QuickMatchRuleReportOf(lobby, userID, method, sides, DateTime.UtcNow));
+				await Database.AntiCheat.FlagAccountForReview_IllegalRequest(db, RealtimeLobbies.IllegalRequestOf(lobby, userID, request, detail, DateTime.UtcNow));
 			}
 			catch (Exception ex)
 			{
-				m_log.LogError(ex, "Keeping the refused {Method} of {UserID} in lobby {LobbyID} for review failed", method, userID, lobby.LobbyID);
+				m_log.LogError(ex, "Keeping the refused {Request} of {UserID} in lobby {LobbyID} for review failed", request, userID, lobby.LobbyID);
 			}
 		}
 

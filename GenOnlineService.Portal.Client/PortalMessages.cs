@@ -251,18 +251,16 @@ namespace GenOnlineService.Portal.Client
 	{
 		public static readonly IReadOnlyList<PortalReviewList> All =
 		[
-			new PortalReviewList("new_accounts", "New accounts in quickmatch", "New accounts", "New accounts that played a quickmatch game."),
 			new PortalReviewList("modules", "Unrecognized modules", "Modules", "Modules a game client loaded that are not on the allow list."),
 			new PortalReviewList("probes", "Suspicious probes", "Probes", "Missing or malformed answers to an anti-cheat probe inside a match."),
 			new PortalReviewList("devices", "Suspicious device ids", "Device ids", "Sign-ins with a device value that lacks the marker of a genuine client."),
-			new PortalReviewList("quickmatch_rules", "Illegal quick match actions", "Quick match", "Quick match requests a genuine client never sends, such as choosing an army in a random army playlist.")
+			new PortalReviewList("illegal_requests", "Illegal requests", "Requests", "Lobby and match requests a genuine client never sends in that state, such as a colour change while the match runs.")
 		];
 
 		public static PortalReviewList? Find(string? kind) => All.FirstOrDefault(list => list.Kind == kind);
 
 		public static string IconOf(string kind) => kind switch
 		{
-			"new_accounts" => "user-plus",
 			"modules" => "puzzle",
 			"probes" => "radar",
 			_ => "fingerprint-pattern"
@@ -1491,7 +1489,7 @@ namespace GenOnlineService.Portal.Client
 		public const string Report = "report";
 		public const string RuleMatch = "rule_match";
 
-		public static readonly IReadOnlyList<string> All = ["report", "modules", "probes", "devices", "quickmatch_rules", "new_accounts", "rule_match"];
+		public static readonly IReadOnlyList<string> All = ["report", "modules", "probes", "devices", "illegal_requests", "rule_match"];
 
 		public static string Title(string kind) => kind switch
 		{
@@ -1511,7 +1509,7 @@ namespace GenOnlineService.Portal.Client
 		{
 			Report => "flag",
 			RuleMatch => "workflow",
-			"quickmatch_rules" => "swords",
+			"illegal_requests" => "swords",
 			_ => PortalReviewList.IconOf(kind)
 		};
 
@@ -1596,9 +1594,9 @@ namespace GenOnlineService.Portal.Client
 		public string? ModuleName { get; init; }
 		public string? ModulePath { get; init; }
 		public long? ModuleSize { get; init; }
-		public int? PlaylistId { get; init; }
-		public string? Method { get; init; }
-		public IReadOnlyList<int>? Sides { get; init; }
+		public string? Request { get; init; }
+		public string? Detail { get; init; }
+		public string? State { get; init; }
 		public long? RuleId { get; init; }
 		public string? RuleName { get; init; }
 		public int? RuleVersion { get; init; }
@@ -1606,9 +1604,6 @@ namespace GenOnlineService.Portal.Client
 		public string? RuleOutcome { get; init; }
 		public string? Actions { get; init; }
 		public System.Text.Json.JsonElement? Facts { get; init; }
-
-		[JsonIgnore]
-		public string SideList => Sides == null ? "" : String.Join(", ", Sides.Select(PortalText.Side));
 	}
 
 	public sealed record PortalCaseSanction
