@@ -893,6 +893,31 @@ namespace GenOnlineService.Realtime
 			CurrentLobby()?.CompleteModuleScan(UserID, request.ScanId);
 		}
 
+		// A report for a match the caller is not in is ignored
+		public Task<Result<Empty>> MatchLoaded(MatchLoadedRequest request)
+		{
+			if (RequireAccess(ESessionAccessType.Gameplay) is Failure denied)
+			{
+				return Task.FromResult<Result<Empty>>(denied);
+			}
+			if (!TryParseMatchID(request.MatchId, out UInt64 matchID))
+			{
+				return Task.FromResult<Result<Empty>>(Result.Invalid("match_id"));
+			}
+
+			Lobby? lobby = CurrentLobby();
+			if (lobby != null && lobby.MatchID == matchID)
+			{
+				lobby.MarkLoaded(UserID);
+			}
+			return Task.FromResult<Result<Empty>>(Result.Success());
+		}
+
+		internal static bool TryParseMatchID(string? text, out UInt64 id)
+		{
+			return UInt64.TryParse(text, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out id) && id > 0;
+		}
+
 		private Lobby? CurrentLobby()
 		{
 			Int64 lobbyID = Session.currentLobbyID;

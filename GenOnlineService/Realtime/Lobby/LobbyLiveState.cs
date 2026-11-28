@@ -195,7 +195,7 @@ namespace GenOnlineService
 				AtStart = m_cachedAtStart_numHumans < 0 ? null : new LobbyCountsLive { Humans = m_cachedAtStart_numHumans, Ai = m_cachedAtStart_numAI, Open = m_cachedAtStart_numOpen, Closed = m_cachedAtStart_numClosed },
 				AbandonedInGame = TimePlayerAbandonedIngame.OrderBy(entry => entry.Key).ToDictionary(entry => Id(entry.Key), entry => entry.Value),
 				ReportedOutcomes = ReportedOutcomes.OrderBy(entry => entry.Key).ToDictionary(entry => Id(entry.Key), entry => entry.Value),
-				ProbesEnabled = m_NextProbe != 0
+				ProbesEnabled = m_ProbesEnabled
 			};
 		}
 
@@ -349,7 +349,7 @@ namespace GenOnlineService
 			// probes start over, a probe sent by the earlier copy is never expected here
 			if (lobby.State == ELobbyState.INGAME && live.ProbesEnabled)
 			{
-				lobby.CalculateNextProbeTime(true);
+				lobby.StartProbes(waitForLoad: false);
 			}
 
 			lobby.DirtyRetransmitLobbyList();

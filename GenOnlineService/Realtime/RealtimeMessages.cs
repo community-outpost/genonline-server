@@ -388,6 +388,11 @@ namespace GenOnlineService.Realtime
 		public bool HasMap { get; init; }
 	}
 
+	public sealed record MatchLoadedRequest
+	{
+		public string MatchId { get; init; } = "";
+	}
+
 	public sealed record SetReadyRequest
 	{
 		public bool Ready { get; init; }

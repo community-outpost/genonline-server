@@ -1314,7 +1314,17 @@ namespace GenOnlineService
 		private int m_lobbyUpdatePending = 0;
 
 		[JsonIgnore]
-		private Int64 m_NextProbe = 0;
+		private bool m_ProbesEnabled = false;
+
+		[JsonIgnore]
+		private readonly ConcurrentDictionary<Int64, Int64> m_NextProbeOf = new();
+
+		[JsonIgnore]
+		private readonly ConcurrentDictionary<Int64, byte> m_LoadedMembers = new();
+
+		// Zero once the probe schedule runs
+		[JsonIgnore]
+		private Int64 m_ProbeScheduleDeadline = 0;
 
 		// used for ping calculation but never sent to clients
 		[JsonIgnore]
@@ -1487,21 +1497,54 @@ public async Task FinalizeACChecks()
 			DirtyRetransmitLobbyList();
 		}
 
-		private void CalculateNextProbeTime(bool bIsFirstProbe)
+		// The first probe waits past the map load and each member draws its own delay, so the clients never read back their screens at the same moment
+		internal static Int64 ProbeDelayMs(bool bIsFirstProbe, Random random)
+		{
+			return bIsFirstProbe ? random.NextInt64(60000, 120001) : random.NextInt64(5 * 60000, 10 * 60000);
+		}
+
+		private static Int64 NextProbeDelayMs(bool bIsFirstProbe)
 		{
 #if DEBUG
-			m_NextProbe = Environment.TickCount64 + (bIsFirstProbe ? 5000 : 30000);
+			return bIsFirstProbe ? 5000 : 30000;
 #else
-			if (bIsFirstProbe) // 30s
-			{
-				m_NextProbe = Environment.TickCount64 + 30000;
-			}
-			else // 5 to 10 min
-			{
-				int nextProbeInterval = Random.Shared.Next(5, 10);
-				m_NextProbe = Environment.TickCount64 + nextProbeInterval * 60000;
-			}
+			return ProbeDelayMs(bIsFirstProbe, Random.Shared);
 #endif
+		}
+
+		// Old clients and crashed clients never report the load, so the schedule starts at this point anyway
+		internal const Int64 MatchLoadWaitMs = 180000;
+
+		internal static bool ProbeScheduleStarts(IEnumerable<Int64> humans, Func<Int64, bool> loaded, Int64 now, Int64 deadline)
+		{
+			return now >= deadline || humans.All(loaded);
+		}
+
+		// A restored lobby starts at once because its members reported the load to the earlier copy
+		internal void StartProbes(bool waitForLoad)
+		{
+			m_NextProbeOf.Clear();
+			m_LoadedMembers.Clear();
+			m_ProbeScheduleDeadline = waitForLoad ? Environment.TickCount64 + MatchLoadWaitMs : 0;
+			m_ProbesEnabled = true;
+		}
+
+		internal void MarkLoaded(Int64 userID)
+		{
+			if (GetMemberFromUserID(userID) != null)
+			{
+				m_LoadedMembers[userID] = 0;
+			}
+		}
+
+		private bool ProbeScheduleRuns(Int64 now)
+		{
+			if (m_ProbeScheduleDeadline != 0
+				&& ProbeScheduleStarts(Members.Where(member => member.IsHuman()).Select(member => member.UserID), m_LoadedMembers.ContainsKey, now, m_ProbeScheduleDeadline))
+			{
+				m_ProbeScheduleDeadline = 0;
+			}
+			return m_ProbeScheduleDeadline == 0;
 		}
 
 		public async Task Tick()
@@ -1514,14 +1557,21 @@ public async Task FinalizeACChecks()
 			await ProcessPendingFullMeshConnectivityChecks();
 			await ProcessStartCountdown();
 
-			if (m_NextProbe != 0 && Environment.TickCount64 >= m_NextProbe)
+			if (m_ProbesEnabled && ProbeScheduleRuns(Environment.TickCount64))
 			{
+				Int64 now = Environment.TickCount64;
 				foreach (LobbyMember memberEntry in Members)
 				{
 					if (!memberEntry.GetSession().TryGetTarget(out UserSession? session) || session == null)
 					{
 						continue;
 					}
+
+					if (now < m_NextProbeOf.GetOrAdd(memberEntry.UserID, _ => now + NextProbeDelayMs(true)))
+					{
+						continue;
+					}
+					m_NextProbeOf[memberEntry.UserID] = now + NextProbeDelayMs(false);
 
 					IRealtimeClient client = RealtimeOut.Session(session);
 
@@ -1539,8 +1589,6 @@ public async Task FinalizeACChecks()
 					RealtimeOut.Fire(client.ModuleScanRequest(new ModuleScanRequestEvent { ScanId = scanID }));
 					RegisterProbeSent_Type2(memberEntry.UserID);
 				}
-
-				CalculateNextProbeTime(false);
 			}
 
 			if (Interlocked.Exchange(ref m_lobbyUpdatePending, 0) != 0)
@@ -2165,12 +2213,12 @@ public async Task FinalizeACChecks()
 					}
 
 					// calculate first probe time
-					CalculateNextProbeTime(true);
+					StartProbes(waitForLoad: true);
 				}
 				else
 				{
 					// disable probes
-					m_NextProbe = 0;
+					m_ProbesEnabled = false;
 				}
 
 
