@@ -1179,6 +1179,119 @@ namespace GenOnlineService.Migrations.MySql
                     b.ToTable("identifier_hashes", (string)null);
                 });
 
+            modelBuilder.Entity("GenOnlineService.Playlists.PlaylistMapRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Custom")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("custom");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("MaxPlayers")
+                        .HasColumnType("int")
+                        .HasColumnName("max_players");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("varchar(128)")
+                        .HasColumnName("path");
+
+                    b.Property<int>("PlaylistId")
+                        .HasColumnType("int")
+                        .HasColumnName("playlist_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("int")
+                        .HasColumnName("position");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaylistId", "Position")
+                        .HasDatabaseName("ix_playlist_maps_playlist_position");
+
+                    b.ToTable("playlist_maps", (string)null);
+                });
+
+            modelBuilder.Entity("GenOnlineService.Playlists.PlaylistRow", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("AllowArmySelection")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("allow_army_selection");
+
+                    b.Property<bool>("AllowTeams")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("allow_teams");
+
+                    b.Property<int>("DesiredPlayers")
+                        .HasColumnType("int")
+                        .HasColumnName("desired_players");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("GracePeriodMs")
+                        .HasColumnType("int")
+                        .HasColumnName("grace_period_ms");
+
+                    b.Property<int>("MinPlayers")
+                        .HasColumnType("int")
+                        .HasColumnName("min_players");
+
+                    b.Property<int>("MinSelectedMaps")
+                        .HasColumnType("int")
+                        .HasColumnName("min_selected_maps");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("TeamSize")
+                        .HasColumnType("int")
+                        .HasColumnName("team_size");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("playlists", (string)null);
+                });
+
             modelBuilder.Entity("GenOnlineService.Rules.AutomatedRule", b =>
                 {
                     b.Property<long>("ID")
@@ -3340,6 +3453,15 @@ namespace GenOnlineService.Migrations.MySql
                     b.HasOne("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreAuthorization", null)
                         .WithMany()
                         .HasForeignKey("AuthorizationID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("GenOnlineService.Playlists.PlaylistMapRow", b =>
+                {
+                    b.HasOne("GenOnlineService.Playlists.PlaylistRow", null)
+                        .WithMany()
+                        .HasForeignKey("PlaylistId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

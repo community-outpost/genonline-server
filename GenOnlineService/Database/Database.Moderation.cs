@@ -62,6 +62,7 @@ public static class AuditTargetKinds
 	public const string Lobby = "lobby";
 	public const string Role = "role";
 	public const string Flag = "flag";
+	public const string Playlist = "playlist";
 	public const string FlagRevision = "flag_revision";
 	public const string AnticheatReport = "anticheat_report";
 	public const string Case = "case";
@@ -105,6 +106,11 @@ public static class ModerationActions
 
 	public const string AppealOpen = "appeal_open";
 	public const string AppealDecide = "appeal_decide";
+
+	public const string PlaylistCreate = "playlist_create";
+	public const string PlaylistUpdate = "playlist_update";
+	public const string PlaylistDelete = "playlist_delete";
+	public const string PlaylistMapChange = "playlist_map_change";
 }
 
 public static class ModerationSources

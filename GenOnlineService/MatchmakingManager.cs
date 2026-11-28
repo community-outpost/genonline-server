@@ -215,7 +215,7 @@ static partial class MatchmakingManager
 				if (mmBucket.HasPlayer(playerSession))
 				{
 					// get the maximum map set for this playlist
-					if (MatchmakingManager.g_Playlists.TryGetValue(mmBucket.PlaylistID, out Playlist? playlist))
+					if (Playlists.TryGetValue(mmBucket.PlaylistID, out Playlist? playlist))
 					{
 						List<int> lstAllMaps = new();
 						for (int mapIndex = 0; mapIndex < playlist.Maps.Count; ++mapIndex)
@@ -246,7 +246,7 @@ static partial class MatchmakingManager
 
 		// not in a bucket yet (still queued waiting to be sorted) - widen their selection anyway, otherwise the
 		// widen request is silently dropped and they get bucketed with their original map list
-		if (MatchmakingManager.g_Playlists.TryGetValue(playerSession.MatchmakingPlaylistID, out Playlist? queuedPlaylist))
+		if (Playlists.TryGetValue(playerSession.MatchmakingPlaylistID, out Playlist? queuedPlaylist))
 		{
 			List<int> lstAllMaps = new();
 			for (int mapIndex = 0; mapIndex < queuedPlaylist.Maps.Count; ++mapIndex)
@@ -403,6 +403,8 @@ static partial class MatchmakingManager
 
 			return null;
 		}
+
+		internal List<UserSession> QueuedSessions() => m_lstMembers.ToList().Select(member => member.GetAssociatedSession()).OfType<UserSession>().ToList();
 
 		private sealed record Formation(ImmutableArray<UserSession> Players, PlaylistMap Map, bool UsedFallbackMap);
 		private Formation? m_Formation;
@@ -1048,7 +1050,7 @@ static partial class MatchmakingManager
 			}
 
 			// TODO_QUICKMATCH: What if the playlist is null? is this even possible since we validated before creating the bucket
-			if (g_Playlists.TryGetValue(PlaylistID, out Playlist? playlist))
+			if (Playlists.TryGetValue(PlaylistID, out Playlist? playlist))
 			{
 				// nobody left? clean ourselves up rather than lingering as a ghost bucket
 				if (CurrentMemberCount() == 0 && !bWaitingOnLobbyJoins && !bHasStartedCountdown)
@@ -1386,137 +1388,38 @@ static partial class MatchmakingManager
 	// Using ConcurrentBag instead of ConcurrentList for lock-free bucket management
 	private static ConcurrentDictionary<UInt16, ConcurrentBag<MatchmakingBucket>> m_dictMatchmakingBuckets = new();
 
-	public static void RemoveInvalidPlaylistsAtStartup()
+	// The playlists staff set up, read from the catalog snapshot
+	private static IReadOnlyDictionary<UInt16, Playlist> Playlists => GenOnlineService.Playlists.PlaylistCatalog.Current.Playlists;
+
+	public static IReadOnlyDictionary<UInt16, Playlist> GetPlaylists() { return Playlists; }
+
+	// A queue entry holds map indexes of the playlist as it was, so a changed playlist sends its queued players back to the start
+	internal static async Task CancelQueuedAsync(IReadOnlySet<UInt16> playlistIDs)
 	{
-		foreach (var (id, playlist) in g_Playlists.ToArray())
+		var queued = new HashSet<UserSession>();
+		foreach (WeakReference<UserSession> wrSession in lstSessions)
 		{
-			string? error = null;
-			if (playlist.MinPlayers < 2 || playlist.DesiredPlayers > Lobby.MaxLobbySize || playlist.MinPlayers > playlist.DesiredPlayers)
-				error = "player bounds exceed supported lobby capacity";
-			else if (playlist.MinSelectedMaps < 1 || playlist.MinSelectedMaps > playlist.Maps.Count)
-				error = "minimum map selection is outside the playlist map count";
-			else if (playlist.Maps.Any(map => map.MaxPlayers < playlist.MinPlayers || map.MaxPlayers > playlist.DesiredPlayers))
-				error = "a map capacity is outside playlist player bounds";
-			else if (Enumerable.Range(playlist.MinPlayers, playlist.DesiredPlayers - playlist.MinPlayers + 1)
-				.Any(size => !playlist.Maps.Any(map => map.MaxPlayers == size)))
-				error = "an allowed formation size has no exact-size map";
-			if (error == null) continue;
-			s_log.LogError("Disabling matchmaking playlist {PlaylistId} ({PlaylistName}): {Reason}", id, playlist.Name, error);
-			g_Playlists.Remove(id);
+			if (wrSession.TryGetTarget(out UserSession? session) && session.IsRegisteredForMatchmaking && playlistIDs.Contains(session.MatchmakingPlaylistID))
+			{
+				queued.Add(session);
+			}
+		}
+		foreach (var bucket in m_dictMatchmakingBuckets.Where(entry => playlistIDs.Contains(entry.Key)).SelectMany(entry => entry.Value))
+		{
+			queued.UnionWith(bucket.QueuedSessions());
+		}
+
+		var lobbyManager = ServiceLocator.Services.GetRequiredService<LobbyManager>();
+		foreach (UserSession session in queued)
+		{
+			await lobbyManager.CancelMatchmakingAsync(session);
+			// a player whose game is already starting stays queued and is not told otherwise
+			if (!session.IsRegisteredForMatchmaking)
+			{
+				await SendLeft(session, "invalid_playlist");
+			}
 		}
 	}
-
-	// TODO_QUICKMATCH: Read from db or file
-	private static Dictionary<UInt16, Playlist> g_Playlists = new()
-	{
-		{ 0, new Playlist(0, "1v1 (Random Armies)", 2, 2, 1, false, -1, false, 0, new List<PlaylistMap>()
-			{
-				new PlaylistMap("[RANK] Snowy Drought ZH v5 (2)", "[RANK] Snowy Drought ZH v5", true, 2),
-				new PlaylistMap("[RANK] Natural Threats ZH v4 (2)", "[RANK] Natural Threats ZH v4", true, 2),
-				new PlaylistMap("[RANK] Arctic Lagoon ZH v2 (2)", "[RANK] Arctic Lagoon ZH v2", true, 2),
-				new PlaylistMap("[RANK] ZH Carrier is Over v2 (2)", "[RANK] ZH Carrier is Over v2", true, 2),
-				new PlaylistMap("[RANK] Vendetta ZH v1 (2)", "[RANK] Vendetta ZH v1", true, 2),
-				new PlaylistMap("[RANK] TD NoBugsCars ZH v1 (2)", "[RANK] TD NoBugsCars ZH v1", true, 2),
-				new PlaylistMap("[RANK] Sand Scorpion (2)", "[RANK] Sand Scorpion", true, 2),
-				new PlaylistMap("[RANK] Mountain Mayhem v2 (2)", "[RANK] Mountain Mayhem v2", true, 2),
-				new PlaylistMap("[RANK] Liquid Gold ZH v2 (2)", "[RANK] Liquid Gold ZH v2", true, 2),
-				new PlaylistMap("[RANK] Imminent Victory ZH v2 (2)", "[RANK] Imminent Victory ZH v2", true, 2),
-				new PlaylistMap("[RANK] Egyptian Oasis ZH v1 (2)", "[RANK] Egyptian Oasis ZH v1", true, 2),
-				new PlaylistMap("[RANK] Desolated District ZH v1 (2)", "[RANK] Desolated District ZH v1", true, 2),
-				new PlaylistMap("[RANK] Canyon of the Dead ZH v2 (2)", "[RANK] Canyon of the Dead ZH v2", true, 2),
-				new PlaylistMap("[RANK] Blossoming Valley ZH v1 (2)", "[RANK] Blossoming Valley ZH v1", true, 2),
-				new PlaylistMap("[RANK] Barren Badlands Balanced ZH v2 (2)", "[RANK] Barren Badlands Balanced ZH v2", true, 2),
-				new PlaylistMap("Battle Plan ZH v3", "Battle Plan ZH v3", true, 2),
-				new PlaylistMap("Canyon Frost ZH v1", "Canyon Frost ZH v1", true, 2),
-				new PlaylistMap("Koujou Okawa v3", "Koujou Okawa v3", true, 2),
-				new PlaylistMap("Oxygen 1", "Oxygen 1", true, 2),
-				new PlaylistMap("Shivas Paradise v4", "Shivas Paradise v4", true, 2),
-				new PlaylistMap("Thermopylae v5", "Thermopylae v5", true, 2),
-				new PlaylistMap("Tiny Tactics ZH v2", "Tiny Tactics ZH v2", true, 2),
-				new PlaylistMap("yota nation arena v3", "yota nation arena v3", true, 2),
-				new PlaylistMap("[RANK] AKAs Magic ZH v1", "[RANK] AKAs Magic ZH v1", true, 2),
-				new PlaylistMap("[RANK] Arctic Arena ZH v1", "[RANK] Arctic Arena ZH v1", true, 2),
-				new PlaylistMap("[RANK] Black Hell ZH v1", "[RANK] Black Hell ZH v1", true, 2),
-				new PlaylistMap("[RANK] Blue Hole ZH v1", "[RANK] Blue Hole ZH v1", true, 2),
-				new PlaylistMap("[RANK] Dammed Scorpion ZH v1", "[RANK] Dammed Scorpion ZH v1", true, 2),
-				new PlaylistMap("[RANK] Drallim Desert ZH v2", "[RANK] Drallim Desert ZH v2", true, 2),
-				new PlaylistMap("[RANK] Farmlands of the Fallen ZH v1", "[RANK] Farmlands of the Fallen ZH v1", true, 2),
-				new PlaylistMap("[RANK] Sakura Forest II ZH v1", "[RANK] Sakura Forest II ZH v1", true, 2),
-				new PlaylistMap("[RANK] Sovereignty ZH v1", "[RANK] Sovereignty ZH v1", true, 2),
-				new PlaylistMap("Arabia v2 (2)", "Arabia v2", true, 2),
-				new PlaylistMap("SandForest Domination v5 (2)", "SandForest Domination v5", true, 2),
-				new PlaylistMap("Toxic Lake v4 (2)", "Toxic Lake v4", true, 2),
-				new PlaylistMap("Tremble v2 (2)", "Tremble v2", true, 2),
-				new PlaylistMap("[RANK] Hanamura Temple ZH v1 (2)", "[RANK] Hanamura Temple ZH v1", true, 2),
-				new PlaylistMap("Forest of Camelot ZH v4 (2)", "Forest of Camelot ZH v4", true, 2),
-				new PlaylistMap("Mirmulnir v4 (2)", "Mirmulnir v4", true, 2),
-				new PlaylistMap("Terraform v2 (2)", "Terraform v2", true, 2),
-				new PlaylistMap("Toxic Lake v5 (2)", "Toxic Lake v5", true, 2)
-			}
-		) },
-
-		/* PRE-WS list:
-		 * { 0, new Playlist(0, "1v1 (Random Armies)", 2, 2, 1, false, -1, false, 0, new List<PlaylistMap>()
-			{
-				new PlaylistMap("[RANK] Snowy Drought ZH v5 (2)", "[RANK] Snowy Drought ZH v5", true, 2),
-				new PlaylistMap("[RANK] Natural Threats ZH v4 (2)", "[RANK] Natural Threats ZH v4", true, 2),
-				new PlaylistMap("[RANK] Arctic Lagoon ZH v2 (2)", "[RANK] Arctic Lagoon ZH v2", true, 2),
-				new PlaylistMap("[RANK] ZH Carrier is Over v2 (2)", "[RANK] ZH Carrier is Over v2", true, 2),
-				new PlaylistMap("[RANK] Vendetta ZH v1 (2)", "[RANK] Vendetta ZH v1", true, 2),
-				new PlaylistMap("[RANK] TD NoBugsCars ZH v1 (2)", "[RANK] TD NoBugsCars ZH v1", true, 2),
-				new PlaylistMap("[RANK] Sand Scorpion (2)", "[RANK] Sand Scorpion", true, 2),
-				new PlaylistMap("[RANK] Mountain Mayhem v2 (2)", "[RANK] Mountain Mayhem v2", true, 2),
-				new PlaylistMap("[RANK] Liquid Gold ZH v2 (2)", "[RANK] Liquid Gold ZH v2", true, 2),
-				new PlaylistMap("[RANK] Imminent Victory ZH v2 (2)", "[RANK] Imminent Victory ZH v2", true, 2),
-				new PlaylistMap("[RANK] Egyptian Oasis ZH v1 (2)", "[RANK] Egyptian Oasis ZH v1", true, 2),
-				new PlaylistMap("[RANK] Desolated District ZH v1 (2)", "[RANK] Desolated District ZH v1", true, 2),
-				new PlaylistMap("[RANK] Canyon of the Dead ZH v2 (2)", "[RANK] Canyon of the Dead ZH v2", true, 2),
-				new PlaylistMap("[RANK] Blossoming Valley ZH v1 (2)", "[RANK] Blossoming Valley ZH v1", true, 2),
-				//new PlaylistMap("[RANK] Battle Plan ZH v1 (2)", "[RANK] Battle Plan ZH v1", true, 2), // NOTE: Disabled. OldA say it is bugged according to map creator.
-				new PlaylistMap("[RANK] Barren Badlands Balanced ZH v2 (2)", "[RANK] Barren Badlands Balanced ZH v2", true, 2),
-
-				// new maps added in 12_05_25 update
-				new PlaylistMap("Battle Plan ZH v3", "Battle Plan ZH v3", true, 2),
-                new PlaylistMap("Canyon Frost ZH v1", "Canyon Frost ZH v1", true, 2),
-                new PlaylistMap("Koujou Okawa v3", "Koujou Okawa v3", true, 2),
-                new PlaylistMap("Oxygen 1", "Oxygen 1", true, 2),
-                new PlaylistMap("Shivas Paradise v4", "Shivas Paradise v4", true, 2),
-                new PlaylistMap("Thermopylae v5", "Thermopylae v5", true, 2),
-                new PlaylistMap("Tiny Tactics ZH v2", "Tiny Tactics ZH v2", true, 2),
-                new PlaylistMap("yota nation arena v3", "yota nation arena v3", true, 2),
-                new PlaylistMap("[RANK] AKAs Magic ZH v1", "[RANK] AKAs Magic ZH v1", true, 2),
-                new PlaylistMap("[RANK] Arctic Arena ZH v1", "[RANK] Arctic Arena ZH v1", true, 2),
-                new PlaylistMap("[RANK] Black Hell ZH v1", "[RANK] Black Hell ZH v1", true, 2),
-                new PlaylistMap("[RANK] Blue Hole ZH v1", "[RANK] Blue Hole ZH v1", true, 2),
-                new PlaylistMap("[RANK] Dammed Scorpion ZH v1", "[RANK] Dammed Scorpion ZH v1", true, 2),
-                new PlaylistMap("[RANK] Drallim Desert ZH v2", "[RANK] Drallim Desert ZH v2", true, 2),
-                new PlaylistMap("[RANK] Farmlands of the Fallen ZH v1", "[RANK] Farmlands of the Fallen ZH v1", true, 2),
-                new PlaylistMap("[RANK] Sakura Forest II ZH v1", "[RANK] Sakura Forest II ZH v1", true, 2),
-                new PlaylistMap("[RANK] Sovereignty ZH v1", "[RANK] Sovereignty ZH v1", true, 2),
-
-				// new maps added in 4_28_26 EAC update (for WS / from GR)
-				new PlaylistMap("Arabia v2 (2)", "Arabia v2", true, 2),
-				new PlaylistMap("SandForest Domination v5 (2)", "SandForest Domination v5", true, 2),
-				new PlaylistMap("Toxic Lake v4 (2)", "Toxic Lake v4", true, 2),
-				new PlaylistMap("Tremble v2 (2)", "Tremble v2", true, 2),
-				new PlaylistMap("[RANK] Hanamura Temple ZH v1 (2)", "[RANK] Hanamura Temple ZH v1", true, 2),
-			}
-		) },
-		*/
-
-		{ 1, new Playlist(1, "6-8P FFA (Random Armies)", 6, 8, 1, false, -1, false, 30000, new List<PlaylistMap>()
-			{
-				new PlaylistMap("Beijing Uprise v4 (6)", "Beijing Uprise v4", true, 6),
-				new PlaylistMap("Defcon6 (6)", "Defcon6", false, 6),
-				new PlaylistMap("Taiga Terror (6)", "Taiga Terror", true, 6),
-				new PlaylistMap("Swamp Assault v3 [WBC2021] (7)", "Swamp Assault v3 [WBC2021]", true, 7),
-				new PlaylistMap("[RANK] Muddy Madness ZH v1 (8)", "[RANK] Muddy Madness ZH v1", true, 8),
-				new PlaylistMap("[RANK] Wastelands Dust ZH v1 (8)", "[RANK] Wastelands Dust ZH v1", true, 8)
-			}
-		) }
-	};
-
-	public static Dictionary<UInt16, Playlist> GetPlaylists() { return g_Playlists; }
 
 	public static int GetTotalQueuedPlayersInPlaylist(UInt16 playlistID)
 	{
@@ -1535,13 +1438,10 @@ static partial class MatchmakingManager
 
 	public static async Task Tick()
 	{
-		// TODO_QUICKMATCH: Move to init func, maybe dont use static for matchmakingmanager
-		if (m_dictMatchmakingBuckets.Count == 0)
+		// a playlist staff add while the service runs gets its buckets here
+		foreach (var kvPair in Playlists)
 		{
-			foreach (var kvPair in g_Playlists)
-			{
-				m_dictMatchmakingBuckets.TryAdd(kvPair.Key, new ConcurrentBag<MatchmakingBucket>());
-			}
+			m_dictMatchmakingBuckets.TryAdd(kvPair.Key, new ConcurrentBag<MatchmakingBucket>());
 		}
 
 		// tick mm buckets
@@ -1650,7 +1550,7 @@ static partial class MatchmakingManager
 							continue;
 						}
 
-						if (g_Playlists.TryGetValue(thisSession.MatchmakingPlaylistID, out Playlist? playlist))
+						if (Playlists.TryGetValue(thisSession.MatchmakingPlaylistID, out Playlist? playlist))
 						{
 
 						// TODO_MATCHAMAKING: Better way of tracking this, we need to know who is already in a bucket
@@ -1761,7 +1661,7 @@ static partial class MatchmakingManager
 			}
 		}
 
-		foreach (UInt16 playlistID in g_Playlists.Keys)
+		foreach (UInt16 playlistID in Playlists.Keys)
 		{
 			AppMetrics.RecordMatchmakingQueue(playlistID.ToString(CultureInfo.InvariantCulture), GetTotalQueuedPlayersInPlaylist(playlistID));
 		}
@@ -1847,7 +1747,7 @@ static partial class MatchmakingManager
 		activity?.SetTag("user.id", plr.m_UserID);
 		activity?.SetTag("matchmaking.playlist_id", playlistID);
 		// validate the request - a bad playlist or out of range map index from a client must never reach a bucket
-		if (!g_Playlists.TryGetValue(playlistID, out Playlist? playlist))
+		if (!Playlists.TryGetValue(playlistID, out Playlist? playlist))
 		{
 			activity?.SetTag("matchmaking.outcome", "unavailable_playlist");
 			s_log.LogWarning("User {UserId} requested unavailable matchmaking playlist {PlaylistId}", plr.m_UserID, playlistID);

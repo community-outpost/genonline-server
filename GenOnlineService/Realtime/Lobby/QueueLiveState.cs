@@ -251,7 +251,7 @@ static partial class MatchmakingManager
 		foreach (QueueTicketLive ticket in queue.Tickets ?? new())
 		{
 			QueueBucketLive? bucket = ticket.Bucket < 0 ? null : (queue.Buckets ?? new()).FirstOrDefault(b => b.Index == ticket.Bucket);
-			if (bucket?.Phase == PhaseCommitted || ticket.PlaylistId < 0 || ticket.PlaylistId > UInt16.MaxValue || !g_Playlists.ContainsKey((UInt16)ticket.PlaylistId))
+			if (bucket?.Phase == PhaseCommitted || ticket.PlaylistId < 0 || ticket.PlaylistId > UInt16.MaxValue || !Playlists.ContainsKey((UInt16)ticket.PlaylistId))
 			{
 				continue;
 			}
@@ -264,7 +264,7 @@ static partial class MatchmakingManager
 	// sent by the old copy of a handover after the queue moved
 	internal static void AddRestoredTicket(QueueTicketLive ticket, long graceMs)
 	{
-		if (ticket.PlaylistId < 0 || ticket.PlaylistId > UInt16.MaxValue || !g_Playlists.ContainsKey((UInt16)ticket.PlaylistId))
+		if (ticket.PlaylistId < 0 || ticket.PlaylistId > UInt16.MaxValue || !Playlists.ContainsKey((UInt16)ticket.PlaylistId))
 		{
 			return;
 		}
@@ -301,7 +301,7 @@ static partial class MatchmakingManager
 	{
 		if (!s_restoredTickets.TryRemove(session.m_UserID, out (QueueTicketLive Ticket, QueueBucketLive? Bucket) restored)
 			|| Environment.TickCount64 >= Interlocked.Read(ref s_restoredDeadline)
-			|| !g_Playlists.TryGetValue((UInt16)restored.Ticket.PlaylistId, out Playlist? playlist)
+			|| !Playlists.TryGetValue((UInt16)restored.Ticket.PlaylistId, out Playlist? playlist)
 			|| GenOnlineService.WebSocketManager.GetSharedDataForUser(session.m_UserID)?.GameStats == null)
 		{
 			return false;

@@ -1452,7 +1452,6 @@ namespace GenOnlineService
 			}
 
 			// These log through AppLog, which only has a logger factory once ServiceLocator.Services is set, so they run after Build
-			MatchmakingManager.RemoveInvalidPlaylistsAtStartup();
 			S3CredentialManager.Initialize();
 
 			if (!ClientFeatures.Configure(builder.Configuration))

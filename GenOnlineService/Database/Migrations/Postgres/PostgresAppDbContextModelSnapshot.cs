@@ -1178,6 +1178,119 @@ namespace GenOnlineService.Migrations.Postgres
                     b.ToTable("identifier_hashes", (string)null);
                 });
 
+            modelBuilder.Entity("GenOnlineService.Playlists.PlaylistMapRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Custom")
+                        .HasColumnType("boolean")
+                        .HasColumnName("custom");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("MaxPlayers")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_players");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("path");
+
+                    b.Property<int>("PlaylistId")
+                        .HasColumnType("integer")
+                        .HasColumnName("playlist_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaylistId", "Position")
+                        .HasDatabaseName("ix_playlist_maps_playlist_position");
+
+                    b.ToTable("playlist_maps", (string)null);
+                });
+
+            modelBuilder.Entity("GenOnlineService.Playlists.PlaylistRow", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("AllowArmySelection")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_army_selection");
+
+                    b.Property<bool>("AllowTeams")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allow_teams");
+
+                    b.Property<int>("DesiredPlayers")
+                        .HasColumnType("integer")
+                        .HasColumnName("desired_players");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<int>("GracePeriodMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("grace_period_ms");
+
+                    b.Property<int>("MinPlayers")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_players");
+
+                    b.Property<int>("MinSelectedMaps")
+                        .HasColumnType("integer")
+                        .HasColumnName("min_selected_maps");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("TeamSize")
+                        .HasColumnType("integer")
+                        .HasColumnName("team_size");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("playlists", (string)null);
+                });
+
             modelBuilder.Entity("GenOnlineService.Rules.AutomatedRule", b =>
                 {
                     b.Property<long>("ID")
@@ -3331,6 +3444,15 @@ namespace GenOnlineService.Migrations.Postgres
                     b.HasOne("OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreAuthorization", null)
                         .WithMany()
                         .HasForeignKey("AuthorizationID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("GenOnlineService.Playlists.PlaylistMapRow", b =>
+                {
+                    b.HasOne("GenOnlineService.Playlists.PlaylistRow", null)
+                        .WithMany()
+                        .HasForeignKey("PlaylistId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

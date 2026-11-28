@@ -89,6 +89,7 @@ namespace GenOnlineService.Rest
 			[RestCodes.RoleBuiltIn] = StatusCodes.Status403Forbidden,
 			[GenOnlineService.Flags.FlagCodes.Stale] = StatusCodes.Status409Conflict,
 			[GenOnlineService.Flags.FlagCodes.Exists] = StatusCodes.Status409Conflict,
+			[GenOnlineService.Playlists.PlaylistCodes.LastEnabled] = StatusCodes.Status409Conflict,
 		};
 
 		public static int StatusOf(string code) => s_statuses.TryGetValue(code, out int status) ? status : ApiResults.StatusOf(code);
