@@ -45,11 +45,20 @@ namespace GenOnlineService.Identity
 
 		private static volatile Dictionary<Int64, string> s_inactive = new();
 		private static volatile Dictionary<Int64, PlayBan> s_banned = new();
+		private static volatile Dictionary<Int64, DateTime> s_muted = new();
 		private static bool s_seeded;
 
 		public static bool IsInactive(Int64 userID) => s_inactive.ContainsKey(userID);
 
 		public static PlayBan? GetPlayBan(Int64 userID) => s_banned.GetValueOrDefault(userID);
+
+		// Until when the player is muted, from the last reload so a lobby update costs no query
+		public static DateTime? GetMute(Int64 userID) => s_muted.TryGetValue(userID, out DateTime until) && until > DateTime.UtcNow ? until : null;
+
+		// A mute always has an end, one without reads as the latest moment
+		public static DateTime MutedUntilOf(Sanction mute) => mute.ExpiresAt == null ? DateTime.SpecifyKind(DateTime.MaxValue, DateTimeKind.Utc) : DateTime.SpecifyKind(mute.ExpiresAt.Value, DateTimeKind.Utc);
+
+		internal static Dictionary<Int64, DateTime> MutesOf(IEnumerable<Sanction> mutes) => mutes.GroupBy(m => m.UserID).ToDictionary(g => g.Key, g => g.Select(MutedUntilOf).Max());
 
 		private static volatile HashSet<Int64> s_nameRequired = new();
 
@@ -98,6 +107,8 @@ namespace GenOnlineService.Identity
 				.ToDictionaryAsync(u => u.ID, u => u.State);
 
 			List<Sanction> bans = await Database.Moderation.ActiveSanctions(db, SanctionTypes.Ban, now).ToListAsync();
+
+			s_muted = MutesOf(await Database.Moderation.ActiveSanctions(db, SanctionTypes.Mute, now).ToListAsync());
 
 			Dictionary<Int64, PlayBan> banned = bans
 				.GroupBy(b => b.UserID)

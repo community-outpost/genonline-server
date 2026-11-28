@@ -53,9 +53,11 @@ namespace GenOnlineService.Rest
 		public async Task<IActionResult> GetMe()
 		{
 			(string Name, int Tag)? name;
+			Sanction? mute;
 			await using (AppDbContext db = await m_dbFactory.CreateDbContextAsync())
 			{
 				name = await Database.DisplayNames.Get(db, Me);
+				mute = await Database.Moderation.GetActiveMute(db, Me);
 			}
 
 			return RestResults.Ok(new MeResponse
@@ -64,7 +66,8 @@ namespace GenOnlineService.Rest
 				DisplayName = name?.Name ?? String.Empty,
 				Tag = PlayerTags.Of(name?.Tag ?? 0),
 				Roles = StaffRoles.RolesOf(Me).Order(StringComparer.Ordinal).ToList(),
-				Permissions = StaffRoles.PermissionsOf(Me).Order(StringComparer.Ordinal).ToList()
+				Permissions = StaffRoles.PermissionsOf(Me).Order(StringComparer.Ordinal).ToList(),
+				MutedUntil = mute == null ? null : AccessControl.MutedUntilOf(mute)
 			});
 		}
 

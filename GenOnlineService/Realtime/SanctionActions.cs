@@ -203,10 +203,14 @@ namespace GenOnlineService.Realtime
 					return AlreadyActive();
 				}
 				mute = added;
+
+				// lobbies show the mute from the reloaded view
+				await AccessControl.Reload(db);
 			}
 
 			ModerationNoticeEvent notice = new ModerationNoticeEvent { Action = ModerationAction.Mute, Reason = String.IsNullOrEmpty(reason) ? null : reason, ExpiresAt = expiresAt };
 			await RealtimeOut.User(target).ModerationNotice(notice);
+			await AnnounceMuteAsync(target, expiresAt);
 			return Result.Success(new CreateSanctionResponse { SanctionId = mute.ID });
 		}
 
@@ -298,12 +302,27 @@ namespace GenOnlineService.Realtime
 			}
 
 			await Database.Moderation.LiftSanction(db, sanction.ID, reason ?? String.Empty, actor);
-			if (sanction.Type == SanctionTypes.Ban)
+
+			// a ban lets the player connect again without waiting for the reload tick, a mute leaves the lobby view current
+			await AccessControl.Reload(db);
+			if (sanction.Type == SanctionTypes.Mute)
 			{
-				// lets the player connect again without waiting for the reload tick
-				await AccessControl.Reload(db);
+				// another mute of the player may still run
+				Sanction? remaining = await Database.Moderation.GetActiveMute(db, sanction.UserID);
+				if (remaining == null)
+				{
+					await RealtimeOut.User(sanction.UserID).ModerationNotice(new ModerationNoticeEvent { Action = ModerationAction.Unmute });
+				}
+				await AnnounceMuteAsync(sanction.UserID, remaining == null ? null : AccessControl.MutedUntilOf(remaining));
 			}
 			return Result.Success();
+		}
+
+		// The lobby the player is in on this copy hears the change, other copies show it from their next lobby state, and the CLI or a test host has no lobbies to tell
+		private static Task AnnounceMuteAsync(Int64 userID, DateTime? mutedUntil)
+		{
+			Lobby? lobby = ServiceLocator.Services?.GetService<LobbyManager>()?.GetLobbies().FirstOrDefault(l => l.GetMemberFromUserID(userID) != null);
+			return lobby == null ? Task.CompletedTask : RealtimeOut.Lobby(lobby.LobbyID).LobbyMemberMute(new LobbyMemberMuteEvent { LobbyId = lobby.LobbyID, UserId = userID, MutedUntil = mutedUntil });
 		}
 
 		// staff never act on themselves

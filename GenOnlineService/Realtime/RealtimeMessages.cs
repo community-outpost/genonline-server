@@ -26,7 +26,7 @@ namespace GenOnlineService.Realtime
 	public enum MessageType { Chat, Action, Announcement }
 	public enum PresenceActivity { Offline, Menu, Channel, Lobby, Matchmaking, InGame }
 	public enum PresenceStatus { Online, Idle, DoNotDisturb, Invisible }
-	public enum ModerationAction { Kick, Ban, Mute, NameReset }
+	public enum ModerationAction { Kick, Ban, Mute, NameReset, Unmute }
 	public enum SlotState { Open, Closed, Player, AiEasy, AiMedium, AiBrutal }
 	public enum LobbyType { Custom, QuickMatch }
 	public enum LobbyStage { Setup, Countdown, InGame, Complete }
@@ -131,6 +131,10 @@ namespace GenOnlineService.Realtime
 		public int Color { get; init; }
 		public int? Team { get; init; }
 		public int StartPosition { get; init; }
+
+		// While the member is muted, until when
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public DateTime? MutedUntil { get; init; }
 	}
 
 	public sealed record LobbySummaryMap
@@ -539,6 +543,15 @@ namespace GenOnlineService.Realtime
 		public string? Reason { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public DateTime? ExpiresAt { get; init; }
+	}
+
+	// Sent to the lobby group when a member of the lobby is muted (muted_until) or unmuted (absent)
+	public sealed record LobbyMemberMuteEvent
+	{
+		public long LobbyId { get; init; }
+		public long UserId { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public DateTime? MutedUntil { get; init; }
 	}
 
 	public sealed record ChannelMembersEvent

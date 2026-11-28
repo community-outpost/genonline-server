@@ -30,6 +30,10 @@ namespace GenOnlineService.Rest
 		public string? Tag { get; init; }
 		public IReadOnlyList<string> Roles { get; init; } = [];
 		public IReadOnlyList<string> Permissions { get; init; } = [];
+
+		// While the caller is muted, until when
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public DateTime? MutedUntil { get; init; }
 	}
 
 	public enum SessionKind { Game, Launcher, Chat }

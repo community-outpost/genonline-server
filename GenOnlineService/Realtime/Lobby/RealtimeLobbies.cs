@@ -126,7 +126,8 @@ namespace GenOnlineService.Realtime
 				Side = member.Side,
 				Color = member.Color,
 				Team = member.Team < 0 ? null : member.Team,
-				StartPosition = member.StartingPosition
+				StartPosition = member.StartingPosition,
+				MutedUntil = human ? AccessControl.GetMute(member.UserID) : null
 			};
 		}
 
