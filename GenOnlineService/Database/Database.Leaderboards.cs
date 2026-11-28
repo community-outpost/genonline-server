@@ -34,6 +34,7 @@ public static class LeaderboardPeriods
 // period_start is the first day of that day, month or year
 public class LeaderboardEntry
 {
+	public string Game { get; set; } = ClientGames.ZeroHour;
 	public string Period { get; set; } = LeaderboardPeriods.Day;
 	public DateOnly PeriodStart { get; set; }
 	public long UserId { get; set; }
@@ -48,9 +49,11 @@ public class LeaderboardEntryConfiguration : IEntityTypeConfiguration<Leaderboar
 	{
 		builder.ToTable("leaderboard_entries");
 
-		builder.HasKey(x => new { x.Period, x.PeriodStart, x.UserId });
+		builder.HasKey(x => new { x.Game, x.Period, x.PeriodStart, x.UserId });
 		builder.HasIndex(x => x.UserId).HasDatabaseName("ix_leaderboard_entries_user_id");
 
+		// The default keeps the inserts of a release without games working while both run
+		builder.Property(x => x.Game).HasColumnName("game").HasMaxLength(16).HasDefaultValue(ClientGames.ZeroHour);
 		builder.Property(x => x.Period).HasColumnName("period").HasMaxLength(8);
 		builder.Property(x => x.PeriodStart).HasColumnName("period_start");
 		builder.Property(x => x.UserId).HasColumnName("user_id");
@@ -76,7 +79,7 @@ namespace Database
 			public int yearly_matches;
 		}
 
-		public static async Task CreateUserEntriesIfNotExists(AppDbContext db, long playerId)
+		public static async Task CreateUserEntriesIfNotExists(AppDbContext db, string game, long playerId)
 		{
 			try
 			{
@@ -89,15 +92,15 @@ namespace Database
 					if (db.Database.IsNpgsql())
 					{
 						await db.Database.ExecuteSqlInterpolatedAsync($@"
-							INSERT INTO leaderboard_entries (period, period_start, user_id, points, wins, losses)
-							VALUES ({period}, {start}, {playerId}, {basePoints}, 0, 0)
-							ON CONFLICT (period, period_start, user_id) DO NOTHING");
+							INSERT INTO leaderboard_entries (game, period, period_start, user_id, points, wins, losses)
+							VALUES ({game}, {period}, {start}, {playerId}, {basePoints}, 0, 0)
+							ON CONFLICT (game, period, period_start, user_id) DO NOTHING");
 					}
 					else
 					{
 						await db.Database.ExecuteSqlInterpolatedAsync($@"
-							INSERT INTO leaderboard_entries (period, period_start, user_id, points, wins, losses)
-							VALUES ({period}, {start}, {playerId}, {basePoints}, 0, 0)
+							INSERT INTO leaderboard_entries (game, period, period_start, user_id, points, wins, losses)
+							VALUES ({game}, {period}, {start}, {playerId}, {basePoints}, 0, 0)
 							ON DUPLICATE KEY UPDATE user_id = user_id");
 					}
 				}
@@ -115,7 +118,7 @@ namespace Database
 			yield return (LeaderboardPeriods.Year, LeaderboardPeriods.YearStart(utc));
 		}
 
-		public static async ValueTask<Dictionary<long, LeaderboardPoints>> GetBulkLeaderboardData(AppDbContext db, List<long> playerIDs, DateTime matchTimeUtc)
+		public static async ValueTask<Dictionary<long, LeaderboardPoints>> GetBulkLeaderboardData(AppDbContext db, string game, List<long> playerIDs, DateTime matchTimeUtc)
 		{
 			var results = new Dictionary<long, LeaderboardPoints>();
 
@@ -132,7 +135,7 @@ namespace Database
 				DateOnly year = LeaderboardPeriods.YearStart(matchTimeUtc);
 
 				var rows = await db.LeaderboardEntries.AsNoTracking()
-					.Where(x => playerIDs.Contains(x.UserId) &&
+					.Where(x => x.Game == game && playerIDs.Contains(x.UserId) &&
 						((x.Period == LeaderboardPeriods.Day && x.PeriodStart == day) ||
 						 (x.Period == LeaderboardPeriods.Month && x.PeriodStart == month) ||
 						 (x.Period == LeaderboardPeriods.Year && x.PeriodStart == year)))

@@ -1661,6 +1661,13 @@ namespace GenOnlineService.Migrations.Postgres
 
             modelBuilder.Entity("LeaderboardEntry", b =>
                 {
+                    b.Property<string>("Game")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("zerohour")
+                        .HasColumnName("game");
+
                     b.Property<string>("Period")
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)")
@@ -1686,7 +1693,7 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("integer")
                         .HasColumnName("wins");
 
-                    b.HasKey("Period", "PeriodStart", "UserId");
+                    b.HasKey("Game", "Period", "PeriodStart", "UserId");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_leaderboard_entries_user_id");

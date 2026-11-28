@@ -22,6 +22,8 @@ using GenOnlineService.Rest;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
 namespace GenOnlineService.Tests;
@@ -134,5 +136,56 @@ public class MatchGameTests
 		Assert.Equal(new long[] { 4 }, await Of(new MatchFeedFilter { Game = ClientGames.Generals, Map = "Alpine Assault" }));
 		Assert.Equal(new long[] { 1 }, await Of(new MatchFeedFilter { Players = [5], Game = ClientGames.Generals, Side = 2 }));
 		Assert.Equal(new long[] { 2 }, await Of(new MatchFeedFilter { Players = [5, 6], Game = ClientGames.ZeroHour }));
+	}
+
+	[Theory]
+	[InlineData("generals", "generals")]
+	[InlineData("zerohour", "zerohour")]
+	[InlineData("none", "zerohour")]
+	[InlineData("", "zerohour")]
+	public void RatingsAndLeaderboardsCountEveryBuildButGeneralsAsZeroHour(string buildGame, string rated)
+	{
+		Assert.Equal(rated, ClientGames.RatedOf(buildGame));
+	}
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task EachGameKeepsItsOwnLeaderboardEntries(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider);
+		if (probe == null) return;
+		await using AppDbContext db = probe.Open();
+		DateTime now = DateTime.UtcNow;
+
+		await Database.Leaderboards.CreateUserEntriesIfNotExists(db, ClientGames.ZeroHour, 5);
+		await Database.Leaderboards.CreateUserEntriesIfNotExists(db, ClientGames.Generals, 5);
+		await Database.Leaderboards.CreateUserEntriesIfNotExists(db, ClientGames.Generals, 5);
+		Assert.Equal(3, await db.LeaderboardEntries.CountAsync(e => e.UserId == 5 && e.Game == ClientGames.ZeroHour));
+		Assert.Equal(3, await db.LeaderboardEntries.CountAsync(e => e.UserId == 5 && e.Game == ClientGames.Generals));
+
+		await db.LeaderboardEntries.Where(e => e.Game == ClientGames.Generals && e.Period == LeaderboardPeriods.Month)
+			.ExecuteUpdateAsync(s => s.SetProperty(e => e.Points, 1700).SetProperty(e => e.Wins, 3));
+		Assert.Equal(1700, (await Database.Leaderboards.GetBulkLeaderboardData(db, ClientGames.Generals, [5], now))[5].monthly);
+		Assert.Equal(3, (await Database.Leaderboards.GetBulkLeaderboardData(db, ClientGames.Generals, [5], now))[5].monthly_matches);
+		Assert.Equal(EloConfig.BaseRating, (await Database.Leaderboards.GetBulkLeaderboardData(db, ClientGames.ZeroHour, [5], now))[5].monthly);
+	}
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task TheMigrationMakesExistingLeaderboardEntriesZeroHour(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider, migrate: false);
+		if (probe == null) return;
+		await using AppDbContext db = probe.Open();
+		IMigrator migrator = db.GetService<IMigrator>();
+		await migrator.MigrateAsync("MatchGameIndex");
+		await db.Database.ExecuteSqlRawAsync("INSERT INTO leaderboard_entries (period, period_start, user_id, points, wins, losses) VALUES ('month', '2026-11-01', 5, 1600, 2, 1)");
+
+		await migrator.MigrateAsync();
+		db.ChangeTracker.Clear();
+
+		LeaderboardEntry entry = await db.LeaderboardEntries.SingleAsync();
+		Assert.Equal(ClientGames.ZeroHour, entry.Game);
+		Assert.Equal(1600, entry.Points);
 	}
 }

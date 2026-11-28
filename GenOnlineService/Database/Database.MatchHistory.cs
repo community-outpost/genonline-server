@@ -1540,7 +1540,7 @@ namespace Database
 					return;
 
 				await UpdateCurrentEloAsync(db, members);
-				await UpdatePeriodEloAndLeaderboardsAsync(db, members, lobby.TimeCreated.ToUniversalTime());
+				await UpdatePeriodEloAndLeaderboardsAsync(db, ClientGames.RatedOf(lobby.Game), members, lobby.TimeCreated.ToUniversalTime());
 			}
 			catch (Exception ex)
 			{
@@ -1598,10 +1598,10 @@ namespace Database
 			}
 		}
 
-		private static async Task UpdatePeriodEloAndLeaderboardsAsync(AppDbContext db, List<MatchdataMemberModel> members, DateTime matchTimeUtc)
+		private static async Task UpdatePeriodEloAndLeaderboardsAsync(AppDbContext db, string game, List<MatchdataMemberModel> members, DateTime matchTimeUtc)
 		{
 			var userIds = members.Select(m => (long)m.user_id).ToList();
-			var bulk = await Database.Leaderboards.GetBulkLeaderboardData(db, userIds, matchTimeUtc);
+			var bulk = await Database.Leaderboards.GetBulkLeaderboardData(db, game, userIds, matchTimeUtc);
 
 			var daily = new Dictionary<long, EloData>();
 			var monthly = new Dictionary<long, EloData>();
@@ -1659,7 +1659,7 @@ namespace Database
 				})
 				{
 					await db.LeaderboardEntries
-						.Where(x => x.UserId == userId && x.Period == period && x.PeriodStart == start)
+						.Where(x => x.Game == game && x.UserId == userId && x.Period == period && x.PeriodStart == start)
 						.ExecuteUpdateAsync(s => s
 							.SetProperty(x => x.Points, points)
 							.SetProperty(x => x.Wins, x => x.Wins + wins)

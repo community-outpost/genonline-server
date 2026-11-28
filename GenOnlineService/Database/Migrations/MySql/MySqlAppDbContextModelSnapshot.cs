@@ -1664,6 +1664,13 @@ namespace GenOnlineService.Migrations.MySql
 
             modelBuilder.Entity("LeaderboardEntry", b =>
                 {
+                    b.Property<string>("Game")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasDefaultValue("zerohour")
+                        .HasColumnName("game");
+
                     b.Property<string>("Period")
                         .HasMaxLength(8)
                         .HasColumnType("varchar(8)")
@@ -1689,7 +1696,7 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("int")
                         .HasColumnName("wins");
 
-                    b.HasKey("Period", "PeriodStart", "UserId");
+                    b.HasKey("Game", "Period", "PeriodStart", "UserId");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_leaderboard_entries_user_id");

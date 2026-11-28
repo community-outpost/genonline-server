@@ -476,7 +476,7 @@ static partial class MatchmakingManager
 
 				foreach (var player in formation.Players)
 				{
-					await Database.Leaderboards.CreateUserEntriesIfNotExists(db, player.m_UserID);
+					await Database.Leaderboards.CreateUserEntriesIfNotExists(db, ClientGames.RatedOf(Build.Game), player.m_UserID);
 					await SendStatus(player, StatusCodes.Creating, new { Players = formation.Players.Length, Map = formation.Map.Name });
 				}
 				var host = formation.Players[0];
