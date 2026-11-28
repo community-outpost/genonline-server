@@ -279,7 +279,7 @@ public abstract partial class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new PlayerNetworkConfiguration());
 		modelBuilder.ApplyConfiguration(new DeviceConfiguration());
 		modelBuilder.ApplyConfiguration(new SessionEventConfiguration());
-		modelBuilder.ApplyConfiguration(new MatchConfiguration());
+		modelBuilder.ApplyConfiguration(new MatchConfiguration(this is PostgresAppDbContext));
 		modelBuilder.ApplyConfiguration(new MatchPlayerConfiguration());
 		modelBuilder.ApplyConfiguration(new MatchPublicationConfiguration());
 		modelBuilder.ApplyConfiguration(new LeaderboardEntryConfiguration());

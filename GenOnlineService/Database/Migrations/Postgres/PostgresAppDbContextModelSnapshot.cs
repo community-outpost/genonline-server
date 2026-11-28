@@ -1726,6 +1726,10 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("boolean")
                         .HasColumnName("allow_observers");
 
+                    b.Property<bool>("Desynced")
+                        .HasColumnType("boolean")
+                        .HasColumnName("desynced");
+
                     b.Property<long>("ExeCrc")
                         .HasColumnType("bigint")
                         .HasColumnName("exe_crc");
@@ -1790,6 +1794,10 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("bigint")
                         .HasColumnName("starting_cash");
 
+                    b.Property<short?>("TeamSize")
+                        .HasColumnType("smallint")
+                        .HasColumnName("team_size");
+
                     b.Property<bool>("TrackStats")
                         .HasColumnType("boolean")
                         .HasColumnName("track_stats");
@@ -1805,6 +1813,22 @@ namespace GenOnlineService.Migrations.Postgres
 
                     b.HasIndex("FinishedAt", "Id")
                         .HasDatabaseName("ix_matches_finished_at");
+
+                    b.HasIndex("Desynced", "FinishedAt", "Id")
+                        .HasDatabaseName("ix_matches_desync_finished")
+                        .HasFilter("desynced");
+
+                    b.HasIndex("LobbyType", "FinishedAt", "Id")
+                        .HasDatabaseName("ix_matches_type_finished");
+
+                    b.HasIndex("MapName", "FinishedAt", "Id")
+                        .HasDatabaseName("ix_matches_map_finished");
+
+                    b.HasIndex("TeamSize", "FinishedAt", "Id")
+                        .HasDatabaseName("ix_matches_team_size_finished");
+
+                    b.HasIndex("TrackStats", "FinishedAt", "Id")
+                        .HasDatabaseName("ix_matches_rated_finished");
 
                     b.ToTable("matches", (string)null);
                 });
@@ -2078,6 +2102,10 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("jsonb")
                         .HasColumnName("details");
 
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
                     b.Property<string>("Result")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -2097,8 +2125,11 @@ namespace GenOnlineService.Migrations.Postgres
 
                     b.HasKey("MatchId", "Slot");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_match_players_user_id");
+                    b.HasIndex("UserId", "MatchId")
+                        .HasDatabaseName("ix_match_players_user_match");
+
+                    b.HasIndex("UserId", "FinishedAt", "MatchId")
+                        .HasDatabaseName("ix_match_players_user_finished");
 
                     b.ToTable("match_players", (string)null);
                 });

@@ -58,6 +58,10 @@ public class Match
 	public DateTime StartedAt { get; set; }
 	public DateTime? FinishedAt { get; set; }
 
+	// The most active players on one team, a player without a team counting as a team of 1, set when the match finishes
+	public short? TeamSize { get; set; }
+	public bool Desynced { get; set; }
+
 	public List<MatchPlayer> Players { get; set; } = new();
 }
 
@@ -74,6 +78,9 @@ public class MatchPlayer
 	public string? Result { get; set; }
 
 	public string? Details { get; set; }
+
+	// A copy of matches.finished_at so a player's history pages on one index
+	public DateTime? FinishedAt { get; set; }
 }
 
 public sealed class MatchPlayerDetails
@@ -126,6 +133,14 @@ public sealed class LobbyTypeConverter : ValueConverter<ELobbyType, string>
 
 public class MatchConfiguration : IEntityTypeConfiguration<Match>
 {
+	private readonly bool m_partialIndexes;
+
+	// PostgreSQL keeps the desync index partial, MySQL has no partial indexes
+	public MatchConfiguration(bool partialIndexes = false)
+	{
+		m_partialIndexes = partialIndexes;
+	}
+
 	public void Configure(EntityTypeBuilder<Match> entity)
 	{
 		entity.ToTable("matches");
@@ -134,6 +149,15 @@ public class MatchConfiguration : IEntityTypeConfiguration<Match>
 
 		entity.HasIndex(e => new { e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_finished_at");
 		entity.HasIndex(e => e.StartedAt).HasDatabaseName("ix_matches_started_at");
+		entity.HasIndex(e => new { e.MapName, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_map_finished");
+		entity.HasIndex(e => new { e.LobbyType, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_type_finished");
+		entity.HasIndex(e => new { e.TrackStats, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_rated_finished");
+		entity.HasIndex(e => new { e.TeamSize, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_team_size_finished");
+		IndexBuilder<Match> desync = entity.HasIndex(e => new { e.Desynced, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_desync_finished");
+		if (m_partialIndexes)
+		{
+			desync.HasFilter("desynced");
+		}
 
 		entity.HasMany(e => e.Players).WithOne().HasForeignKey(p => p.MatchId).OnDelete(DeleteBehavior.Cascade);
 
@@ -157,6 +181,8 @@ public class MatchConfiguration : IEntityTypeConfiguration<Match>
 		entity.Property(e => e.IniCrc).HasColumnName("ini_crc");
 		entity.Property(e => e.StartedAt).HasColumnName("started_at");
 		entity.Property(e => e.FinishedAt).HasColumnName("finished_at");
+		entity.Property(e => e.TeamSize).HasColumnName("team_size");
+		entity.Property(e => e.Desynced).HasColumnName("desynced");
 	}
 }
 
@@ -167,7 +193,8 @@ public class MatchPlayerConfiguration : IEntityTypeConfiguration<MatchPlayer>
 		entity.ToTable("match_players");
 
 		entity.HasKey(e => new { e.MatchId, e.Slot });
-		entity.HasIndex(e => e.UserId).HasDatabaseName("ix_match_players_user_id");
+		entity.HasIndex(e => new { e.UserId, e.MatchId }).HasDatabaseName("ix_match_players_user_match");
+		entity.HasIndex(e => new { e.UserId, e.FinishedAt, e.MatchId }).HasDatabaseName("ix_match_players_user_finished");
 
 		entity.Property(e => e.MatchId).HasColumnName("match_id");
 		entity.Property(e => e.Slot).HasColumnName("slot");
@@ -177,6 +204,7 @@ public class MatchPlayerConfiguration : IEntityTypeConfiguration<MatchPlayer>
 		entity.Property(e => e.Color).HasColumnName("color");
 		entity.Property(e => e.Result).HasColumnName("result").HasMaxLength(16);
 		entity.Property(e => e.Details).HasColumnName("details");
+		entity.Property(e => e.FinishedAt).HasColumnName("finished_at");
 	}
 }
 
@@ -463,6 +491,12 @@ namespace Database
 				player.Details = WriteDetails(details);
 
 				await db.SaveChangesAsync();
+
+				if (desynced)
+				{
+					await db.Matches.Where(m => m.Id == (long)matchId).ExecuteUpdateAsync(s => s.SetProperty(m => m.Desynced, true));
+				}
+
 				return changed;
 			}
 			catch (Exception ex)
@@ -474,6 +508,16 @@ namespace Database
 			{
 				db.ChangeTracker.Clear();
 			}
+		}
+
+		// Observers keep the random side (-2), and a player without a team counts as a team of 1
+		public static short? TeamSizeOf(IEnumerable<MatchPlayer> players)
+		{
+			int[] sizes = players.Where(p => p.Side != -2)
+				.GroupBy(p => p.Team is short team && team >= 0 ? team : -1 - p.Slot)
+				.Select(team => team.Count())
+				.ToArray();
+			return sizes.Length == 0 ? null : (short)sizes.Max();
 		}
 
 		private static string ComputeRosterType(Dictionary<int, int> playersPerTeam)
@@ -893,32 +937,47 @@ namespace Database
 
 			await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
-			await FinishMatch(db, lobby, cancellationToken);
+			await FinishMatch(db, (long)lobby.MatchID, cancellationToken);
 			await DetermineLobbyWinnerIfNotPresent(db, lobby, cancellationToken);
 			await ScheduleExternalPublication(db, lobby.MatchID, cancellationToken);
 
 			await transaction.CommitAsync(cancellationToken);
 		}
 
-		private static async Task FinishMatch(
+		internal static async Task FinishMatch(
 			AppDbContext db,
-			GenOnlineService.Lobby lobby,
+			long matchID,
 			CancellationToken cancellationToken)
 		{
-			if (lobby.MatchID == 0)
+			if (matchID == 0)
 				return;
 
+			// Whole microseconds, the precision both providers store, so a page cursor equals the stored value
 			DateTime now = DateTime.UtcNow;
+			now = now.AddTicks(-(now.Ticks % 10));
 
-			await db.Matches
-				.Where(m => m.Id == (long)lobby.MatchID && m.FinishedAt == null)
-				.ExecuteUpdateAsync(s => s.SetProperty(m => m.FinishedAt, now), cancellationToken);
+			List<MatchPlayer> players = await db.MatchPlayers.AsNoTracking().Where(p => p.MatchId == matchID).ToListAsync(cancellationToken);
+			short? teamSize = TeamSizeOf(players);
+			bool desynced = players.Any(p => ReadDetails(p.Details).desynced);
+
+			int finished = await db.Matches
+				.Where(m => m.Id == matchID && m.FinishedAt == null)
+				.ExecuteUpdateAsync(s => s
+					.SetProperty(m => m.FinishedAt, now)
+					.SetProperty(m => m.TeamSize, teamSize)
+					.SetProperty(m => m.Desynced, m => m.Desynced || desynced), cancellationToken);
+			if (finished == 1)
+			{
+				await db.MatchPlayers
+					.Where(p => p.MatchId == matchID)
+					.ExecuteUpdateAsync(s => s.SetProperty(p => p.FinishedAt, now), cancellationToken);
+			}
 
 			bool matchExists = await db.Matches
-				.AnyAsync(m => m.Id == (long)lobby.MatchID && m.FinishedAt != null, cancellationToken);
+				.AnyAsync(m => m.Id == matchID && m.FinishedAt != null, cancellationToken);
 
 			if (!matchExists)
-				throw new InvalidOperationException($"Finished match {lobby.MatchID} was not found.");
+				throw new InvalidOperationException($"Finished match {matchID} was not found.");
 		}
 
 		private static async Task ScheduleExternalPublication(
