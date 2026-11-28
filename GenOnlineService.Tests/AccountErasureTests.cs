@@ -78,8 +78,8 @@ public class AccountErasureTests
 	// two erasures of one account at the same time: one erases and audits, the other finds it already erased
 	// a live player cannot take a name that reads as an erased account's, look-alikes included
 	[Fact]
-	public void ATombstoneShapedNameIsAReservedWord()
+	public void ATombstoneShapedNameIsReserved()
 	{
-		Assert.Equal("deleted", GenOnlineService.Realtime.ProfileActions.ReservedWordIn(AccountErasure.TombstoneName()));
+		Assert.Equal(GenOnlineService.Realtime.ErrorCodes.NameReserved, GenOnlineService.Realtime.ProfileActions.ReservedNameRefusal(AccountErasure.TombstoneName())!.Value.Code);
 	}
 }

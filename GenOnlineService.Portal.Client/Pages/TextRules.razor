@@ -191,7 +191,7 @@ else
             else
             {
                 <div class="bb:space-y-4">
-                    <p class="bb:text-sm bb:text-muted-foreground">The rules of each input are checked in order: the first enabled rule whose condition holds decides, none means allow. A condition reads @String.Join(", ", m_fields.Select(f => "input." + f)) with numbers, comparisons and &amp;&amp;, || and !. The service compiles and runs the rules before it saves them. A chat rule that filters adds its flag words to the list that players who turn on the chat filter download; it does not change what is stored or sent.</p>
+                    <p class="bb:text-sm bb:text-muted-foreground">The rules of each input are checked in order: the first enabled rule whose condition holds decides, none means allow. A condition reads @String.Join(", ", m_fields.Select(f => "input." + f)) with numbers, comparisons and &amp;&amp;, || and !. The service compiles and runs the rules before it saves them. A rule that blocks or refuses may carry a message, which the player reads as written, so it never names the matched word. A chat rule that filters adds its flag words to the list that players who turn on the chat filter download; it does not change what is stored or sent.</p>
                     @foreach (WorkflowDraft workflow in m_workflows)
                     {
                         <BbCard>
@@ -209,6 +209,12 @@ else
                                         <div class="go-filterbar-search">
                                             <BbInput @bind-Value="rule.Expression" Placeholder="input.Block > 0" AriaLabel="Condition" Class="bb:font-mono" autocomplete="off" spellcheck="false" />
                                         </div>
+                                        @if (rule.Outcome is "block" or "refuse")
+                                        {
+                                            <div class="go-filterbar-search">
+                                                <BbInput @bind-Value="rule.Message" MaxLength="200" Placeholder="Message to the player (optional)…" AriaLabel="Message to the player" autocomplete="off" />
+                                            </div>
+                                        }
                                         <div class="go-filterbar-selects">
                                             <BbNativeSelect TValue="string" @bind-Value="rule.Outcome" AriaLabel="Outcome" Class="go-select">
                                                 @foreach (string outcome in workflow.Outcomes)
@@ -396,6 +402,7 @@ else
         public string? Name { get; set; }
         public string? Expression { get; set; }
         public string? Outcome { get; set; }
+        public string? Message { get; set; }
         public bool Enabled { get; set; } = true;
     }
 
@@ -489,7 +496,7 @@ else
     {
         Kind = workflow.Kind,
         Outcomes = workflow.Outcomes,
-        Rules = workflow.Definition.Rules.Select(r => new RuleDraft { Name = r.Name, Expression = r.Expression, Outcome = r.Outcome, Enabled = r.Enabled }).ToList(),
+        Rules = workflow.Definition.Rules.Select(r => new RuleDraft { Name = r.Name, Expression = r.Expression, Outcome = r.Outcome, Message = r.Message, Enabled = r.Enabled }).ToList(),
         UpdatedBy = workflow.UpdatedBy,
         UpdatedAt = workflow.UpdatedAt
     };
@@ -580,7 +587,7 @@ else
         workflow.Reason = null;
         var definition = new PortalTextWorkflowDefinition
         {
-            Rules = workflow.Rules.Select(r => new PortalTextRule { Name = r.Name?.Trim() ?? "", Expression = r.Expression?.Trim() ?? "", Outcome = r.Outcome ?? "", Enabled = r.Enabled }).ToList()
+            Rules = workflow.Rules.Select(r => new PortalTextRule { Name = r.Name?.Trim() ?? "", Expression = r.Expression?.Trim() ?? "", Outcome = r.Outcome ?? "", Message = String.IsNullOrWhiteSpace(r.Message) ? null : r.Message.Trim(), Enabled = r.Enabled }).ToList()
         };
         (PortalAnswer<PortalTextWorkflow> saved, string? reason) = await Api.SaveTextWorkflowAsync(workflow.Kind, definition);
         workflow.Saving = false;

@@ -1197,6 +1197,7 @@ namespace GenOnlineService.Portal.Client
 		public string Expression { get; init; } = "";
 		public string Outcome { get; init; } = "";
 		public bool Enabled { get; init; } = true;
+		public string? Message { get; init; }
 	}
 
 	public sealed record PortalTextWorkflowDefinition

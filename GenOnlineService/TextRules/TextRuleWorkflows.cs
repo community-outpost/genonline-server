@@ -63,6 +63,10 @@ namespace GenOnlineService.TextRules
 		public string Expression { get; init; } = String.Empty;
 		public string Outcome { get; init; } = TextOutcomes.Allow;
 		public bool Enabled { get; init; } = true;
+
+		// Plain text shown to the player a rule refuses, null for none
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Message { get; init; }
 	}
 
 	public sealed record TextWorkflowDefinition
@@ -70,7 +74,7 @@ namespace GenOnlineService.TextRules
 		public IReadOnlyList<TextRuleDefinition> Rules { get; init; } = [];
 	}
 
-	public sealed record TextRuleDecision(string Outcome, string? Rule);
+	public sealed record TextRuleDecision(string Outcome, string? Rule, string? Message = null);
 
 	// The rule workflows of the text checks run on Microsoft RulesEngine. Staff write only a condition and an outcome per
 	// rule: the condition may name the input fields, numbers, strings, comparisons and and/or/not, nothing else, so it can
@@ -80,6 +84,7 @@ namespace GenOnlineService.TextRules
 		public const int MaxRules = 32;
 		public const int MaxNameLength = 64;
 		public const int MaxExpressionLength = 500;
+		public const int MaxMessageLength = 200;
 		public const string InputName = "input";
 
 		private static readonly ILogger s_log = AppLog.For(typeof(TextRuleWorkflows));
@@ -201,7 +206,7 @@ namespace GenOnlineService.TextRules
 				}
 				if (result.IsSuccess)
 				{
-					return new TextRuleDecision(result.Rule.SuccessEvent, result.Rule.RuleName);
+					return new TextRuleDecision(result.Rule.SuccessEvent, result.Rule.RuleName, definition.Rules.FirstOrDefault(r => r.Name == result.Rule.RuleName)?.Message);
 				}
 			}
 			return new TextRuleDecision(TextOutcomes.Allow, null);
@@ -255,6 +260,10 @@ namespace GenOnlineService.TextRules
 				if (!outcomes.Contains(rule.Outcome, StringComparer.Ordinal))
 				{
 					return $"rule {rule.Name}: the outcome of a {kind} rule is one of {String.Join(", ", outcomes)}";
+				}
+				if (rule.Message != null && (rule.Message.Length is 0 or > MaxMessageLength || rule.Message.Any(Char.IsControl)))
+				{
+					return $"rule {rule.Name}: the message is plain text of 1 to {MaxMessageLength} characters";
 				}
 				if (ExpressionError(rule.Expression) is string expressionError)
 				{

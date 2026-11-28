@@ -56,7 +56,7 @@ namespace GenOnlineService.Names
 			// the placeholder's own shape would settle the debt and still look owed
 			if (Database.DisplayNames.IsPlaceholderShaped(name))
 			{
-				return Result.Fail(ErrorCodes.NameReserved, new { Word = "player" });
+				return Result.Fail(ErrorCodes.NameReserved, new { Category = TextRules.TextCategories.Reserved });
 			}
 
 			bool found;
@@ -202,10 +202,9 @@ namespace GenOnlineService.Names
 			}
 			if (!StaffRoles.HasPermission(owner, Permissions.NamesProtected))
 			{
-				string? word = ProfileActions.ReservedWordIn(name);
-				if (word != null)
+				if (ProfileActions.ReservedNameRefusal(name) is Failure reserved)
 				{
-					return Result.Fail(ErrorCodes.NameReserved, new { Word = word });
+					return reserved;
 				}
 			}
 			return null;

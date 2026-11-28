@@ -63,16 +63,16 @@ namespace GenOnlineService.Realtime
 			return null;
 		}
 
-		// The listed word that refuses the name, as the list spells it, null when it passes. A word with anything but letters keeps the plugin's NameRules.check
+		// The name.reserved refusal of a listed word or null when the name passes, where a word with anything but letters keeps the plugin's NameRules.check
 		// rule: both sides lower-cased with Java's Locale.ROOT rules, then a substring match.
-		public static string? ReservedWordIn(string name)
+		public static Failure? ReservedNameRefusal(string name)
 		{
 			// the name of an erased account must not be taken by a live player
 			if (AccountErasure.IsTombstoneShaped(name))
 			{
-				return "deleted";
+				return Result.Fail(ErrorCodes.NameReserved, new { Category = TextRules.TextCategories.Reserved });
 			}
-			return TextRules.TextChecks.RefusedNameWord(name);
+			return TextRules.TextChecks.NameRefusal(name);
 		}
 	}
 }

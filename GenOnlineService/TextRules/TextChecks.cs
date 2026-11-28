@@ -24,7 +24,7 @@ using System.Text.Json;
 
 namespace GenOnlineService.TextRules
 {
-	public sealed record TextCheck(string Kind, string Outcome, string? Rule, IReadOnlyList<TextHit> Hits, IReadOnlyList<TextReading> Readings, TextRuleFacts Facts);
+	public sealed record TextCheck(string Kind, string Outcome, string? Rule, IReadOnlyList<TextHit> Hits, IReadOnlyList<TextReading> Readings, TextRuleFacts Facts, string? Message = null);
 
 	// A reload builds a new set and swaps it in whole
 	public sealed class TextRuleSet
@@ -125,7 +125,7 @@ namespace GenOnlineService.TextRules
 				.OrderBy(h => h.Start).ThenByDescending(h => h.End).ThenByDescending(h => h.Term.Term.Length).ToList();
 			TextRuleFacts facts = TextRuleFacts.Of(kind, distinct);
 			TextRuleDecision decision = Workflows.Decide(facts);
-			return new TextCheck(kind, decision.Outcome, decision.Rule, distinct, readings, facts);
+			return new TextCheck(kind, decision.Outcome, decision.Rule, distinct, readings, facts, decision.Message);
 		}
 	}
 
@@ -222,32 +222,41 @@ namespace GenOnlineService.TextRules
 
 		public static TextCheck Check(string kind, string text) => Current.Check(kind, text);
 
-		// The listed word a chosen display name is refused for, null when the rules allow the name. The name codes stay as
-		// they were: the caller answers name.reserved with this word.
-		public static string? RefusedNameWord(string name)
+		public const string OtherCategory = "other";
+
+		private static readonly string[] s_categoryPriority = [TextCategories.Impersonation, TextCategories.Reserved, TextCategories.Slur, TextCategories.Sexual, TextCategories.Insult, TextCategories.Profanity];
+
+		// The refusal of a text rule, {category, message?}: the category of the words that matched and the staff message of the deciding
+		// rule, never the matched word itself. Name only categories count for display names only.
+		public static Failure Refusal(string code, TextCheck check)
+		{
+			List<TextTermInfo> terms = check.Hits.Select(h => h.Term).Where(t => check.Kind == TextKinds.DisplayName || !TextCategories.IsNameOnly(t.Category)).ToList();
+			if (terms.Any(t => t.Severity == TextSeverities.Block))
+			{
+				terms = terms.Where(t => t.Severity == TextSeverities.Block).ToList();
+			}
+			string category = s_categoryPriority.FirstOrDefault(c => terms.Any(t => t.Category == c)) ?? OtherCategory;
+			return Result.Fail(code, check.Message == null ? new { Category = category } : new { Category = category, Message = check.Message });
+		}
+
+		// name.reserved when the rules refuse a chosen display name, null when they allow it
+		public static Failure? NameRefusal(string name)
 		{
 			TextCheck check = Check(TextKinds.DisplayName, name);
-			if (check.Outcome != TextOutcomes.Refuse)
-			{
-				return null;
-			}
-			return check.Hits.FirstOrDefault()?.Term.Term ?? check.Rule ?? TextOutcomes.Refuse;
+			return check.Outcome == TextOutcomes.Refuse ? Refusal(ErrorCodes.NameReserved, check) : null;
 		}
 
 		public static Failure? LobbyNameRefusal(string name)
 		{
 			TextCheck check = Check(TextKinds.LobbyName, name);
-			if (check.Outcome != TextOutcomes.Refuse)
-			{
-				return null;
-			}
-			return Result.Fail(ErrorCodes.NameReserved, new { Word = check.Hits.FirstOrDefault()?.Term.Term ?? check.Rule ?? TextOutcomes.Refuse });
+			return check.Outcome == TextOutcomes.Refuse ? Refusal(ErrorCodes.NameReserved, check) : null;
 		}
 
 		// Chat is stored and delivered as written: a block rule refuses it, a filter rule only feeds the client filter list
 		public static Failure? ChatRefusal(string content)
 		{
-			return Check(TextKinds.Chat, content).Outcome == TextOutcomes.Block ? Result.Fail(ChatBlocked) : null;
+			TextCheck check = Check(TextKinds.Chat, content);
+			return check.Outcome == TextOutcomes.Block ? Refusal(ChatBlocked, check) : null;
 		}
 
 		// A database seeded with an older version gets only what later versions added; staff edits and removals stay. One transaction, so a second copy starting at the same time fails and writes nothing.

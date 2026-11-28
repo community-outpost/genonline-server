@@ -88,7 +88,7 @@ namespace GenOnlineService.Identity
 			{
 				return PasswordAccountResult.Refused(nameFailure.Code == ErrorCodes.NameLength ? ErrorNameLength : ErrorNameInvalid);
 			}
-			if (ProfileActions.ReservedWordIn(name) != null)
+			if (ProfileActions.ReservedNameRefusal(name) != null)
 			{
 				return PasswordAccountResult.Refused(ErrorNameReserved);
 			}
