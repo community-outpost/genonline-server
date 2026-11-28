@@ -113,6 +113,10 @@ namespace Database
 		public string? State { get; init; }
 		public string? EacKind { get; init; }
 		public bool? SelfReported { get; init; }
+		public string? EpicReferenceId { get; init; }
+		public string? EpicAction { get; init; }
+		public DateTime? EpicPlacedAt { get; init; }
+		public DateTime? EpicExpiresAt { get; init; }
 
 		public PlayerReport? Report { get; init; }
 
@@ -209,7 +213,7 @@ namespace Database
 				{
 					Kind = kind, ID = r.ReportID, UserID = r.UserID, MatchID = r.MatchID > 0 ? r.MatchID : null, LobbyID = r.LobbyID, At = r.ReportedAt,
 					ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, Reason = r.Reason, Request = r.Request, Detail = r.Detail, State = r.State,
-					EacKind = r.EacKind, SelfReported = r.SelfReported
+					EacKind = r.EacKind, SelfReported = r.SelfReported, EpicReferenceId = r.EpicReferenceId, EpicAction = r.EpicAction, EpicPlacedAt = r.EpicPlacedAt, EpicExpiresAt = r.EpicExpiresAt
 				}));
 			}
 			if (kinds.Contains(CaseSignalKinds.RuleMatch))

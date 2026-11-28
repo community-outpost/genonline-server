@@ -39,6 +39,10 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("datetime(6)")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("expires_at");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -53,6 +57,18 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("bigint")
                         .HasColumnName("match_id");
 
+                    b.Property<DateTime?>("PlacedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("placed_at");
+
+                    b.Property<string>("ReferenceId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasDefaultValue("")
+                        .HasColumnName("reference_id");
+
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("reviewed_at");
@@ -61,9 +77,22 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("bigint")
                         .HasColumnName("reviewed_by");
 
+                    b.Property<string>("SanctionAction")
+                        .HasMaxLength(64)
+                        .HasColumnType("varchar(64)")
+                        .HasColumnName("sanction_action");
+
                     b.Property<bool>("SelfReported")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("self_reported");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasDefaultValue("client")
+                        .HasColumnName("source");
 
                     b.Property<long>("UserId")
                         .HasColumnType("bigint")
@@ -77,7 +106,7 @@ namespace GenOnlineService.Migrations.MySql
                     b.HasIndex("ReviewedAt")
                         .HasDatabaseName("ix_anticheat_eac_findings_reviewed_at");
 
-                    b.HasIndex("UserId", "MatchId", "LobbyId", "Kind", "SelfReported")
+                    b.HasIndex("UserId", "MatchId", "LobbyId", "Kind", "SelfReported", "ReferenceId")
                         .IsUnique()
                         .HasDatabaseName("ux_anticheat_eac_findings_target");
 

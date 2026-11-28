@@ -51,6 +51,12 @@ namespace GenOnlineService.Realtime
 			}
 
 			await Database.AntiCheat.RecordEacEvent(db, report!);
+			string productUserId = WebSocketManager.GetMiddlewareIDForUser(report!.TargetUserId);
+			if (productUserId.Length > 0)
+			{
+				// the report never waits for Epic
+				_ = m_sanctions.CheckAsync(report.TargetUserId, productUserId);
+			}
 			return Result.Success();
 		}
 	}

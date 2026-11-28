@@ -216,6 +216,25 @@ public class AnticheatEacFinding
 	public DateTime? ReviewedAt { get; set; }
 	public Int64? ReviewedBy { get; set; }
 	public Int64? CaseID { get; set; }
+
+	// client for a game client report, epic for an active sanction that Epic returned
+	public string Source { get; set; } = AnticheatEacSources.Client;
+
+	// the Epic sanction, empty or null for a client report
+	public string ReferenceId { get; set; } = "";
+	public string? SanctionAction { get; set; }
+	public DateTime? PlacedAt { get; set; }
+
+	// null for a permanent sanction
+	public DateTime? ExpiresAt { get; set; }
+}
+
+public static class AnticheatEacSources
+{
+	public const string Client = "client";
+	public const string Epic = "epic";
+
+	public const string EpicKind = "sanction";
 }
 
 // One reporter of a finding with the EAC codes and text that reporter saw
@@ -251,7 +270,9 @@ public static class AntiCheatReviewKinds
 
 	public const string Eac = "eac";
 
-	public static readonly IReadOnlyList<string> All = [Modules, Probes, Devices, IllegalRequests, Eac];
+	public const string Epic = "epic";
+
+	public static readonly IReadOnlyList<string> All = [Modules, Probes, Devices, IllegalRequests, Eac, Epic];
 
 	public static bool IsKnown(string? kind) => kind != null && All.Contains(kind);
 }
@@ -386,6 +407,9 @@ public class AnticheatIllegalRequestConfiguration : IEntityTypeConfiguration<Ant
 public class AnticheatEacFindingConfiguration : IEntityTypeConfiguration<AnticheatEacFinding>
 {
 	public const int KindMaxLength = 32;
+	public const int SourceMaxLength = 16;
+	public const int ReferenceIdMaxLength = 64;
+	public const int SanctionActionMaxLength = 64;
 
 	public void Configure(EntityTypeBuilder<AnticheatEacFinding> entity)
 	{
@@ -401,11 +425,16 @@ public class AnticheatEacFindingConfiguration : IEntityTypeConfiguration<Antiche
 		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
 		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
 		entity.Property(e => e.CaseID).HasColumnName("case_id");
+		entity.Property(e => e.Source).HasColumnName("source").HasMaxLength(SourceMaxLength).IsRequired().HasDefaultValue(AnticheatEacSources.Client);
+		entity.Property(e => e.ReferenceId).HasColumnName("reference_id").HasMaxLength(ReferenceIdMaxLength).IsRequired().HasDefaultValue("");
+		entity.Property(e => e.SanctionAction).HasColumnName("sanction_action").HasMaxLength(SanctionActionMaxLength);
+		entity.Property(e => e.PlacedAt).HasColumnName("placed_at");
+		entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
 		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_eac_findings_reviewed_at");
 		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_eac_findings_case");
 
-		// reports about one player in one match from every witness meet in one finding
-		entity.HasIndex(e => new { e.UserId, e.MatchId, e.LobbyId, e.Kind, e.SelfReported })
+		// reports about one player in one match from every witness meet in one finding, and an Epic sanction is one finding by its reference id
+		entity.HasIndex(e => new { e.UserId, e.MatchId, e.LobbyId, e.Kind, e.SelfReported, e.ReferenceId })
 			.IsUnique()
 			.HasDatabaseName("ux_anticheat_eac_findings_target");
 	}
@@ -457,6 +486,11 @@ namespace Database
 		public string? EacKind { get; init; }
 		public bool? SelfReported { get; init; }
 
+		public string? EpicReferenceId { get; init; }
+		public string? EpicAction { get; init; }
+		public DateTime? EpicPlacedAt { get; init; }
+		public DateTime? EpicExpiresAt { get; init; }
+
 		// null for a row stored before the other kinds kept the time
 		public DateTime? ReportedAt { get; init; }
 
@@ -482,9 +516,14 @@ namespace Database
 					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, LobbyID = r.LobbyId, Request = r.Request, Detail = r.Detail, State = r.State,
 					ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				}),
-				AntiCheatReviewKinds.Eac => db.AnticheatEacFindings.AsNoTracking().Select(r => new AntiCheatReviewRow
+				AntiCheatReviewKinds.Eac => db.AnticheatEacFindings.AsNoTracking().Where(r => r.Source == AnticheatEacSources.Client).Select(r => new AntiCheatReviewRow
 				{
 					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, LobbyID = r.LobbyId > 0 ? r.LobbyId : null, EacKind = r.Kind, SelfReported = r.SelfReported,
+					ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
+				}),
+				AntiCheatReviewKinds.Epic => db.AnticheatEacFindings.AsNoTracking().Where(r => r.Source == AnticheatEacSources.Epic).Select(r => new AntiCheatReviewRow
+				{
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = 0, EpicReferenceId = r.ReferenceId, EpicAction = r.SanctionAction, EpicPlacedAt = r.PlacedAt, EpicExpiresAt = r.ExpiresAt,
 					ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				}),
 				_ => Probes(db, kind).AsNoTracking().Select(r => new AntiCheatReviewRow
@@ -512,8 +551,8 @@ namespace Database
 				AntiCheatReviewKinds.IllegalRequests => await db.AnticheatIllegalRequests
 					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
 					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
-				AntiCheatReviewKinds.Eac => await db.AnticheatEacFindings
-					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
+				AntiCheatReviewKinds.Eac or AntiCheatReviewKinds.Epic => await db.AnticheatEacFindings
+					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null && r.Source == (kind == AntiCheatReviewKinds.Epic ? AnticheatEacSources.Epic : AnticheatEacSources.Client))
 					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
 				AntiCheatReviewKinds.Probes or AntiCheatReviewKinds.Devices => await Probes(db, kind)
 					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
@@ -727,6 +766,51 @@ namespace Database
 			{
 				AppMetrics.RecordSecurityAction("anticheat_eac_review", "error");
 				s_log.LogError(ex, "RecordEacEvent failed");
+				return false;
+			}
+		}
+
+		// a sanction Epic no longer returns stays as history, and nothing acts on the player without staff
+		public static async Task<bool> RecordEpicSanctions(AppDbContext db, Int64 userId, IReadOnlyList<EpicSanction> sanctions, DateTime at)
+		{
+			try
+			{
+				DateTime now = TruncateToMicroseconds(at);
+				bool created = false;
+				foreach (EpicSanction sanction in sanctions)
+				{
+					if (await db.AnticheatEacFindings.AsNoTracking().AnyAsync(f => f.UserId == userId && f.Source == AnticheatEacSources.Epic && f.ReferenceId == sanction.ReferenceId))
+					{
+						continue;
+					}
+					db.AnticheatEacFindings.Add(new AnticheatEacFinding
+					{
+						UserId = userId, Kind = AnticheatEacSources.EpicKind, Source = AnticheatEacSources.Epic, ReferenceId = sanction.ReferenceId, SanctionAction = sanction.Action,
+						PlacedAt = TruncateToMicroseconds(sanction.PlacedAt), ExpiresAt = sanction.ExpiresAt is DateTime expires ? TruncateToMicroseconds(expires) : null, CreatedAt = now
+					});
+					try
+					{
+						await db.SaveChangesAsync();
+						created = true;
+					}
+					catch (Exception ex) when (DbHelpers.IsUniqueViolation(ex))
+					{
+						// another check stored the sanction first
+						db.ChangeTracker.Clear();
+					}
+				}
+
+				AppMetrics.RecordSecurityAction("anticheat_epic_review", "success");
+				if (created)
+				{
+					RaiseReport(userId, 0, AntiCheatReviewKinds.Epic);
+				}
+				return true;
+			}
+			catch (Exception ex)
+			{
+				AppMetrics.RecordSecurityAction("anticheat_epic_review", "error");
+				s_log.LogError(ex, "RecordEpicSanctions failed");
 				return false;
 			}
 		}

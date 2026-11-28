@@ -472,6 +472,21 @@ else
                     </BbCardContent>
                 </BbCard>
             }
+            @if (m_epic.Count > 0)
+            {
+                <BbCard Class="bb:mt-4" data-testid="player-epic">
+                    <BbCardHeader>
+                        <BbCardTitle As="h2">Waiting Epic verified sanctions (@m_epic.Count)</BbCardTitle>
+                        <BbCardDescription title="@EpicSanctionFacts.TrustNote">Sanctions Epic holds on the linked Epic account of this player, decided in the waiting case.</BbCardDescription>
+                    </BbCardHeader>
+                    <BbCardContent Class="bb:space-y-4">
+                        @foreach (PortalCaseSignal signal in m_epic)
+                        {
+                            <EpicSanctionFacts Signal="@signal" />
+                        }
+                    </BbCardContent>
+                </BbCard>
+            }
         </BbTabsContent>
 
         <BbTabsContent Value="roles" Class="bb:mt-4">
@@ -1125,6 +1140,7 @@ else
         m_cases = null;
         m_casesError = null;
         m_eac = [];
+        m_epic = [];
         await LoadAsync();
 
         // the host audits this read, so it runs once per opened page and not after each action
@@ -1256,6 +1272,7 @@ else
     private List<PortalCaseSummary>? m_cases;
     private string? m_casesError;
     private List<PortalCaseSignal> m_eac = [];
+    private List<PortalCaseSignal> m_epic = [];
 
     private async Task LoadCasesAsync()
     {
@@ -1267,6 +1284,7 @@ else
         m_casesError = answer.Ok ? null : answer.Error;
         m_cases = (answer.Value?.Standing.PriorCases ?? []).ToList();
         m_eac = (answer.Value?.Signals ?? []).Where(signal => signal.Kind == "eac").ToList();
+        m_epic = (answer.Value?.Signals ?? []).Where(signal => signal.Kind == "epic").ToList();
     }
 
     private bool NeedsReason => ReasonRequired && String.IsNullOrWhiteSpace(m_reason);

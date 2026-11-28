@@ -289,7 +289,8 @@ namespace GenOnlineService.Portal.Client
 			new PortalReviewList("probes", "Suspicious probes", "Probes", "Missing or malformed answers to an anti-cheat probe inside a match."),
 			new PortalReviewList("devices", "Suspicious device ids", "Device ids", "Sign-ins with a device value that lacks the marker of a genuine client."),
 			new PortalReviewList("illegal_requests", "Illegal requests", "Requests", "Lobby and match requests a genuine client never sends in that state, such as a colour change while the match runs."),
-			new PortalReviewList("eac", "Easy Anti-Cheat", "EAC", "Easy Anti-Cheat decisions and integrity violations that game clients reported for a player.")
+			new PortalReviewList("eac", "Easy Anti-Cheat", "EAC", "Easy Anti-Cheat decisions and integrity violations that game clients reported for a player."),
+			new PortalReviewList("epic", "Epic verified sanctions", "Epic", "Active sanctions that the Epic Sanctions Web API returned for the linked Epic account of a player.")
 		];
 
 		public static PortalReviewList? Find(string? kind) => All.FirstOrDefault(list => list.Kind == kind);
@@ -299,6 +300,7 @@ namespace GenOnlineService.Portal.Client
 			"modules" => "puzzle",
 			"probes" => "radar",
 			"eac" => "shield-alert",
+			"epic" => "badge-check",
 			_ => "fingerprint-pattern"
 		};
 	}
@@ -1616,7 +1618,7 @@ namespace GenOnlineService.Portal.Client
 		public const string Report = "report";
 		public const string RuleMatch = "rule_match";
 
-		public static readonly IReadOnlyList<string> All = ["report", "modules", "probes", "devices", "illegal_requests", "eac", "rule_match"];
+		public static readonly IReadOnlyList<string> All = ["report", "modules", "probes", "devices", "illegal_requests", "eac", "epic", "rule_match"];
 
 		public static string Title(string kind) => kind switch
 		{
@@ -1727,6 +1729,10 @@ namespace GenOnlineService.Portal.Client
 		public string? EacKind { get; init; }
 		public bool? SelfReported { get; init; }
 		public IReadOnlyList<PortalCaseEacWitness>? Witnesses { get; init; }
+		public string? EpicReferenceId { get; init; }
+		public string? EpicAction { get; init; }
+		public DateTime? EpicPlacedAt { get; init; }
+		public DateTime? EpicExpiresAt { get; init; }
 		public long? RuleId { get; init; }
 		public string? RuleName { get; init; }
 		public int? RuleVersion { get; init; }

@@ -1184,7 +1184,8 @@ namespace GenOnlineService
 			builder.Services.AddSingleton(sp => new MatchIdGenerator(sp.GetRequiredService<IMatchIdWorkerStore>(), TimeProvider.System, MatchIdGenerator.DefaultHolder()));
 			builder.Services.AddSingleton<LobbyManager>();
 			builder.Services.AddSingleton<LobbyMembershipConnections>();
-			builder.Services.AddSingleton<GenOnlineService.Rest.ILinkedAccountProvider>(sp => new GenOnlineService.Rest.EosLinkedAccountProvider(sp.GetRequiredService<LobbyManager>()));
+			builder.Services.AddSingleton<EpicSanctionsClient>();
+			builder.Services.AddSingleton<GenOnlineService.Rest.ILinkedAccountProvider>(sp => new GenOnlineService.Rest.EosLinkedAccountProvider(sp.GetRequiredService<LobbyManager>(), sp.GetRequiredService<EpicSanctionsClient>()));
 
 			GenOnlineService.Realtime.RealtimeBackplaneSettings realtimeBackplane = GenOnlineService.Realtime.RealtimeBackplaneSettings.Read(builder.Configuration);
 
@@ -1407,6 +1408,10 @@ namespace GenOnlineService
 			GenOnlineService.Realtime.RealtimeOut.Initialize(app.Services.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<GenOnlineService.Realtime.RealtimeHub, GenOnlineService.Realtime.IRealtimeClient>>());
 			await GenOnlineService.Realtime.RealtimeControl.StartAsync(realtimeBackplane);
 			app.Logger.LogInformation("Service copy {CopyId} starting", GenOnlineService.Failover.CopyIdentity.ID);
+			if (app.Services.GetRequiredService<EpicSanctionsClient>().Config == null)
+			{
+				app.Logger.LogInformation("The Epic sanctions check is off because Epic:client_id, Epic:client_secret or Middleware:deployment_id is missing");
+			}
 			GenOnlineService.Failover.FailoverCoordinator? failover = null;
 			if (failoverSettings.Enabled)
 			{

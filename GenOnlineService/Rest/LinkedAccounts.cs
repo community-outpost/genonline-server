@@ -54,15 +54,17 @@ namespace GenOnlineService.Rest
 	{
 		private readonly LobbyManager m_lobbyManager;
 		private readonly Func<EosTokenIssuer.Settings?> m_tokenSettings;
+		private readonly EpicSanctionsClient? m_sanctions;
 
-		public EosLinkedAccountProvider(LobbyManager lobbyManager) : this(lobbyManager, EosTokenIssuer.GetSettings)
+		public EosLinkedAccountProvider(LobbyManager lobbyManager, EpicSanctionsClient? sanctions = null) : this(lobbyManager, EosTokenIssuer.GetSettings, sanctions)
 		{
 		}
 
-		public EosLinkedAccountProvider(LobbyManager lobbyManager, Func<EosTokenIssuer.Settings?> tokenSettings)
+		public EosLinkedAccountProvider(LobbyManager lobbyManager, Func<EosTokenIssuer.Settings?> tokenSettings, EpicSanctionsClient? sanctions = null)
 		{
 			m_lobbyManager = lobbyManager;
 			m_tokenSettings = tokenSettings;
+			m_sanctions = sanctions;
 		}
 
 		public string Name => EosLink.Provider;
@@ -81,7 +83,7 @@ namespace GenOnlineService.Rest
 
 		public Task<Failure?> LinkAsync(Int64 userID, EUserSessionType sessionType, string proof)
 		{
-			return EosLink.LinkAsync(m_lobbyManager, userID, sessionType, proof);
+			return EosLink.LinkAsync(m_lobbyManager, userID, sessionType, proof, m_sanctions);
 		}
 	}
 }

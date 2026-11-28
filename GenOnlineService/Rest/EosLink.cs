@@ -311,7 +311,7 @@ namespace GenOnlineService.Rest
 			_ => EosLinkOutcome.Linked
 		};
 
-		public static async Task<Failure?> LinkAsync(LobbyManager lobbyManager, Int64 userID, EUserSessionType sessionType, string idToken)
+		public static async Task<Failure?> LinkAsync(LobbyManager lobbyManager, Int64 userID, EUserSessionType sessionType, string idToken, EpicSanctionsClient? sanctions = null)
 		{
 			MiddlewareSettings? settings = LoadMiddlewareSettings();
 			if (settings == null)
@@ -356,7 +356,13 @@ namespace GenOnlineService.Rest
 			// if the player is already in a lobby, peers were signalled before the ID was known, so the manager tells
 			// them (serialized under the user's membership gate and the lobby gate, and only when the value changed).
 			WebSocketManager.EMiddlewareIDApplyResult applyResult = await lobbyManager.ApplyMiddlewareIDAsync(userID, sessionType, mwUserID);
-			return FailureOf(OutcomeOf(applyResult));
+			EosLinkOutcome outcome = OutcomeOf(applyResult);
+			if (outcome == EosLinkOutcome.Linked && sanctions != null)
+			{
+				// the sign-in never waits for Epic
+				_ = sanctions.CheckAsync(userID, mwUserID);
+			}
+			return FailureOf(outcome);
 		}
 	}
 }

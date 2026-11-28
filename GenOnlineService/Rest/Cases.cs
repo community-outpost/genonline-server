@@ -142,6 +142,15 @@ namespace GenOnlineService.Rest
 		public IReadOnlyList<CaseEacWitness>? Witnesses { get; init; }
 
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? EpicReferenceId { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? EpicAction { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public DateTime? EpicPlacedAt { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public DateTime? EpicExpiresAt { get; init; }
+
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public long? RuleId { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public string? RuleName { get; init; }
@@ -238,6 +247,7 @@ namespace GenOnlineService.Rest
 			[AntiCheatReviewKinds.Devices] = 30,
 			[AntiCheatReviewKinds.IllegalRequests] = 30,
 			[AntiCheatReviewKinds.Eac] = 40,
+			[AntiCheatReviewKinds.Epic] = 50,
 			[CaseSignalKinds.RuleMatch] = 20,
 			[CaseSignalKinds.Report] = 10
 		};
@@ -429,7 +439,11 @@ namespace GenOnlineService.Rest
 				Witnesses = row.Kind == AntiCheatReviewKinds.Eac ? witnesses.GetValueOrDefault(row.ID, []).Select(w => new CaseEacWitness
 				{
 					Reporter = RealtimeMembers.Of(w.ReporterId, names), At = w.CreatedAt, Action = w.Action, ReasonCode = w.ReasonCode, ViolationType = w.ViolationType, Details = w.Details
-				}).ToArray() : null
+				}).ToArray() : null,
+				EpicReferenceId = row.EpicReferenceId,
+				EpicAction = row.EpicAction,
+				EpicPlacedAt = row.EpicPlacedAt,
+				EpicExpiresAt = row.EpicExpiresAt
 			};
 		}
 

@@ -54,9 +54,11 @@ namespace GenOnlineService.Realtime
 		private readonly IAuthorizationService m_authorization;
 		private readonly IOpenIddictAuthorizationManager m_signIns;
 		private readonly ILogger<RealtimeHub> m_log;
+		private readonly EpicSanctionsClient m_sanctions;
 
-		public RealtimeHub(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IAuthorizationService authorization, IOpenIddictAuthorizationManager signIns, ILogger<RealtimeHub> log)
+		public RealtimeHub(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IAuthorizationService authorization, IOpenIddictAuthorizationManager signIns, ILogger<RealtimeHub> log, EpicSanctionsClient sanctions)
 		{
+			m_sanctions = sanctions;
 			m_dbFactory = dbFactory;
 			m_lobbyManager = lobbyManager;
 			m_authorization = authorization;

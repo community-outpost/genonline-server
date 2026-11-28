@@ -38,6 +38,10 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -52,6 +56,18 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("bigint")
                         .HasColumnName("match_id");
 
+                    b.Property<DateTime?>("PlacedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("placed_at");
+
+                    b.Property<string>("ReferenceId")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("")
+                        .HasColumnName("reference_id");
+
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("reviewed_at");
@@ -60,9 +76,22 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("bigint")
                         .HasColumnName("reviewed_by");
 
+                    b.Property<string>("SanctionAction")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sanction_action");
+
                     b.Property<bool>("SelfReported")
                         .HasColumnType("boolean")
                         .HasColumnName("self_reported");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("client")
+                        .HasColumnName("source");
 
                     b.Property<long>("UserId")
                         .HasColumnType("bigint")
@@ -76,7 +105,7 @@ namespace GenOnlineService.Migrations.Postgres
                     b.HasIndex("ReviewedAt")
                         .HasDatabaseName("ix_anticheat_eac_findings_reviewed_at");
 
-                    b.HasIndex("UserId", "MatchId", "LobbyId", "Kind", "SelfReported")
+                    b.HasIndex("UserId", "MatchId", "LobbyId", "Kind", "SelfReported", "ReferenceId")
                         .IsUnique()
                         .HasDatabaseName("ux_anticheat_eac_findings_target");
 

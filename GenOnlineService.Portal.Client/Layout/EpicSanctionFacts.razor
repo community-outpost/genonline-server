@@ -1,0 +1,20 @@
+@* An active sanction that Epic returned for the linked Epic account of the player *@
+
+<div class="bb:space-y-2" data-testid="epic-sanction">
+    <div class="bb:text-sm">
+        @(String.IsNullOrEmpty(Signal.EpicAction) ? "Sanction" : Signal.EpicAction)
+        <BbBadge Variant="BadgeVariant.SoftDestructive" title="@TrustNote">Epic verified</BbBadge>
+    </div>
+    <dl class="go-case-facts">
+        <dt>Placed</dt><dd><When Value="@Signal.EpicPlacedAt" Exact="true" /></dd>
+        <dt>Expires</dt><dd><When Value="@Signal.EpicExpiresAt" Exact="true" Empty="Permanent" /></dd>
+        <dt>Reference</dt><dd style="overflow-wrap: anywhere">@Signal.EpicReferenceId</dd>
+    </dl>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public PortalCaseSignal Signal { get; set; } = new PortalCaseSignal();
+
+    public const string TrustNote = "The service read this sanction from the Epic Sanctions Web API itself, so no game client can forge it. Nothing acts on the player until staff decide.";
+}

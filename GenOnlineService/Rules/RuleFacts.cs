@@ -128,7 +128,8 @@ namespace GenOnlineService.Rules
 				AntiCheatReviewKinds.Probes => await m_db.AnticheatProbeReports.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null && r.MatchId != 0),
 				AntiCheatReviewKinds.Devices => await m_db.AnticheatProbeReports.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null && r.MatchId == 0),
 				AntiCheatReviewKinds.IllegalRequests => await m_db.AnticheatIllegalRequests.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null),
-				AntiCheatReviewKinds.Eac => await m_db.AnticheatEacFindings.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null),
+				AntiCheatReviewKinds.Eac => await m_db.AnticheatEacFindings.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null && r.Source == AnticheatEacSources.Client),
+				AntiCheatReviewKinds.Epic => await m_db.AnticheatEacFindings.AsNoTracking().CountAsync(r => r.UserId == UserID && r.ReviewedAt == null && r.Source == AnticheatEacSources.Epic),
 				_ => 0
 			};
 			return [(double)count];
