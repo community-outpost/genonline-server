@@ -169,9 +169,9 @@ namespace GenOnlineService.TextRules
 			return await SaveAsync(db, actor, TextRuleAudit.WorkflowUpdate, () => new { kind, from = previous, to = stored }, row);
 		}
 
-		private static object Details(TextRuleTerm t) => new { id = t.ID, term = t.Term, language = t.Language, category = t.Category, severity = t.Severity, match = t.Match };
+		private static object Details(TextRuleTerm t) => new { id = t.ID, term = t.Term, language = t.Language, category = t.Category, severity = t.Severity, level = t.Level, match = t.Match };
 
-		private static Failure? Apply(TextRuleTerm term, TextTermRequest request, bool create)
+		public static Failure? Apply(TextRuleTerm term, TextTermRequest request, bool create)
 		{
 			if (request.Term != null || create)
 			{
@@ -198,7 +198,13 @@ namespace GenOnlineService.TextRules
 			{
 				return Result.Invalid("match");
 			}
-			(term.Language, term.Category, term.Severity, term.Match) = (language, category, severity, match);
+			// a level that is not given follows the category when the term is new or the category changes
+			string? level = request.Level != null ? request.Level : create || category != term.Category ? TextLevels.OfCategory(category) : term.Level;
+			if (TextCategories.IsNameOnly(category) ? !String.IsNullOrEmpty(level) : level == null || !TextLevels.All.Contains(level, StringComparer.Ordinal))
+			{
+				return Result.Invalid("level");
+			}
+			(term.Language, term.Category, term.Severity, term.Match, term.Level) = (language, category, severity, match, String.IsNullOrEmpty(level) ? null : level);
 			return null;
 		}
 

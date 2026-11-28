@@ -144,7 +144,7 @@ namespace GenOnlineService.TextRules
 			{
 				foreach (string[] fields in Lines(language + ".txt"))
 				{
-					terms.Add((new TextRuleTerm { Term = fields[0], Language = language, Category = fields[1], Severity = fields[2], Match = fields[3], Source = TextRuleSources.Seed }, 1));
+					terms.Add((new TextRuleTerm { Term = fields[0], Language = language, Category = fields[1], Severity = fields[2], Match = fields[3], Level = TextLevels.OfCategory(fields[1]), Source = TextRuleSources.Seed }, 1));
 				}
 			}
 			// the plugin's list: a word with anything but letters keeps the plugin's literal rule, as folding would read it otherwise
@@ -165,7 +165,7 @@ namespace GenOnlineService.TextRules
 			{
 				foreach (string[] fields in Lines("ldnoobw-" + language + ".txt"))
 				{
-					terms.Add((new TextRuleTerm { Term = fields[0], Language = language, Category = fields[1], Severity = fields[2], Match = fields[3], Source = TextRuleSources.Ldnoobw }, 2));
+					terms.Add((new TextRuleTerm { Term = fields[0], Language = language, Category = fields[1], Severity = fields[2], Match = fields[3], Level = TextLevels.OfCategory(fields[1]), Source = TextRuleSources.Ldnoobw }, 2));
 				}
 			}
 			return terms.DistinctBy(t => (t.Term.Language, t.Term.Term)).Where(t => t.Since > after).Select(t => t.Term).ToList();
@@ -216,7 +216,7 @@ namespace GenOnlineService.TextRules
 			return new TextRuleSet(TextRuleSeeds.Terms().Select(Info), TextRuleSeeds.Exceptions().Select(Info), new TextRuleWorkflows(TextRuleWorkflows.Defaults), String.Empty);
 		}
 
-		public static TextTermInfo Info(TextRuleTerm t) => new TextTermInfo(t.ID, t.Term, t.Language, t.Category, t.Severity, t.Match);
+		public static TextTermInfo Info(TextRuleTerm t) => new TextTermInfo(t.ID, t.Term, t.Language, t.Category, t.Severity, t.Match, false, t.Level ?? TextLevels.OfCategory(t.Category), t.Source);
 
 		public static TextTermInfo Info(TextRuleException e) => new TextTermInfo(e.ID, e.Term, e.Language, String.Empty, String.Empty, TextMatchModes.Anywhere, true);
 

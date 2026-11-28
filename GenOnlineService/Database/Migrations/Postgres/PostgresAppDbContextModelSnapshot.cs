@@ -1434,6 +1434,11 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("character varying(8)")
                         .HasColumnName("language");
 
+                    b.Property<string>("Level")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("level");
+
                     b.Property<string>("Match")
                         .IsRequired()
                         .HasMaxLength(16)

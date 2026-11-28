@@ -1436,6 +1436,11 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("varchar(8)")
                         .HasColumnName("language");
 
+                    b.Property<string>("Level")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("level");
+
                     b.Property<string>("Match")
                         .IsRequired()
                         .HasMaxLength(16)

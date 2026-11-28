@@ -1155,6 +1155,7 @@ namespace GenOnlineService.Portal.Client
 		public string Language { get; init; } = "";
 		public string Category { get; init; } = "";
 		public string Severity { get; init; } = "";
+		public string? Level { get; init; }
 		public string Match { get; init; } = "";
 		public string Source { get; init; } = "";
 		public string UpdatedBy { get; init; } = "";
@@ -1173,6 +1174,7 @@ namespace GenOnlineService.Portal.Client
 		public string? Language { get; init; }
 		public string? Category { get; init; }
 		public string? Severity { get; init; }
+		public string? Level { get; init; }
 		public string? Match { get; init; }
 	}
 
@@ -1251,6 +1253,7 @@ namespace GenOnlineService.Portal.Client
 		public static readonly IReadOnlyList<(string Value, string Title)> Languages = [("en", "English"), ("ar", "Arabic")];
 		public static readonly IReadOnlyList<string> Categories = ["slur", "sexual", "profanity", "insult", "impersonation", "reserved"];
 		public static readonly IReadOnlyList<string> Severities = ["block", "flag"];
+		public static readonly IReadOnlyList<string> Levels = ["extreme", "standard", "strict"];
 		public static readonly IReadOnlyList<string> Matches = ["word", "anywhere", "literal"];
 
 		public static string KindTitle(string kind) => Kinds.FirstOrDefault(k => k.Value == kind).Title ?? kind;

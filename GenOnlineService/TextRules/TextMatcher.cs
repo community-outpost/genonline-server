@@ -18,7 +18,7 @@
 
 namespace GenOnlineService.TextRules
 {
-	public sealed record TextTermInfo(Int64 ID, string Term, string Language, string Category, string Severity, string Match, bool Exception = false);
+	public sealed record TextTermInfo(Int64 ID, string Term, string Language, string Category, string Severity, string Match, bool Exception = false, string? Level = null, string Source = "");
 
 	public sealed record TextHit(TextTermInfo Term, string Reading, int Start, int End);
 

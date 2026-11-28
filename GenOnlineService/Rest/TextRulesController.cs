@@ -33,6 +33,7 @@ namespace GenOnlineService.Rest
 		public string? Language { get; init; }
 		public string? Category { get; init; }
 		public string? Severity { get; init; }
+		public string? Level { get; init; }
 		public string? Match { get; init; }
 	}
 
@@ -43,6 +44,7 @@ namespace GenOnlineService.Rest
 		public string Language { get; init; } = "";
 		public string Category { get; init; } = "";
 		public string Severity { get; init; } = "";
+		public string? Level { get; init; }
 		public string Match { get; init; } = "";
 		public string Source { get; init; } = "";
 		public string UpdatedBy { get; init; } = "";
@@ -50,7 +52,7 @@ namespace GenOnlineService.Rest
 
 		public static TextTermView Of(TextRuleTerm t) => new TextTermView
 		{
-			Id = t.ID, Term = t.Term, Language = t.Language, Category = t.Category, Severity = t.Severity, Match = t.Match, Source = t.Source, UpdatedBy = t.UpdatedBy, UpdatedAt = t.UpdatedAt
+			Id = t.ID, Term = t.Term, Language = t.Language, Category = t.Category, Severity = t.Severity, Level = t.Level, Match = t.Match, Source = t.Source, UpdatedBy = t.UpdatedBy, UpdatedAt = t.UpdatedAt
 		};
 	}
 
@@ -171,7 +173,7 @@ namespace GenOnlineService.Rest
 			return added.Ok ? RestResults.Created(TextTermView.Of(added.Data!)) : RestResults.Fail(new Failure(added.Code!, added.Params!));
 		}
 
-		[EndpointSummary("Changes the text, language, category, severity or match of a word.")]
+		[EndpointSummary("Changes the text, language, category, severity, level or match of a word.")]
 		[ProducesResponseType<TextTermView>(StatusCodes.Status200OK)]
 		[HttpPatch("~/api/v1/text_rules/terms/{id:long}")]
 		public async Task<IActionResult> UpdateTerm(long id, [FromBody] TextTermRequest? body)

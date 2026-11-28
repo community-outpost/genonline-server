@@ -57,6 +57,24 @@ namespace GenOnlineService.TextRules
 		public static bool IsNameOnly(string category) => category is Impersonation or Reserved;
 	}
 
+	// How much of the chat filter list a client turns on, its level and every level below it, with no level for the name only categories
+	public static class TextLevels
+	{
+		public const string Extreme = "extreme";
+		public const string Standard = "standard";
+		public const string Strict = "strict";
+
+		public static readonly IReadOnlyList<string> All = [Extreme, Standard, Strict];
+
+		public static string? OfCategory(string category) => category switch
+		{
+			TextCategories.Slur => Extreme,
+			TextCategories.Sexual or TextCategories.Insult => Standard,
+			TextCategories.Profanity => Strict,
+			_ => null
+		};
+	}
+
 	public static class TextSeverities
 	{
 		public const string Block = "block";
@@ -99,6 +117,9 @@ namespace GenOnlineService.TextRules
 		public string Category { get; set; } = TextCategories.Profanity;
 		public string Severity { get; set; } = TextSeverities.Block;
 		public string Match { get; set; } = TextMatchModes.Word;
+
+		// Null for the name only categories
+		public string? Level { get; set; }
 
 		public string Source { get; set; } = TextRuleSources.Staff;
 		public string UpdatedBy { get; set; } = String.Empty;
@@ -143,6 +164,7 @@ namespace GenOnlineService.TextRules
 			builder.Property(e => e.Category).HasColumnName("category").HasMaxLength(32);
 			builder.Property(e => e.Severity).HasColumnName("severity").HasMaxLength(16);
 			builder.Property(e => e.Match).HasColumnName("match_mode").HasMaxLength(16);
+			builder.Property(e => e.Level).HasColumnName("level").HasMaxLength(16);
 			builder.Property(e => e.Source).HasColumnName("source").HasMaxLength(16);
 			builder.Property(e => e.UpdatedBy).HasColumnName("updated_by").HasMaxLength(64);
 			builder.Property(e => e.UpdatedAt).HasColumnName("updated_at");

@@ -101,6 +101,7 @@ else
                                         <BbBadge Variant="@(row.Severity == "block" ? BadgeVariant.SoftDestructive : BadgeVariant.Secondary)">@row.Severity</BbBadge>
                                     </CellTemplate>
                                 </BbDataTableColumn>
+                                <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Level ?? "")" Header="Level" CellClass="go-nowrap" />
                                 <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Match)" Header="Match" CellClass="go-nowrap" />
                                 <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Source)" Header="Source" CellClass="bb:text-muted-foreground" />
                                 <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => PortalText.Date(t.UpdatedAt))" Header="Changed" CellClass="go-nowrap" />
@@ -365,6 +366,17 @@ else
                     </BbNativeSelect>
                 </div>
                 <div class="bb:space-y-2">
+                    <BbLabel For="word-level">Level</BbLabel>
+                    <BbNativeSelect TValue="string" Id="word-level" @bind-Value="m_draft.Level" Class="bb:w-full">
+                        <option value="">Follow the category</option>
+                        @foreach (string level in PortalTextChoices.Levels)
+                        {
+                            <option value="@level">@level</option>
+                        }
+                    </BbNativeSelect>
+                    <p class="bb:text-xs bb:text-muted-foreground">The chat filter setting that turns the word on: extreme, standard (adds extreme) or strict (adds both). Slurs follow extreme, sexual words and insults standard, profanity strict; impersonation and reserved words have no level.</p>
+                </div>
+                <div class="bb:space-y-2">
                     <BbLabel For="word-match">Match</BbLabel>
                     <BbNativeSelect TValue="string" Id="word-match" @bind-Value="m_draft.Match" Class="bb:w-full">
                         @foreach (string match in PortalTextChoices.Matches)
@@ -423,6 +435,7 @@ else
         public string? Language { get; set; } = "en";
         public string? Category { get; set; } = "profanity";
         public string? Severity { get; set; } = "block";
+        public string? Level { get; set; } = "";
         public string? Match { get; set; } = "word";
     }
 
@@ -511,14 +524,14 @@ else
     private void OpenEdit(PortalTextTerm term)
     {
         m_editing = term;
-        m_draft = new TermDraft { Term = term.Term, Language = term.Language, Category = term.Category, Severity = term.Severity, Match = term.Match };
+        m_draft = new TermDraft { Term = term.Term, Language = term.Language, Category = term.Category, Severity = term.Severity, Level = term.Level ?? "", Match = term.Match };
         m_editOpen = true;
     }
 
     private async Task SaveTermAsync()
     {
         m_saving = true;
-        var request = new PortalTextTermRequest { Term = m_draft.Term, Language = m_draft.Language, Category = m_draft.Category, Severity = m_draft.Severity, Match = m_draft.Match };
+        var request = new PortalTextTermRequest { Term = m_draft.Term, Language = m_draft.Language, Category = m_draft.Category, Severity = m_draft.Severity, Level = string.IsNullOrEmpty(m_draft.Level) ? null : m_draft.Level, Match = m_draft.Match };
         PortalAnswer<PortalTextTerm> saved = m_editing == null ? await Api.AddTextTermAsync(request) : await Api.UpdateTextTermAsync(m_editing.Id, request);
         m_saving = false;
         if (!saved.Ok)
