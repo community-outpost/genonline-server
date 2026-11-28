@@ -1467,6 +1467,13 @@ namespace GenOnlineService
 				return;
 			}
 
+			if (!AntiCheatDataRules.Configure(builder.Configuration))
+			{
+				Console.Error.WriteLine($"[ERROR] {AntiCheatDataRules.ConfigSection} has invalid values, see the log above.");
+				Environment.ExitCode = 1;
+				return;
+			}
+
 			// Schema changes only happen through "GenOnlineService migrate"
 			using (var migrationScope = app.Services.CreateScope())
 			{

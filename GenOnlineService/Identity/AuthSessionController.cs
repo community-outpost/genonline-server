@@ -35,6 +35,9 @@ namespace GenOnlineService.Identity
 		[JsonPropertyName("exe_crc")] public uint? ExeCrc { get; set; }
 		[JsonPropertyName("ini_crc")] public uint? IniCrc { get; set; }
 		[JsonPropertyName("anticheat_id")] public int? AnticheatID { get; set; }
+
+		[JsonPropertyName("audio_crc")] public uint? AudioCrc { get; set; }
+		[JsonPropertyName("data_archives")] public List<string>? DataArchives { get; set; }
 	}
 
 	[ApiController]
@@ -118,6 +121,13 @@ namespace GenOnlineService.Identity
 			if (sessionType == EUserSessionType.GameClient)
 			{
 				await Database.GameSessionStore.SetMachine(db, userID, sessionType, authorizationID, machineID);
+
+				// staff review the finding, the player is not told, and an open finding with the same text is not raised again
+				if (AntiCheatDataRules.Finding(client.Game, body.AudioCrc, body.DataArchives) is string finding
+					&& !await db.AnticheatProbeReports.AnyAsync(r => r.UserId == userID && r.MatchId == 0 && r.ReviewedAt == null && r.Reason == finding))
+				{
+					await Database.AntiCheat.FlagAccountForReview_SuspectProbes(db, userID, 0, finding);
+				}
 			}
 			AppMetrics.RecordAuthentication("session", client.ClientID, "success");
 			GenOnlineService.Rules.RuleRunner.Raise(GenOnlineService.Rules.RuleEvent.Of(GenOnlineService.Rules.RuleTriggers.GameSession, userID, ipAddress, (GenOnlineService.Rules.RuleEventFields.Client, client.ClientID)));
