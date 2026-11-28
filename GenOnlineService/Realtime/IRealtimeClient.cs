@@ -23,6 +23,7 @@ namespace GenOnlineService.Realtime
 		Task Ready(ReadyEvent e);
 		Task BadgesUpdate(BadgesUpdateEvent e);
 		Task FeaturesUpdate(FeaturesUpdateEvent e);
+		Task PermissionsUpdate(PermissionsUpdateEvent e);
 		Task ChatFilterUpdate(ChatFilterUpdateEvent e);
 		Task MotdUpdate(MotdUpdateEvent e);
 		Task ChannelsUpdate(ChannelsUpdateEvent e);

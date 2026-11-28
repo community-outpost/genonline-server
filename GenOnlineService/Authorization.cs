@@ -209,6 +209,7 @@ namespace GenOnlineService
 
 			s_lastUnknownRoles = unknown;
 			Dictionary<Int64, HashSet<string>> previousRoles = s_rolesByUser;
+			IReadOnlyDictionary<Int64, HashSet<string>> previousPermissions = s_permissionsByUser;
 			// ranks go first, so a new permission holder is never moderatable as a player while the swap runs
 			s_rolesByUser = rows
 				.Where(r => IsKnown(r.Role))
@@ -218,6 +219,7 @@ namespace GenOnlineService
 
 			// every role source writes user_roles, so this swap is the one place a feature list changes
 			ClientFeatures.PublishChanges(previousCatalog, previousRoles, s_catalog, s_rolesByUser);
+			PermissionUpdates.PublishChanges(previousCatalog, previousPermissions, s_catalog, next);
 			RealtimeBadges.PublishChanges(previousCatalog, s_catalog);
 		}
 	}

@@ -513,6 +513,12 @@ namespace GenOnlineService.Realtime
 		public IReadOnlyList<string> Features { get; init; } = [];
 	}
 
+	// The full permission list of the player, sorted as Ready sends it
+	public sealed record PermissionsUpdateEvent
+	{
+		public IReadOnlyList<string> Permissions { get; init; } = [];
+	}
+
 	// The chat filter list changed, a client that uses it fetches GET /api/v1/chat/filter again
 	public sealed record ChatFilterUpdateEvent
 	{

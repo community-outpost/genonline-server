@@ -85,4 +85,32 @@ public class LocalApiPermissionTests
 		Assert.False(Permissions.AnyStaff([]));
 		Assert.True(Permissions.AnyStaff([.. s_localApi, Permissions.ModerationKick]));
 	}
+
+	private static HashSet<string> Set(params string[] permissions) => new HashSet<string>(permissions, StringComparer.Ordinal);
+
+	private static RoleCatalog EveryoneWith(params string[] permissions) => RoleCatalog.From(RoleCatalog.BuiltInDefinitions.Select(d =>
+		d.Name == RoleCatalog.Everyone ? d with { Permissions = Set(permissions) } : d));
+
+	[Fact]
+	public void PermissionChangesReachOnlineUsersWhoseListChanged()
+	{
+		Dictionary<long, HashSet<string>> before = new() { [7] = Set(Permissions.LocalApiMatch), [8] = Set(Permissions.LocalApiMatch), [9] = Set(Permissions.LocalApiMatch) };
+		Dictionary<long, HashSet<string>> after = new() { [7] = Set(Permissions.LocalApiStats, Permissions.LocalApiMatch), [8] = Set(Permissions.LocalApiMatch), [9] = Set() };
+
+		var changes = PermissionUpdates.Changes(RoleCatalog.Defaults, before, RoleCatalog.Defaults, after, new long[] { 8, 7, 7 });
+
+		Assert.Equal(new long[] { 7 }, changes.Select(c => c.UserID));
+		Assert.Equal(new[] { Permissions.LocalApiMatch, Permissions.LocalApiStats }, changes[0].Permissions);
+	}
+
+	[Fact]
+	public void AnEveryoneRoleEditReachesOnlineUsersWithoutRoles()
+	{
+		Dictionary<long, HashSet<string>> staff = new() { [7] = Set(Permissions.LocalApiMatch) };
+
+		var changes = PermissionUpdates.Changes(EveryoneWith(), staff, EveryoneWith(Permissions.LocalApiStats), staff, new long[] { 7, 12 });
+
+		Assert.Equal(new long[] { 12 }, changes.Select(c => c.UserID));
+		Assert.Equal(new[] { Permissions.LocalApiStats }, changes[0].Permissions);
+	}
 }
