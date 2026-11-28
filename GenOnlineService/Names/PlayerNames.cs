@@ -161,10 +161,13 @@ namespace GenOnlineService.Names
 			if (live)
 			{
 				await RealtimeNames.PublishOne(change);
-				await SessionRevocation.RevokeUser(target, false, "name reset");
+				await SessionRevocation.RevokeUser(target, false, "name reset", notice: ResetNotice(reason));
 			}
 			return Result.Success();
 		}
+
+		public static ModerationNoticeEvent ResetNotice(string? reason) =>
+			new ModerationNoticeEvent { Action = ModerationAction.NameReset, Reason = String.IsNullOrEmpty(reason) ? null : reason };
 
 		public static Failure? CheckStaff(Int64? actorID, int actorRank, Int64 target, int targetRank, string? reason)
 		{

@@ -26,7 +26,7 @@ namespace GenOnlineService.Realtime
 	public enum MessageType { Chat, Action, Announcement }
 	public enum PresenceActivity { Offline, Menu, Channel, Lobby, Matchmaking, InGame }
 	public enum PresenceStatus { Online, Idle, DoNotDisturb, Invisible }
-	public enum ModerationAction { Kick, Ban, Mute }
+	public enum ModerationAction { Kick, Ban, Mute, NameReset }
 	public enum SlotState { Open, Closed, Player, AiEasy, AiMedium, AiBrutal }
 	public enum LobbyType { Custom, QuickMatch }
 	public enum LobbyStage { Setup, Countdown, InGame, Complete }

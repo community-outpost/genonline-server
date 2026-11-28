@@ -216,6 +216,12 @@
   <data name="Welcome.Description" xml:space="preserve">
     <value>This is the name other players see.</value>
   </data>
+  <data name="Welcome.NameReset" xml:space="preserve">
+    <value>A moderator reset your player name. Choose a new one to continue.</value>
+  </data>
+  <data name="Welcome.NameResetReason" xml:space="preserve">
+    <value>A moderator reset your player name: {0}. Choose a new one to continue.</value>
+  </data>
   <data name="Welcome.Intro" xml:space="preserve">
     <value>This is the name other players see. Choose your own; you can change it later.</value>
   </data>

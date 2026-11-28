@@ -639,17 +639,30 @@ namespace GenOnlineService.Identity
 			{
 				return LocalRedirect(target);
 			}
-			return WelcomeForm(200, target, NameSuggestion.Read(HttpContext, user.ID), null, user.NameTag);
+			return await WelcomeForm(200, target, NameSuggestion.Read(HttpContext, user.ID), null, user);
 		}
 
-		private ContentResult WelcomeForm(int status, string target, string? displayName, string? message, int nameTag)
+		private async Task<ContentResult> WelcomeForm(int status, string target, string? displayName, string? message, User user)
 		{
+			int nameTag = user.NameTag;
 			string? tag = nameTag > 0 ? "#" + Database.DisplayNames.FormatTag(nameTag) : null;
-			var body = new System.Text.StringBuilder(Message(message));
+			var body = new System.Text.StringBuilder(Message(await NameResetNotice(user.ID))).Append(Message(message));
 			body.Append(FormStart(NameSuggestion.PagePath, target));
 			body.Append(CultureInfo.InvariantCulture, $"<div class=\"gp-pane\">{PortalLook.Field("display_name", T("Field.PlayerName"), $"type=\"text\" name=\"display_name\" autocomplete=\"nickname\" minlength=\"{Realtime.RealtimeHub.NameMinLength}\" maxlength=\"{Realtime.RealtimeHub.NameMaxLength}\" required", displayName, suffix: tag, suffixLabel: tag == null ? null : T("Name.TagLabel", tag), hint: WebUtility.HtmlEncode((String.IsNullOrEmpty(displayName) || tag == null ? String.Empty : T("Name.Seen", displayName + tag) + " ") + T("Name.Range", Realtime.RealtimeHub.NameMinLength, Realtime.RealtimeHub.NameMaxLength)), large: true)}</div>");
 			body.Append(PortalLook.Actions(null, PortalLook.Submit(T("Continue"), large: true))).Append("</form>");
 			return Page(status, T("Welcome.Title"), body.ToString(), T("Welcome.Description"), step: 1);
+		}
+
+		// A player whose name staff reset learns why before choosing a new one, a new account has no reset to explain
+		private async Task<string?> NameResetNotice(Int64 userID)
+		{
+			await using AppDbContext db = await HttpContext.RequestServices.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContextAsync();
+			AuditLogEntry? reset = await Database.Moderation.NameResetEntry(db, userID);
+			if (reset == null)
+			{
+				return null;
+			}
+			return String.IsNullOrEmpty(reset.Reason) ? T("Welcome.NameReset") : T("Welcome.NameResetReason", reset.Reason);
 		}
 
 		[HttpPost("~/users/sign_up/welcome")]
@@ -674,7 +687,7 @@ namespace GenOnlineService.Identity
 			Realtime.Result<Realtime.Empty> chosen = await m_names.ChooseAsync(user.ID, displayName);
 			if (!chosen.Ok)
 			{
-				return WelcomeForm(400, target, displayName, NameMessage(chosen.Code), user.NameTag);
+				return await WelcomeForm(400, target, displayName, NameMessage(chosen.Code), user);
 			}
 
 			NameSuggestion.Clear(HttpContext);

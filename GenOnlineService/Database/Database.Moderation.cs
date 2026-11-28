@@ -599,6 +599,20 @@ namespace Database
 			}
 		}
 
+		// The staff name reset that left the player owing a name, null when no name is owed or a new account owes one
+		public static async Task<AuditLogEntry?> NameResetEntry(AppDbContext db, Int64 userID)
+		{
+			DateTime? since = await db.Users.AsNoTracking().Where(u => u.ID == userID).Select(u => u.NameRequiredAt).FirstOrDefaultAsync();
+			if (since == null)
+			{
+				return null;
+			}
+			return await db.AuditLog.AsNoTracking()
+				.Where(e => e.Action == ModerationActions.NameReset && e.TargetKind == AuditTargetKinds.User && e.TargetID == userID && e.CreatedAt >= since)
+				.OrderByDescending(e => e.ID)
+				.FirstOrDefaultAsync();
+		}
+
 		// Same as AddAuditEntry for an action that already happened, a failed write is only reported
 		public static async Task LogAction(AppDbContext db, ModerationActor actor, string action, string targetKind, Int64 target, string? reason, object? details = null)
 		{

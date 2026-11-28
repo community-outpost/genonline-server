@@ -145,7 +145,7 @@ namespace GenOnlineService.Identity
 			foreach (Int64 userID in nameRequired.Where(id => !previousNameRequired.Contains(id) && IsConnectedHere(id)))
 			{
 				s_log.LogInformation("User {UserId} must choose a new name: ending their sessions", userID);
-				await SessionRevocation.RevokeUser(userID, false, "name reset");
+				await SessionRevocation.RevokeUser(userID, false, "name reset", notice: Names.PlayerNames.ResetNotice((await Database.Moderation.NameResetEntry(db, userID))?.Reason));
 			}
 		}
 
@@ -389,10 +389,11 @@ namespace GenOnlineService.Identity
 			return client != null && client.SessionType != EUserSessionType.None;
 		}
 
-		public static Task<int> RevokeUser(Int64 userID, bool bOnlyGameClients, string reason, PlayBan? ban = null)
-			=> RevokeUser(ServiceLocator.Services, userID, bOnlyGameClients, reason, ban);
+		public static Task<int> RevokeUser(Int64 userID, bool bOnlyGameClients, string reason, PlayBan? ban = null, Realtime.ModerationNoticeEvent? notice = null)
+			=> RevokeUser(ServiceLocator.Services, userID, bOnlyGameClients, reason, ban, notice);
 
-		public static async Task<int> RevokeUser(IServiceProvider services, Int64 userID, bool bOnlyGameClients, string reason, PlayBan? ban = null)
+		// notice reaches the realtime connections just before they close, a ban sends its own
+		public static async Task<int> RevokeUser(IServiceProvider services, Int64 userID, bool bOnlyGameClients, string reason, PlayBan? ban = null, Realtime.ModerationNoticeEvent? notice = null)
 		{
 			var revoked = new HashSet<string>(StringComparer.Ordinal);
 
@@ -450,16 +451,16 @@ namespace GenOnlineService.Identity
 
 			if (ban == null)
 			{
-				await CloseRealtime(userID, null);
+				await CloseRealtime(userID, null, notice);
 			}
 
 			s_log.LogInformation("Revoked {Count} still valid authorization(s) of user {UserId}, dropped their game sessions and closed their realtime connections: {Reason}", revoked.Count, userID, reason);
 			return revoked.Count;
 		}
 
-		public static Task CloseRealtime(Int64 userID, EUserSessionType? onlySessionType)
+		public static Task CloseRealtime(Int64 userID, EUserSessionType? onlySessionType, Realtime.ModerationNoticeEvent? notice = null)
 		{
-			return Realtime.RealtimeControl.RequestClose(Realtime.CloseRequest.ForUser(userID, AuthRevokedCode, allowReconnect: false, notice: null, onlySessionType));
+			return Realtime.RealtimeControl.RequestClose(Realtime.CloseRequest.ForUser(userID, AuthRevokedCode, allowReconnect: false, notice, onlySessionType));
 		}
 	}
 

@@ -213,6 +213,12 @@
   <data name="Welcome.Description" xml:space="preserve">
     <value>هذا هو الاسم الذي يراه اللاعبون الآخرون.</value>
   </data>
+  <data name="Welcome.NameReset" xml:space="preserve">
+    <value>أعاد أحد المشرفين تعيين اسم اللاعب الخاص بك. اختر اسمًا جديدًا للمتابعة.</value>
+  </data>
+  <data name="Welcome.NameResetReason" xml:space="preserve">
+    <value>أعاد أحد المشرفين تعيين اسم اللاعب الخاص بك: {0}. اختر اسمًا جديدًا للمتابعة.</value>
+  </data>
   <data name="Welcome.Intro" xml:space="preserve">
     <value>هذا هو الاسم الذي يراه اللاعبون الآخرون. اختر اسمك، ويمكنك تغييره لاحقًا.</value>
   </data>

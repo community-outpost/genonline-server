@@ -213,6 +213,12 @@
   <data name="Welcome.Description" xml:space="preserve">
     <value>Это имя видят другие игроки.</value>
   </data>
+  <data name="Welcome.NameReset" xml:space="preserve">
+    <value>Модератор сбросил ваше имя игрока. Выберите новое, чтобы продолжить.</value>
+  </data>
+  <data name="Welcome.NameResetReason" xml:space="preserve">
+    <value>Модератор сбросил ваше имя игрока: {0}. Выберите новое, чтобы продолжить.</value>
+  </data>
   <data name="Welcome.Intro" xml:space="preserve">
     <value>Это имя видят другие игроки. Выберите своё; позже его можно изменить.</value>
   </data>
