@@ -128,7 +128,7 @@ public class PlayerReport
 	public string? Reason { get; set; }
 
 	// message report: {message, before, after, after_filled_at}; the retention purge fills "after" just before the message expires
-	// player report: {messages}, up to 10 of the player's latest messages the reporter could see
+	// player report: {messages, match_messages}, up to 10 of the player's latest messages the reporter could see and, with a match, up to 10 of their lines of it
 	public string Evidence { get; set; } = "{}";
 
 	public string Category { get; set; } = PlayerReportCategories.Chat;
@@ -713,7 +713,7 @@ namespace Database
 		}
 
 		// The one-open-report-per-reporter-and-player rule stays with the caller.
-		public static async Task<long> CreatePlayerReport(AppDbContext db, long reporterId, long reportedUserId, string? reason, IReadOnlyList<ChatMessage> evidence, string category = PlayerReportCategories.Other, long? matchId = null, long? lobbyId = null, CancellationToken cancellationToken = default)
+		public static async Task<long> CreatePlayerReport(AppDbContext db, long reporterId, long reportedUserId, string? reason, IReadOnlyList<ChatMessage> evidence, string category = PlayerReportCategories.Other, long? matchId = null, long? lobbyId = null, IReadOnlyList<ChatMessage>? matchLines = null, CancellationToken cancellationToken = default)
 		{
 			PlayerReport report = new PlayerReport
 			{
@@ -723,11 +723,17 @@ namespace Database
 				MatchID = matchId,
 				LobbyID = lobbyId,
 				Reason = reason,
-				Evidence = JsonSerializer.Serialize(new PlayerEvidence(evidence.Select(ToSnapshot).ToList()), s_snapshotJson),
+				Evidence = PlayerEvidenceJson(evidence, matchLines ?? []),
 				Status = PlayerReportStatuses.Open,
 				CreatedAt = TruncateToMicroseconds(DateTime.UtcNow)
 			};
 			return (await AddReport(db, report, cancellationToken)).ReportID;
+		}
+
+		// match_messages is left out without match lines, so the stored shape of other reports stays as it was
+		internal static string PlayerEvidenceJson(IReadOnlyList<ChatMessage> evidence, IReadOnlyList<ChatMessage> matchLines)
+		{
+			return JsonSerializer.Serialize(new PlayerEvidence(evidence.Select(ToSnapshot).ToList(), matchLines.Count == 0 ? null : matchLines.Select(ToSnapshot).ToList()), s_snapshotJson);
 		}
 
 		private static async Task<(ReportResult Result, long ReportID)> AddReport(AppDbContext db, PlayerReport report, CancellationToken cancellationToken)
@@ -751,6 +757,12 @@ namespace Database
 		public static async Task<bool> HasOpenPlayerReport(AppDbContext db, long reporterId, long reportedUserId, CancellationToken cancellationToken = default)
 		{
 			return await db.PlayerReports.AnyAsync(r => r.ReporterID == reporterId && r.ReportedUserID == reportedUserId && r.MessageID == null && r.Status == PlayerReportStatuses.Open, cancellationToken);
+		}
+
+		// The newest match lines of one player in one match, the caller keeps the ones a reporter could see
+		public static async Task<List<ChatMessage>> GetMatchMessagesBy(AppDbContext db, long matchId, long senderId, int limit, CancellationToken cancellationToken = default)
+		{
+			return await db.ChatMessages.AsNoTracking().Where(m => m.Kind == ChatMessageKinds.Match && m.MatchID == matchId && m.SenderID == senderId).OrderByDescending(m => m.ID).Take(limit).ToListAsync(cancellationToken);
 		}
 
 		public static async Task<List<ChatMessage>> GetRecentMessagesBy(AppDbContext db, long senderId, int limit, CancellationToken cancellationToken = default)
@@ -1099,7 +1111,7 @@ namespace Database
 
 		private static ChatSnapshotMessage ToSnapshot(ChatMessage m)
 		{
-			return new ChatSnapshotMessage(m.ID, m.Kind, m.ChannelID, m.LobbyID, m.MatchID, m.SenderID, m.RecipientID, m.GroupID, m.Type, m.Content, m.CreatedAt, m.DeletedAt);
+			return new ChatSnapshotMessage(m.ID, m.Kind, m.ChannelID, m.LobbyID, m.MatchID, m.SenderID, m.RecipientID, m.GroupID, m.Type, m.Content, m.CreatedAt, m.DeletedAt, m.Scope, m.Recipients);
 		}
 
 		private sealed record ChatReportSnapshot(
@@ -1108,25 +1120,29 @@ namespace Database
 			[property: JsonPropertyName("after")] List<ChatSnapshotMessage>? After,
 			[property: JsonPropertyName("after_filled_at"), JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTime? AfterFilledAt);
 
-		private sealed record PlayerEvidence([property: JsonPropertyName("messages")] List<ChatSnapshotMessage> Messages);
+		private sealed record PlayerEvidence(
+			[property: JsonPropertyName("messages")] List<ChatSnapshotMessage> Messages,
+			[property: JsonPropertyName("match_messages")] List<ChatSnapshotMessage>? MatchMessages = null);
 
 		// The stored evidence of a report as staff read it: a message report has the message, the ones before it and, once the purge
 		// filled them in (AfterPending false), the ones after it; a player report has Messages.
-		public sealed record ReportEvidenceMessage(long ID, long SenderID, string Content, DateTime CreatedAt, DateTime? DeletedAt);
+		// Scope is set on match lines only
+		public sealed record ReportEvidenceMessage(long ID, long SenderID, string Content, DateTime CreatedAt, DateTime? DeletedAt, string? Scope = null);
 
+		// MatchMessages are the in-game chat lines of the reported match that the reporter could see
 		public sealed record ReportEvidence(ReportEvidenceMessage? Message, IReadOnlyList<ReportEvidenceMessage> Before, IReadOnlyList<ReportEvidenceMessage> After,
-			bool AfterPending, IReadOnlyList<ReportEvidenceMessage> Messages)
+			bool AfterPending, IReadOnlyList<ReportEvidenceMessage> Messages, IReadOnlyList<ReportEvidenceMessage> MatchMessages)
 		{
-			public static readonly ReportEvidence Empty = new(null, [], [], false, []);
+			public static readonly ReportEvidence Empty = new(null, [], [], false, [], []);
 
-			public IEnumerable<long> SenderIDs => (Message == null ? Messages : Before.Append(Message).Concat(After)).Select(m => m.SenderID);
+			public IEnumerable<long> SenderIDs => (Message == null ? Messages.Concat(MatchMessages) : Before.Append(Message).Concat(After)).Select(m => m.SenderID);
 		}
 
 		// Evidence that does not parse reads as empty, so one damaged row never hides the rest of a case
 		public static ReportEvidence ReadEvidence(PlayerReport report)
 		{
 			static List<ReportEvidenceMessage> Of(List<ChatSnapshotMessage>? messages) =>
-				(messages ?? []).Select(m => new ReportEvidenceMessage(m.ID, m.SenderID, m.Content, m.CreatedAt, m.DeletedAt)).ToList();
+				(messages ?? []).Select(m => new ReportEvidenceMessage(m.ID, m.SenderID, m.Content, m.CreatedAt, m.DeletedAt, m.Scope)).ToList();
 			try
 			{
 				if (report.MessageID != null)
@@ -1136,10 +1152,10 @@ namespace Database
 					{
 						return ReportEvidence.Empty;
 					}
-					return new ReportEvidence(Of([snapshot.Message])[0], Of(snapshot.Before), Of(snapshot.After), snapshot.AfterFilledAt == null, []);
+					return new ReportEvidence(Of([snapshot.Message])[0], Of(snapshot.Before), Of(snapshot.After), snapshot.AfterFilledAt == null, [], []);
 				}
 				PlayerEvidence? evidence = JsonSerializer.Deserialize<PlayerEvidence>(report.Evidence, s_snapshotJson);
-				return new ReportEvidence(null, [], [], false, Of(evidence?.Messages));
+				return new ReportEvidence(null, [], [], false, Of(evidence?.Messages), Of(evidence?.MatchMessages));
 			}
 			catch (JsonException)
 			{
@@ -1159,6 +1175,8 @@ namespace Database
 			[property: JsonPropertyName("type")] string Type,
 			[property: JsonPropertyName("content")] string Content,
 			[property: JsonPropertyName("created_at")] DateTime CreatedAt,
-			[property: JsonPropertyName("deleted_at")] DateTime? DeletedAt);
+			[property: JsonPropertyName("deleted_at")] DateTime? DeletedAt,
+			[property: JsonPropertyName("scope")] string? Scope = null,
+			[property: JsonPropertyName("recipients")] string? Recipients = null);
 	}
 }

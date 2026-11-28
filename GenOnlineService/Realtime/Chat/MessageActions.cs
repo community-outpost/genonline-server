@@ -220,7 +220,8 @@ namespace GenOnlineService.Realtime
 				}
 
 				List<ChatMessage> evidence = await EvidenceAsync(db, me, player);
-				long reportID = await Database.Chat.CreatePlayerReport(db, me, player, String.IsNullOrEmpty(reason) ? null : reason, evidence, category, matchID, lobbyID);
+				List<ChatMessage> matchLines = matchID == null ? [] : VisibleMatchLines(await Database.Chat.GetMatchMessagesBy(db, matchID.Value, player, EvidenceCandidates), me, matchID.Value);
+				long reportID = await Database.Chat.CreatePlayerReport(db, me, player, String.IsNullOrEmpty(reason) ? null : reason, evidence, category, matchID, lobbyID, matchLines);
 				return Result.Success(new CreateReportResponse { ReportId = reportID });
 			}
 			finally
@@ -258,6 +259,16 @@ namespace GenOnlineService.Realtime
 				ChatMessageKinds.Group => !blocked && groups.Contains(m.GroupID ?? -1),
 				_ => !blocked && ReceivedBy(m, me)
 			}).Take(EvidenceMessages).ToList();
+			seen.Reverse();
+			return seen;
+		}
+
+		// Up to 10 lines of one match that the reporter saw in game, those to everyone or addressed to the reporter, oldest first
+		internal static List<ChatMessage> VisibleMatchLines(IEnumerable<ChatMessage> lines, Int64 reporter, Int64 matchID)
+		{
+			List<ChatMessage> seen = lines
+				.Where(m => m.Kind == ChatMessageKinds.Match && m.MatchID == matchID && (m.Scope == ChatMessageScopes.Everyone || Database.Chat.DecodeMentions(m.Recipients).Contains(reporter)))
+				.OrderByDescending(m => m.ID).Take(EvidenceMessages).ToList();
 			seen.Reverse();
 			return seen;
 		}

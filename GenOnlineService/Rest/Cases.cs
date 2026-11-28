@@ -88,6 +88,10 @@ namespace GenOnlineService.Rest
 		public DateTime At { get; init; }
 		public bool Deleted { get; init; }
 		public string Part { get; init; } = "";
+
+		// Match lines only: everyone, allies or self
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Scope { get; init; }
 	}
 
 	public sealed record CaseSignal
@@ -352,10 +356,10 @@ namespace GenOnlineService.Rest
 				Database.Chat.ReportEvidence found = evidence[row.ID];
 				CaseMessage Line(Database.Chat.ReportEvidenceMessage m, string part) => new CaseMessage
 				{
-					Id = m.ID, Author = RealtimeMembers.Of(m.SenderID, names), Content = m.Content, At = m.CreatedAt, Deleted = m.DeletedAt != null, Part = part
+					Id = m.ID, Author = RealtimeMembers.Of(m.SenderID, names), Content = m.Content, At = m.CreatedAt, Deleted = m.DeletedAt != null, Part = part, Scope = m.Scope
 				};
 				List<CaseMessage> conversation = found.Message == null
-					? found.Messages.Select(m => Line(m, "recent")).ToList()
+					? [.. found.Messages.Select(m => Line(m, "recent")), .. found.MatchMessages.Select(m => Line(m, "match"))]
 					: [.. found.Before.Select(m => Line(m, "before")), Line(found.Message, "message"), .. found.After.Select(m => Line(m, "after"))];
 				return signal with
 				{
