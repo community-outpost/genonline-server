@@ -170,25 +170,39 @@ namespace GenOnlineService.Realtime
 		};
 	}
 
-	internal static class ChatRateLimiter
+	internal sealed class ChatRateLimiter
 	{
-		private static readonly ConditionalWeakTable<SharedUserData, Queue<long>> s_windows = new();
+		// Public channel chat
+		public static readonly ChatRateLimiter Channel = new(RealtimeHub.ChatRateMessages, RealtimeHub.ChatRateWindowMs);
 
-		public static bool TryConsume(SharedUserData user, out long retryAfterMs)
+		// In-game match chat mirrored over REST, 20 lines per 10 s
+		public static readonly ChatRateLimiter Match = new(20, 10_000);
+
+		private readonly ConditionalWeakTable<SharedUserData, Queue<long>> m_windows = new();
+		private readonly int m_messages;
+		private readonly long m_windowMs;
+
+		public ChatRateLimiter(int messages, long windowMs)
 		{
-			Queue<long> window = s_windows.GetValue(user, _ => new Queue<long>());
+			m_messages = messages;
+			m_windowMs = windowMs;
+		}
+
+		public bool TryConsume(SharedUserData user, out long retryAfterMs)
+		{
+			Queue<long> window = m_windows.GetValue(user, _ => new Queue<long>());
 			long now = Environment.TickCount64;
 
 			lock (window)
 			{
-				while (window.TryPeek(out long sent) && now - sent >= RealtimeHub.ChatRateWindowMs)
+				while (window.TryPeek(out long sent) && now - sent >= m_windowMs)
 				{
 					window.Dequeue();
 				}
 
-				if (window.Count >= RealtimeHub.ChatRateMessages)
+				if (window.Count >= m_messages)
 				{
-					retryAfterMs = Math.Max(1, RealtimeHub.ChatRateWindowMs - (now - window.Peek()));
+					retryAfterMs = Math.Max(1, m_windowMs - (now - window.Peek()));
 					return false;
 				}
 

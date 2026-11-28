@@ -74,7 +74,7 @@ namespace GenOnlineService.Realtime
 				row = tombstone.Message;
 
 				// ids only, the audit row never holds the chat text
-				object details = new { kind = row.Kind, sender_id = row.SenderID, channel_id = row.ChannelID, lobby_id = row.LobbyID, recipient_id = row.RecipientID, group_id = row.GroupID };
+				object details = new { kind = row.Kind, sender_id = row.SenderID, channel_id = row.ChannelID, lobby_id = row.LobbyID, match_id = row.MatchID, recipient_id = row.RecipientID, group_id = row.GroupID };
 				await Database.Moderation.LogAction(db, SanctionActions.ApiActorOf(me), ModerationActions.MessageDelete, AuditTargetKinds.Message, messageID, reason, details);
 
 				if (row.Kind == ChatMessageKinds.Group)
@@ -96,6 +96,15 @@ namespace GenOnlineService.Realtime
 				{
 					Int64 lobbyID = row.LobbyID ?? -1;
 					await RealtimeOut.Lobby(lobbyID).MessageDelete(new MessageRefEvent { ChannelId = RealtimeGroups.Lobby(lobbyID), MessageId = id });
+					break;
+				}
+				case ChatMessageKinds.Match:
+				{
+					// the lobby group only reaches players while the lobby exists, the match line has no other audience
+					if (row.LobbyID is Int64 matchLobby)
+					{
+						await RealtimeOut.Lobby(matchLobby).MessageDelete(new MessageRefEvent { ChannelId = Database.Chat.MatchConversationKey(row.MatchID ?? -1), MessageId = id });
+					}
 					break;
 				}
 				case ChatMessageKinds.Group:

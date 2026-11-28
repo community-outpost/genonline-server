@@ -617,6 +617,16 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("bigint")
                         .HasColumnName("recipient_id");
 
+                    b.Property<string>("Recipients")
+                        .HasMaxLength(256)
+                        .HasColumnType("varchar(256)")
+                        .HasColumnName("recipients");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(16)
+                        .HasColumnType("varchar(16)")
+                        .HasColumnName("scope");
+
                     b.Property<long>("SenderID")
                         .HasColumnType("bigint")
                         .HasColumnName("sender_id");
@@ -637,6 +647,9 @@ namespace GenOnlineService.Migrations.MySql
 
                     b.HasIndex("LobbyID", "ID")
                         .HasDatabaseName("ix_chat_messages_lobby");
+
+                    b.HasIndex("MatchID", "ID")
+                        .HasDatabaseName("ix_chat_messages_match");
 
                     b.HasIndex("Kind", "ChannelID", "ID")
                         .HasDatabaseName("ix_chat_messages_channel");

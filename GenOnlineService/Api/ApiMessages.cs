@@ -239,6 +239,21 @@ namespace GenOnlineService.Api
 		public DateTime? ExpiresAt { get; init; }
 	}
 
+	// scope is everyone, allies or self, and recipient_user_ids are the other players of the match the line was shown to
+	[ApiFixture("post-matches-chat.request")]
+	public sealed record SendMatchChatRequest
+	{
+		public string? Text { get; init; }
+		public string? Scope { get; init; }
+		public IReadOnlyList<long>? RecipientUserIds { get; init; }
+	}
+
+	[ApiFixture("post-matches-chat.response")]
+	public sealed record SendMatchChatResponse
+	{
+		public string MessageId { get; init; } = "";
+	}
+
 	[ApiFixture("get-matchmaking-playlists.response")]
 	public sealed record PlaylistsResponse
 	{

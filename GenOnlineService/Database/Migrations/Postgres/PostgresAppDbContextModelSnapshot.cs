@@ -616,6 +616,16 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasColumnType("bigint")
                         .HasColumnName("recipient_id");
 
+                    b.Property<string>("Recipients")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("recipients");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("scope");
+
                     b.Property<long>("SenderID")
                         .HasColumnType("bigint")
                         .HasColumnName("sender_id");
@@ -636,6 +646,9 @@ namespace GenOnlineService.Migrations.Postgres
 
                     b.HasIndex("LobbyID", "ID")
                         .HasDatabaseName("ix_chat_messages_lobby");
+
+                    b.HasIndex("MatchID", "ID")
+                        .HasDatabaseName("ix_chat_messages_match");
 
                     b.HasIndex("Kind", "ChannelID", "ID")
                         .HasDatabaseName("ix_chat_messages_channel");

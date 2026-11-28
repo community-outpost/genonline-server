@@ -46,7 +46,7 @@ namespace GenOnlineService.Realtime
 
 		public async Task<Result<HistoryData>> GetHistory(GetHistoryRequest request)
 		{
-			if (!TryParseChannel(request.ChannelId, out string kind, out Int64 targetID))
+			if (!TryParseChannel(request.ChannelId, out string kind, out Int64 targetID) || IsMirrorOnly(kind))
 			{
 				return Result.Invalid("channel_id");
 			}
@@ -339,6 +339,7 @@ namespace GenOnlineService.Realtime
 				ChatMessageKinds.Channel => Database.Chat.ChannelConversationKey(row.ChannelID ?? -1),
 				ChatMessageKinds.Lobby => RealtimeGroups.Lobby(row.LobbyID ?? -1),
 				ChatMessageKinds.Group => Database.Chat.GroupConversationKey(row.GroupID ?? -1),
+				ChatMessageKinds.Match => Database.Chat.MatchConversationKey(row.MatchID ?? -1),
 				_ => Database.Chat.DirectConversationKey(row.SenderID == viewer ? row.RecipientID ?? -1 : row.SenderID)
 			};
 		}

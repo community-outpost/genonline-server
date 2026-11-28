@@ -16,6 +16,7 @@
 **    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+using GenOnlineService.Identity;
 using GenOnlineService.Names;
 using GenOnlineService.OpenApi;
 using Microsoft.AspNetCore.Authorization;
@@ -34,12 +35,14 @@ namespace GenOnlineService.Api
 		private readonly IDbContextFactory<AppDbContext> m_dbFactory;
 		private readonly PlayerNames m_names;
 		private readonly LobbyManager m_lobbyManager;
+		private readonly AccountsSettings m_accounts;
 
-		public ProfileController(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IAuthorizationService authorization, PlayerNames names) : base(authorization)
+		public ProfileController(IDbContextFactory<AppDbContext> dbFactory, LobbyManager lobbyManager, IAuthorizationService authorization, PlayerNames names, AccountsSettings accounts) : base(authorization)
 		{
 			m_dbFactory = dbFactory;
 			m_names = names;
 			m_lobbyManager = lobbyManager;
+			m_accounts = accounts;
 		}
 
 		[EndpointSummary("Changes the display name of the caller.")]
@@ -68,6 +71,20 @@ namespace GenOnlineService.Api
 				return ApiResults.Fail(malformed.Value);
 			}
 			return ApiResults.Answer(await MatchActions.SubmitResultAsync(m_dbFactory, m_lobbyManager, Me, matchID, body ?? new MatchResultRequest()));
+		}
+
+		[EndpointSummary("Mirrors one line of the in-game chat of a match the caller plays in.")]
+		[ProducesResponseType<SendMatchChatResponse>(StatusCodes.Status200OK)]
+		[ApiRequestBody(typeof(SendMatchChatRequest))]
+		[HttpPost("~/api/v1/matches/{matchID:long}/chat")]
+		public async Task<IActionResult> SendMatchChat(long matchID)
+		{
+			(SendMatchChatRequest? body, Failure? malformed) = await ReadBodyAsync<SendMatchChatRequest>();
+			if (malformed != null)
+			{
+				return ApiResults.Fail(malformed.Value);
+			}
+			return ApiResults.Answer(await MatchChat.SendAsync(m_dbFactory, m_lobbyManager, m_accounts.Agreements, Me, matchID, body ?? new SendMatchChatRequest()));
 		}
 
 		// A repeated report changes nothing, and only the storage can make a file uploaded

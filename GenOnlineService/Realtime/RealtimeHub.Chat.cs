@@ -70,7 +70,7 @@ namespace GenOnlineService.Realtime
 				return Result.NotFound("user");
 			}
 
-			if (!TryParseChannel(request.ChannelId, out string kind, out Int64 targetID))
+			if (!TryParseChannel(request.ChannelId, out string kind, out Int64 targetID) || IsMirrorOnly(kind))
 			{
 				return Result.Invalid("channel_id");
 			}
@@ -231,11 +231,11 @@ namespace GenOnlineService.Realtime
 			}
 			if (mute != null)
 			{
-				return mute.ExpiresAt == null ? Result.Fail(ErrorCodes.ChatMuted) : Result.Fail(ErrorCodes.ChatMuted, new { ExpiresAt = mute.ExpiresAt.Value });
+				return MutedFailure(mute);
 			}
 
 			// only the public channel chat is rate limited, lobby hosts can kick and direct and group messages go to friends
-			if (kind == "channel" && !ChatRateLimiter.TryConsume(authorData, out long retryAfterMs))
+			if (kind == "channel" && !ChatRateLimiter.Channel.TryConsume(authorData, out long retryAfterMs))
 			{
 				return Result.Fail(ErrorCodes.ChatRateLimited, new { RetryAfterMs = retryAfterMs });
 			}
@@ -506,7 +506,15 @@ namespace GenOnlineService.Realtime
 			return excluded;
 		}
 
-		private static bool TryParseChannel(string? channelID, out string kind, out Int64 id)
+		internal static Failure MutedFailure(Sanction mute)
+		{
+			return mute.ExpiresAt == null ? Result.Fail(ErrorCodes.ChatMuted) : Result.Fail(ErrorCodes.ChatMuted, new { ExpiresAt = mute.ExpiresAt.Value });
+		}
+
+		// Match lines reach the service over REST only, the realtime hub neither sends nor serves them
+		internal static bool IsMirrorOnly(string kind) => kind == "match";
+
+		internal static bool TryParseChannel(string? channelID, out string kind, out Int64 id)
 		{
 			kind = String.Empty;
 			id = -1;
@@ -517,7 +525,7 @@ namespace GenOnlineService.Realtime
 			}
 
 			kind = channelID.Substring(0, separator);
-			return (kind == "channel" || kind == "lobby" || kind == "dm" || kind == "group")
+			return (kind == "channel" || kind == "lobby" || kind == "dm" || kind == "group" || kind == "match")
 				&& Int64.TryParse(channelID.Substring(separator + 1), NumberStyles.None, CultureInfo.InvariantCulture, out id);
 		}
 	}

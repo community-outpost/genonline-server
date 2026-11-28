@@ -62,6 +62,7 @@ namespace GenOnlineService.Realtime
 		public const string ChatRateLimited = "chat.rate_limited";
 		public const string ChatTooLong = "chat.too_long";
 		public const string ChatMuted = "chat.muted";
+		public const string AgreementsOwed = "agreements.owed";
 		public const string ChatNotFriends = "chat.not_friends";
 		public const string ReportDuplicate = "report.duplicate";
 		public const string MatchResultClosed = "match.result_closed";

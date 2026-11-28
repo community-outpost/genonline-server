@@ -374,6 +374,7 @@ namespace GenOnlineService
 				ChatMessageKinds.Channel => $"channel {m.ChannelID}",
 				ChatMessageKinds.Lobby => $"lobby {m.LobbyID} match {m.MatchID?.ToString(CultureInfo.InvariantCulture) ?? "none"}",
 				ChatMessageKinds.Group => $"group {m.GroupID}",
+				ChatMessageKinds.Match => $"match {m.MatchID}",
 				_ => $"direct to user {m.RecipientID}"
 			};
 			string content = m.DeletedAt != null ? $"[deleted {m.DeletedAt:yyyy-MM-dd HH:mm} UTC] {m.Content}" : m.Content;

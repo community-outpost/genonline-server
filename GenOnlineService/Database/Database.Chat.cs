@@ -27,6 +27,16 @@ public static class ChatMessageKinds
 	public const string Lobby = "lobby";
 	public const string Direct = "direct";
 	public const string Group = "group";
+	public const string Match = "match";
+}
+
+public static class ChatMessageScopes
+{
+	public const string Everyone = "everyone";
+	public const string Allies = "allies";
+	public const string Self = "self";
+
+	public static readonly IReadOnlyList<string> All = [Everyone, Allies, Self];
 }
 
 public static class ChatMessageTypes
@@ -53,7 +63,13 @@ public class ChatMessage
 
 	// lobby messages only; the match id stays null until the game starts
 	public Int64? LobbyID { get; set; }
+
+	// set on lobby lines written after the match started and on every match line
 	public Int64? MatchID { get; set; }
+
+	// match lines only: the scope the player chose in game and the user ids the line was addressed to (EncodeMentions form), null for none
+	public string? Scope { get; set; }
+	public string? Recipients { get; set; }
 
 	public Int64 SenderID { get; set; }
 
@@ -158,6 +174,8 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
 
 		builder.HasIndex(e => new { e.LobbyID, e.ID }).HasDatabaseName("ix_chat_messages_lobby");
 
+		builder.HasIndex(e => new { e.MatchID, e.ID }).HasDatabaseName("ix_chat_messages_match");
+
 		builder.HasIndex(e => new { e.SenderID, e.RecipientID, e.ID }).HasDatabaseName("ix_chat_messages_sender_recipient");
 		builder.HasIndex(e => new { e.RecipientID, e.SenderID, e.ID }).HasDatabaseName("ix_chat_messages_recipient_sender");
 
@@ -170,6 +188,8 @@ public class ChatMessageConfiguration : IEntityTypeConfiguration<ChatMessage>
 		builder.Property(e => e.ChannelID).HasColumnName("channel_id");
 		builder.Property(e => e.LobbyID).HasColumnName("lobby_id");
 		builder.Property(e => e.MatchID).HasColumnName("match_id");
+		builder.Property(e => e.Scope).HasColumnName("scope").HasMaxLength(16);
+		builder.Property(e => e.Recipients).HasColumnName("recipients").HasMaxLength(Database.Chat.MaximumMentionsLength);
 		builder.Property(e => e.SenderID).HasColumnName("sender_id");
 		builder.Property(e => e.RecipientID).HasColumnName("recipient_id");
 		builder.Property(e => e.GroupID).HasColumnName("group_id");
@@ -309,10 +329,12 @@ namespace Database
 		public const string DirectConversationPrefix = "dm:";
 		public const string ChannelConversationPrefix = "channel:";
 		public const string GroupConversationPrefix = "group:";
+		public const string MatchConversationPrefix = "match:";
 
 		public static string DirectConversationKey(long otherUserId) => DirectConversationPrefix + otherUserId;
 		public static string ChannelConversationKey(long channelId) => ChannelConversationPrefix + channelId;
 		public static string GroupConversationKey(long groupId) => GroupConversationPrefix + groupId;
+		public static string MatchConversationKey(long matchId) => MatchConversationPrefix + matchId;
 
 		public static Task<ChatMessage> InsertChannelMessage(AppDbContext db, long channelId, long senderId, string type, string content, IReadOnlyList<long>? mentions = null, CancellationToken cancellationToken = default)
 		{
@@ -322,6 +344,12 @@ namespace Database
 		public static Task<ChatMessage> InsertLobbyMessage(AppDbContext db, long lobbyId, long? matchId, long senderId, string type, string content, IReadOnlyList<long>? mentions = null, CancellationToken cancellationToken = default)
 		{
 			return Insert(db, new ChatMessage { Kind = ChatMessageKinds.Lobby, LobbyID = lobbyId, MatchID = matchId, SenderID = senderId, Type = type, Content = content, Mentions = EncodeMentions(mentions) }, cancellationToken);
+		}
+
+		// The scope and recipients are stored as the game sent them, the text is never masked
+		public static Task<ChatMessage> InsertMatchMessage(AppDbContext db, long matchId, long? lobbyId, long senderId, string content, string scope, IReadOnlyList<long> recipients, CancellationToken cancellationToken = default)
+		{
+			return Insert(db, new ChatMessage { Kind = ChatMessageKinds.Match, MatchID = matchId, LobbyID = lobbyId, SenderID = senderId, Type = ChatMessageTypes.Chat, Content = content, Scope = scope, Recipients = EncodeMentions(recipients) }, cancellationToken);
 		}
 
 		public static Task<ChatMessage> InsertDirectMessage(AppDbContext db, long senderId, long recipientId, string type, string content, IReadOnlyList<long>? mentions = null, CancellationToken cancellationToken = default)
@@ -738,6 +766,7 @@ namespace Database
 				ChatMessageKinds.Channel => conversation.Where(m => m.Kind == ChatMessageKinds.Channel && m.ChannelID == message.ChannelID),
 				ChatMessageKinds.Lobby => conversation.Where(m => m.Kind == ChatMessageKinds.Lobby && m.LobbyID == message.LobbyID),
 				ChatMessageKinds.Group => conversation.Where(m => m.Kind == ChatMessageKinds.Group && m.GroupID == message.GroupID),
+				ChatMessageKinds.Match => conversation.Where(m => m.Kind == ChatMessageKinds.Match && m.MatchID == message.MatchID),
 				_ => conversation.Where(m => m.Kind == ChatMessageKinds.Direct && ((m.SenderID == message.SenderID && m.RecipientID == message.RecipientID) || (m.SenderID == message.RecipientID && m.RecipientID == message.SenderID)))
 			};
 		}
