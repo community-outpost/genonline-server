@@ -238,6 +238,13 @@ namespace GenOnlineService.Api
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public IReadOnlyDictionary<string, string>? StatsFields { get; init; }
 
+		// Present while the storage has no load screen of the caller, so a game whose GameStart URL stopped working still uploads it
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? LoadscreenUrl { get; init; }
+
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public IReadOnlyDictionary<string, string>? LoadscreenFields { get; init; }
+
 		// When the upload URLs stop working, so the game can end an upload that would be refused anyway
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public DateTime? ExpiresAt { get; init; }

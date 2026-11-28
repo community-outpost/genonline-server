@@ -85,23 +85,35 @@ namespace GenOnlineService.Realtime
 			// The lobby outlives a disconnected player's session, so the report is kept there for the winner decision
 			outcomeLobby?.RecordPlayerOutcome(me, request.Won);
 
+			bool loadScreenUploaded;
+			await using (AppDbContext db = await dbFactory.CreateDbContextAsync())
+			{
+				loadScreenUploaded = await global::Database.MatchHistory.IsLoadScreenUploaded(db, matchIDValue, slotIndexInLobby);
+			}
+
 			DateTime? urlExpiry = S3CredentialManager.UrlExpiry();
 			MatchResultResponse answer = await BuildAnswerAsync(
 				(fileType, screenshotType) => S3CredentialManager.GetUploadTarget(fileType, screenshotType, matchID, me, slotIndexInLobby, lobbyCreationTime),
 				WantsStatsURL(GenOnlineService.Flags.FlagCatalog.Get(StatsUploadFlag, true), request),
 				GenOnlineService.Flags.FlagCatalog.Get(ReplayUploadFlag, true),
-				urlExpiry);
+				urlExpiry,
+				!loadScreenUploaded);
 
 			MatchStats stats = request.Stats;
+			bool outcomeChanged;
 			await using (AppDbContext db = await dbFactory.CreateDbContextAsync())
 			{
-				await global::Database.MatchHistory.CommitPlayerOutcome(db, slotIndexInLobby, matchID, request.Side,
+				outcomeChanged = await global::Database.MatchHistory.CommitPlayerOutcome(db, slotIndexInLobby, matchID, request.Side,
 					stats.BuildingsBuilt, stats.BuildingsKilled, stats.BuildingsLost, stats.UnitsBuilt, stats.UnitsKilled, stats.UnitsLost,
 					(int)Math.Clamp(stats.TotalMoney, Int32.MinValue, Int32.MaxValue), request.Won, request.Desynced, (UInt32)request.DurationS);
 			}
-			GenOnlineService.Rules.RuleRunner.Raise(GenOnlineService.Rules.RuleEvent.Of(GenOnlineService.Rules.RuleTriggers.MatchResult, me, null,
-				(GenOnlineService.Rules.RuleEventFields.MatchId, matchIDValue), (GenOnlineService.Rules.RuleEventFields.Won, request.Won),
-				(GenOnlineService.Rules.RuleEventFields.Desynced, request.Desynced), (GenOnlineService.Rules.RuleEventFields.DurationS, (long)request.DurationS)));
+			// A resend of the same outcome is not counted again
+			if (outcomeChanged)
+			{
+				GenOnlineService.Rules.RuleRunner.Raise(GenOnlineService.Rules.RuleEvent.Of(GenOnlineService.Rules.RuleTriggers.MatchResult, me, null,
+					(GenOnlineService.Rules.RuleEventFields.MatchId, matchIDValue), (GenOnlineService.Rules.RuleEventFields.Won, request.Won),
+					(GenOnlineService.Rules.RuleEventFields.Desynced, request.Desynced), (GenOnlineService.Rules.RuleEventFields.DurationS, (long)request.DurationS)));
+			}
 
 			DateTime now = DateTime.UtcNow;
 			foreach (KeyValuePair<(long MatchID, long UserID), (string Body, MatchResultResponse Answer, DateTime At)> old in s_answers)
@@ -120,9 +132,10 @@ namespace GenOnlineService.Realtime
 
 		internal static bool WantsStatsURL(bool statsUploadEnabled, MatchResultRequest request) => statsUploadEnabled && request.StatsFile != false;
 
-		internal static async Task<MatchResultResponse> BuildAnswerAsync(Func<EMetadataFileType, EScreenshotType, Task<GenOnlineService.Service.UploadTarget?>> presign, bool statsUploadEnabled, bool replayUploadEnabled, DateTime? expiresAt = null)
+		internal static async Task<MatchResultResponse> BuildAnswerAsync(Func<EMetadataFileType, EScreenshotType, Task<GenOnlineService.Service.UploadTarget?>> presign, bool statsUploadEnabled, bool replayUploadEnabled, DateTime? expiresAt = null, bool wantsLoadScreen = false)
 		{
 			GenOnlineService.Service.UploadTarget? screenshot = await presign(EMetadataFileType.FILE_TYPE_SCREENSHOT, EScreenshotType.SCREENSHOT_TYPE_SCORESCREEN);
+			GenOnlineService.Service.UploadTarget? loadScreen = wantsLoadScreen ? await presign(EMetadataFileType.FILE_TYPE_SCREENSHOT, EScreenshotType.SCREENSHOT_TYPE_LOADSCREEN) : null;
 			GenOnlineService.Service.UploadTarget? replay = replayUploadEnabled ? await presign(EMetadataFileType.FILE_TYPE_REPLAY, EScreenshotType.NONE) : null;
 			GenOnlineService.Service.UploadTarget? stats = statsUploadEnabled ? await presign(EMetadataFileType.FILE_TYPE_STATS, EScreenshotType.NONE) : null;
 
@@ -134,6 +147,8 @@ namespace GenOnlineService.Realtime
 				ReplayFields = replay?.Fields,
 				StatsUrl = stats?.Url,
 				StatsFields = stats?.Fields,
+				LoadscreenUrl = loadScreen?.Url,
+				LoadscreenFields = loadScreen?.Fields,
 				ExpiresAt = expiresAt
 			};
 		}

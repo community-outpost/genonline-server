@@ -414,7 +414,14 @@ namespace Database
 				.FirstOrDefaultAsync(p => p.MatchId == matchId && p.Slot == (short)slotIndex, cancellationToken);
 		}
 
-		public static async Task CommitPlayerOutcome(
+		// The duration is stored only by a player report, so a missing one marks the first report even after the server decided the winner
+		internal static bool OutcomeChanged(MatchPlayerDetails stored, string? storedResult, bool won, bool desynced, uint duration)
+		{
+			return stored.duration != duration || stored.desynced != desynced || storedResult != (won ? MatchResults.Win : MatchResults.Loss);
+		}
+
+		// True when the stored outcome of the player changed
+		public static async Task<bool> CommitPlayerOutcome(
 			AppDbContext db,
 			int slotIndex,
 			ulong matchId,
@@ -431,15 +438,16 @@ namespace Database
 			uint duration)
 		{
 			if (slotIndex < 0 || slotIndex >= SlotCount)
-				return;
+				return false;
 
 			try
 			{
 				MatchPlayer? player = await GetPlayer(db, (long)matchId, slotIndex);
 				if (player == null)
-					return;
+					return false;
 
 				MatchPlayerDetails details = ReadDetails(player.Details);
+				bool changed = OutcomeChanged(details, player.Result, won, desynced, duration);
 				details.buildings_built = buildingsBuilt;
 				details.buildings_killed = buildingsKilled;
 				details.buildings_lost = buildingsLost;
@@ -455,10 +463,12 @@ namespace Database
 				player.Details = WriteDetails(details);
 
 				await db.SaveChangesAsync();
+				return changed;
 			}
 			catch (Exception ex)
 			{
 				s_log.LogError(ex, "CommitPlayerOutcome failed");
+				return false;
 			}
 			finally
 			{
@@ -1115,6 +1125,20 @@ namespace Database
 			{
 				db.ChangeTracker.Clear();
 			}
+		}
+
+		// Only a stored load screen counts, an issued one may never arrive and every issue has its own name
+		internal static bool LoadScreenUploaded(MatchPlayerDetails details)
+		{
+			return (details.metadata ?? new List<MemberMetadataModel>()).Any(file => file.file_type == EMetadataFileType.FILE_TYPE_SCREENSHOT
+				&& file.file_status == EMetadataFileStatus.FILE_STATUS_UPLOADED
+				&& file.file_name != null && file.file_name.Contains("_loadscreen_", StringComparison.Ordinal));
+		}
+
+		public static async Task<bool> IsLoadScreenUploaded(AppDbContext db, long matchId, int slotIndex, CancellationToken cancellationToken = default)
+		{
+			MatchPlayer? player = await db.MatchPlayers.AsNoTracking().FirstOrDefaultAsync(p => p.MatchId == matchId && p.Slot == (short)slotIndex, cancellationToken);
+			return player != null && LoadScreenUploaded(ReadDetails(player.Details));
 		}
 
 		// A failure report can come from an upload that reached the storage anyway, so failed files are checked like waiting ones
