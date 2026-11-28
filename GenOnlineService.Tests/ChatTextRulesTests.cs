@@ -17,9 +17,9 @@ public class ChatTextRulesTests
 	}
 
 	[Fact]
-	public void BlockWordsStillRefuseChat()
+	public void ExtremeBlockWordsStillRefuseChat()
 	{
-		Assert.Equal(TextChecks.ChatBlocked, TextChecks.ChatRefusal("you fuck")!.Value.Code);
+		Assert.Equal(TextChecks.ChatBlocked, TextChecks.ChatRefusal("you kkk")!.Value.Code);
 	}
 
 	[Fact]
@@ -64,8 +64,8 @@ public class ChatTextRulesTests
 	[Fact]
 	public void ChatRefusalCarriesTheCategoryAndNeverTheWord()
 	{
-		Failure refusal = TextChecks.ChatRefusal("you fuck")!.Value;
-		Assert.Equal("{\"category\":\"profanity\"}", Json(refusal.Params));
+		Failure refusal = TextChecks.ChatRefusal("you kkk")!.Value;
+		Assert.Equal("{\"category\":\"extreme\"}", Json(refusal.Params));
 	}
 
 	[Fact]
@@ -75,18 +75,18 @@ public class ChatTextRulesTests
 			new TextRuleDefinition { Name = "blocked words", Expression = "input.Block > 0", Outcome = TextOutcomes.Block, Message = "Please keep the chat friendly." },
 			new TextRuleTerm { Term = "heck", Severity = TextSeverities.Block, Category = TextCategories.Insult, Match = TextMatchModes.Word });
 		Failure refusal = TextChecks.Refusal(TextChecks.ChatBlocked, set.Check(TextKinds.Chat, "oh heck no"));
-		Assert.Equal("{\"category\":\"insult\",\"message\":\"Please keep the chat friendly.\"}", Json(refusal.Params));
+		Assert.Equal("{\"category\":\"custom\",\"message\":\"Please keep the chat friendly.\"}", Json(refusal.Params));
 	}
 
 	[Fact]
-	public void RefusalCategoryIsOtherWhenOnlyNameWordsMatched()
+	public void ChatRefusalCategoryIsCustomWhenOnlyNameWordsMatched()
 	{
 		TextRuleSet set = SetWithChat(
 			new TextRuleDefinition { Name = "any", Expression = "input.Matches > 0", Outcome = TextOutcomes.Block },
 			new TextRuleTerm { Term = "heck", Severity = TextSeverities.Block, Category = TextCategories.Reserved, Match = TextMatchModes.Word });
 		TextCheck check = set.Check(TextKinds.Chat, "oh heck no");
 		Assert.Equal(TextOutcomes.Block, check.Outcome);
-		Assert.Equal("{\"category\":\"other\"}", Json(TextChecks.Refusal(TextChecks.ChatBlocked, check).Params));
+		Assert.Equal("{\"category\":\"custom\"}", Json(TextChecks.Refusal(TextChecks.ChatBlocked, check).Params));
 	}
 
 	[Theory]

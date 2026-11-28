@@ -1234,6 +1234,7 @@ namespace GenOnlineService.Portal.Client
 		public string Language { get; init; } = "";
 		public string Category { get; init; } = "";
 		public string Severity { get; init; } = "";
+		public string? Level { get; init; }
 		public string Reading { get; init; } = "";
 		public string Text { get; init; } = "";
 	}

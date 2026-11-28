@@ -122,6 +122,7 @@ namespace GenOnlineService.Rest
 		public string Language { get; init; } = "";
 		public string Category { get; init; } = "";
 		public string Severity { get; init; } = "";
+		public string? Level { get; init; }
 		public string Match { get; init; } = "";
 		public string Reading { get; init; } = "";
 		public int Start { get; init; }
@@ -270,6 +271,7 @@ namespace GenOnlineService.Rest
 					Language = h.Term.Language,
 					Category = h.Term.Category,
 					Severity = h.Term.Severity,
+					Level = h.Term.Level,
 					Match = h.Term.Match,
 					Reading = h.Reading,
 					Start = h.Start,

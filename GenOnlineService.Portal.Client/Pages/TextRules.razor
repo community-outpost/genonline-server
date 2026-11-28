@@ -86,7 +86,7 @@ else
                     }
                     else
                     {
-                        <p class="bb:text-xs bb:text-muted-foreground" data-testid="word-count">@(m_terms.Total > m_terms.Terms.Count ? $"The first {m_terms.Terms.Count} of {m_terms.Total} words." : $"{m_terms.Total} words.") A block word refuses a display name or lobby name and blocks a chat message, a flag word goes to the chat filter list of players who turn the filter on and never changes the chat that is stored or sent; impersonation and reserved words refuse display names only.</p>
+                        <p class="bb:text-xs bb:text-muted-foreground" data-testid="word-count">@(m_terms.Total > m_terms.Terms.Count ? $"The first {m_terms.Terms.Count} of {m_terms.Total} words." : $"{m_terms.Total} words.") A block word refuses a display name or lobby name. In chat only a block word at the extreme level and a block word that staff added refuse the message, every other word with a level goes to the chat filter list that clients download and never changes the chat that is stored or sent; impersonation and reserved words refuse display names only.</p>
                         <BbDataTable TData="PortalTextTerm" Data="@m_terms.Terms" ShowToolbar="false" ShowPagination="false" AriaLabel="Words">
                             <Columns>
                                 <BbDataTableColumn TData="PortalTextTerm" TValue="string" Property="@(t => t.Term)" Header="Word">

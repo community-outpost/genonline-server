@@ -22,8 +22,12 @@ using System.Text.Json;
 
 namespace GenOnlineService.TextRules
 {
-	// A listed word as the client matcher reads it: text is folded and carries the repeats of the word, match is word, anywhere or literal
-	public sealed record ChatFilterTerm(string Text, string Match, string Language);
+	// A listed word as the client matcher reads it: text is folded and carries the repeats of the word, match is word, anywhere or literal,
+	// level is the filter setting that turns it on
+	public sealed record ChatFilterTerm(string Text, string Match, string Language, string Level);
+
+	// An exception takes the level of the most severe listed word it covers, extreme when it covers none, so it applies from that setting up
+	public sealed record ChatFilterException(string Text, string Level);
 
 	// The tables a client applies to inbound text: fold maps a lower-cased character to its replacement, leet reads digits and symbols
 	// inside words, leet_alt is the second reading of a 1, and arabic_prefixes may sit before a whole Arabic word
@@ -31,7 +35,7 @@ namespace GenOnlineService.TextRules
 
 	// The words of the filter rules of chat for the players who turn the chat filter on, served without sign-in because the list holds no
 	// player data and the retail clients carry word lists of their own
-	public sealed record ChatFilterList(string Revision, ChatFilterFold Fold, IReadOnlyList<ChatFilterTerm> Terms, IReadOnlyList<string> Exceptions)
+	public sealed record ChatFilterList(string Revision, ChatFilterFold Fold, IReadOnlyList<ChatFilterTerm> Terms, IReadOnlyList<ChatFilterException> Exceptions)
 	{
 		private static readonly ILogger s_log = AppLog.For(typeof(ChatFilterList));
 		private static readonly JsonSerializerOptions s_json = RealtimeJson.Create();
@@ -42,15 +46,30 @@ namespace GenOnlineService.TextRules
 		{
 			bool filtering = set.Workflows.Definitions.TryGetValue(TextKinds.Chat, out TextWorkflowDefinition? chat)
 				&& chat.Rules.Any(r => r.Enabled && r.Outcome == TextOutcomes.Filter);
-			IEnumerable<ChatFilterTerm> terms = filtering
-				? set.Terms.Where(t => t.Severity == TextSeverities.Flag && !TextCategories.IsNameOnly(t.Category)).Select(t => new ChatFilterTerm(TextOf(t), t.Match, t.Language))
-				: [];
+			List<TextTermInfo> listed = filtering ? set.Terms.Where(t => t.Level != null && !TextCategories.IsNameOnly(t.Category)).ToList() : [];
+			IEnumerable<ChatFilterTerm> terms = listed.Select(t => new ChatFilterTerm(TextOf(t), t.Match, t.Language, t.Level!));
 			var list = new ChatFilterList(
 				String.Empty,
 				new ChatFilterFold(Clean(TextFolding.FoldTable()), Clean(TextFolding.LeetTable()), Clean(TextFolding.LeetAlternativeTable()), TextFolding.ArabicPrefixes),
 				terms.Where(t => IsClean(t.Text)).Distinct().OrderBy(t => t.Match, StringComparer.Ordinal).ThenBy(t => t.Language, StringComparer.Ordinal).ThenBy(t => t.Text, StringComparer.Ordinal).ToList(),
-				set.Exceptions.Select(TextOf).Where(IsClean).Distinct().Order(StringComparer.Ordinal).ToList());
+				ExceptionsOf(set.Exceptions, listed));
 			return list with { Revision = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(list, s_json)), 0, 16).ToLowerInvariant() };
+		}
+
+		private static List<ChatFilterException> ExceptionsOf(IReadOnlyList<TextTermInfo> exceptions, List<TextTermInfo> listed)
+		{
+			var matcher = new TextMatcher();
+			foreach (TextTermInfo term in listed.Where(t => t.Match != TextMatchModes.Literal))
+			{
+				matcher.Add(term, TextFolding.Latin(TextFolding.Words(TextFolding.Fold(term.Term), false), false), term.Match == TextMatchModes.Word);
+			}
+			matcher.Build();
+			return exceptions
+				.Where(e => IsClean(TextOf(e)))
+				.Select(e => new ChatFilterException(
+					TextOf(e),
+					matcher.Find(TextFolding.Latin(TextFolding.Words(TextFolding.Fold(e.Term), false), false)).Select(h => h.Term.Level!).MinBy(l => TextLevels.Rank(l)) ?? TextLevels.Extreme))
+				.Distinct().OrderBy(e => e.Text, StringComparer.Ordinal).ToList();
 		}
 
 		private static string TextOf(TextTermInfo term) => ExportText(term.Term, term.Match);

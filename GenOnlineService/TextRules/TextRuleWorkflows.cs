@@ -30,6 +30,10 @@ namespace GenOnlineService.TextRules
 		public int Matches { get; init; }
 		public int Block { get; init; }
 		public int Flag { get; init; }
+
+		// Block words at the extreme level, and block words that staff added: the only words the default chat rules refuse
+		public int Extreme { get; init; }
+		public int Custom { get; init; }
 		public int Slur { get; init; }
 		public int Sexual { get; init; }
 		public int Profanity { get; init; }
@@ -47,6 +51,8 @@ namespace GenOnlineService.TextRules
 				Matches = terms.Count,
 				Block = rated.Count(t => t.Severity == TextSeverities.Block),
 				Flag = rated.Count(t => t.Severity == TextSeverities.Flag),
+				Extreme = rated.Count(t => t.Level == TextLevels.Extreme),
+				Custom = rated.Count(t => t.Severity == TextSeverities.Block && t.Source == TextRuleSources.Staff),
 				Slur = terms.Count(t => t.Category == TextCategories.Slur),
 				Sexual = terms.Count(t => t.Category == TextCategories.Sexual),
 				Profanity = terms.Count(t => t.Category == TextCategories.Profanity),
@@ -100,13 +106,14 @@ namespace GenOnlineService.TextRules
 		{
 			InputName, "true", "false", "null", "and", "or", "not", "AND", "OR", "NOT",
 			nameof(TextRuleFacts.Kind), nameof(TextRuleFacts.Matches), nameof(TextRuleFacts.Block), nameof(TextRuleFacts.Flag),
+			nameof(TextRuleFacts.Extreme), nameof(TextRuleFacts.Custom),
 			nameof(TextRuleFacts.Slur), nameof(TextRuleFacts.Sexual), nameof(TextRuleFacts.Profanity), nameof(TextRuleFacts.Insult),
 			nameof(TextRuleFacts.Impersonation), nameof(TextRuleFacts.Reserved)
 		};
 
 		public static readonly IReadOnlyList<string> Fields =
 		[
-			nameof(TextRuleFacts.Kind), nameof(TextRuleFacts.Matches), nameof(TextRuleFacts.Block), nameof(TextRuleFacts.Flag), nameof(TextRuleFacts.Slur),
+			nameof(TextRuleFacts.Kind), nameof(TextRuleFacts.Matches), nameof(TextRuleFacts.Block), nameof(TextRuleFacts.Flag), nameof(TextRuleFacts.Extreme), nameof(TextRuleFacts.Custom), nameof(TextRuleFacts.Slur),
 			nameof(TextRuleFacts.Sexual), nameof(TextRuleFacts.Profanity), nameof(TextRuleFacts.Insult), nameof(TextRuleFacts.Impersonation), nameof(TextRuleFacts.Reserved)
 		];
 
@@ -134,7 +141,8 @@ namespace GenOnlineService.TextRules
 			{
 				Rules =
 				[
-					new TextRuleDefinition { Name = "blocked words", Expression = "input.Block > 0", Outcome = TextOutcomes.Block },
+					// the other words only feed the filter list: players choose how much of it their client applies
+					new TextRuleDefinition { Name = "blocked words", Expression = "input.Extreme > 0 || input.Custom > 0", Outcome = TextOutcomes.Block },
 					new TextRuleDefinition { Name = "flagged words", Expression = "input.Flag > 0", Outcome = TextOutcomes.Filter }
 				]
 			}
@@ -152,6 +160,17 @@ namespace GenOnlineService.TextRules
 					[
 						new TextRuleDefinition { Name = "reserved words", Expression = "input.Impersonation > 0 || input.Reserved > 0", Outcome = TextOutcomes.Refuse },
 						new TextRuleDefinition { Name = "blocked words", Expression = "input.Block > 0", Outcome = TextOutcomes.Refuse }
+					]
+				}
+			],
+			[TextKinds.Chat] =
+			[
+				new TextWorkflowDefinition
+				{
+					Rules =
+					[
+						new TextRuleDefinition { Name = "blocked words", Expression = "input.Block > 0", Outcome = TextOutcomes.Block },
+						new TextRuleDefinition { Name = "flagged words", Expression = "input.Flag > 0", Outcome = TextOutcomes.Filter }
 					]
 				}
 			]

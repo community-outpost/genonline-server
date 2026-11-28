@@ -17,10 +17,34 @@ public class ChatFilterTests
 		new() { Term = term, Severity = severity, Match = match, Category = category, Language = language };
 
 	[Fact]
-	public void ListHoldsFlagTermsOnly()
+	public void ListHoldsTheTermsThatHaveALevelWhateverTheirSeverity()
 	{
 		ChatFilterList list = Set([Term("heck", TextSeverities.Flag), Term("darn", TextSeverities.Block), Term("admin", TextSeverities.Flag, category: TextCategories.Impersonation)]).ChatFilter;
-		Assert.Equal(["heck"], list.Terms.Select(t => t.Text));
+		Assert.Equal(["darn", "heck"], list.Terms.Select(t => t.Text).Order());
+	}
+
+	[Fact]
+	public void TermsCarryTheirLevel()
+	{
+		ChatFilterList list = Set([Term("heck", TextSeverities.Flag), Term("kkk", TextSeverities.Block, category: TextCategories.Slur), Term("porn", TextSeverities.Flag, category: TextCategories.Sexual)]).ChatFilter;
+		Assert.Equal([("heck", "strict"), ("kk", "extreme"), ("porn", "standard")], list.Terms.Select(t => (t.Text, t.Level)).Order());
+	}
+
+	[Fact]
+	public void ATermKeepsAStaffLevelOverItsCategory()
+	{
+		var term = Term("heck", TextSeverities.Flag);
+		term.Level = TextLevels.Extreme;
+		Assert.Equal("extreme", Set([term]).ChatFilter.Terms[0].Level);
+	}
+
+	[Fact]
+	public void AnExceptionTakesTheMostSevereLevelOfTheTermsItProtects()
+	{
+		ChatFilterList list = Set(
+			[Term("cock", TextSeverities.Flag, TextMatchModes.Anywhere, TextCategories.Sexual), Term("ass", TextSeverities.Flag, TextMatchModes.Anywhere), Term("kkk", TextSeverities.Block, TextMatchModes.Anywhere, TextCategories.Slur)],
+			[new TextRuleException { Term = "cockpit" }, new TextRuleException { Term = "assassin" }, new TextRuleException { Term = "cockkkpit" }, new TextRuleException { Term = "unrelated" }]).ChatFilter;
+		Assert.Equal([("assassin", "strict"), ("cockkpit", "extreme"), ("cockpit", "standard"), ("unrelated", "extreme")], list.Exceptions.Select(e => (e.Text, e.Level)).Order());
 	}
 
 	[Fact]
@@ -34,7 +58,7 @@ public class ChatFilterTests
 	public void ExceptionsAreListedFolded()
 	{
 		ChatFilterList list = Set([Term("sex", TextSeverities.Flag, TextMatchModes.Anywhere)], [new TextRuleException { Term = "Sussex" }]).ChatFilter;
-		Assert.Equal(["sussex"], list.Exceptions);
+		Assert.Equal(["sussex"], list.Exceptions.Select(e => e.Text));
 	}
 
 	[Fact]
@@ -53,8 +77,9 @@ public class ChatFilterTests
 		Assert.Equal(first, Set([Term("heck", TextSeverities.Flag)]).ChatFilter.Revision);
 		Assert.NotEqual(first, Set([Term("heck", TextSeverities.Flag), Term("darn", TextSeverities.Flag)]).ChatFilter.Revision);
 		Assert.NotEqual(first, Set([Term("heck", TextSeverities.Flag, TextMatchModes.Anywhere)]).ChatFilter.Revision);
-		// a block word is not in the list
-		Assert.Equal(first, Set([Term("heck", TextSeverities.Flag), Term("darn", TextSeverities.Block)]).ChatFilter.Revision);
+		Assert.NotEqual(first, Set([Term("heck", TextSeverities.Flag, category: TextCategories.Slur)]).ChatFilter.Revision);
+		// a word without a level is not in the list
+		Assert.Equal(first, Set([Term("heck", TextSeverities.Flag), Term("admin", TextSeverities.Block, category: TextCategories.Reserved)]).ChatFilter.Revision);
 	}
 
 	[Fact]
@@ -65,6 +90,7 @@ public class ChatFilterTests
 		JsonElement root = body.RootElement;
 		Assert.Equal(set.ChatFilter.Revision, root.GetProperty("revision").GetString());
 		Assert.Equal("heck", root.GetProperty("terms")[0].GetProperty("text").GetString());
+		Assert.Equal("strict", root.GetProperty("terms")[0].GetProperty("level").GetString());
 		Assert.Equal("a", root.GetProperty("fold").GetProperty("leet").GetProperty("4").GetString());
 		Assert.Equal("l", root.GetProperty("fold").GetProperty("leet_alt").GetProperty("1").GetString());
 		Assert.Equal("ال", root.GetProperty("fold").GetProperty("arabic_prefixes")[0].GetString());
@@ -174,7 +200,7 @@ public class ChatFilterTests
 			[new TextRuleException { Term = "́", Language = TextLanguages.English }]));
 		Assert.Equal(["heck"], list.Terms.Select(t => t.Text));
 		Assert.Empty(list.Exceptions);
-		Assert.All(list.Terms.Select(t => t.Text).Concat(list.Exceptions), t => Assert.True(ChatFilterList.IsClean(t)));
+		Assert.All(list.Terms.Select(t => t.Text).Concat(list.Exceptions.Select(e => e.Text)), t => Assert.True(ChatFilterList.IsClean(t)));
 	}
 
 	[Fact]
@@ -193,7 +219,7 @@ public class ChatFilterTests
 		ChatFilterList list = ChatFilterList.Of(Set(
 			TextRuleSeeds.Terms().Select(t => Term(t.Term, TextSeverities.Flag, t.Match, t.Category, t.Language)),
 			TextRuleSeeds.Exceptions()));
-		string[] bad = list.Terms.Select(t => t.Text).Concat(list.Exceptions).Where(t => !ChatFilterList.IsClean(t)).ToArray();
+		string[] bad = list.Terms.Select(t => t.Text).Concat(list.Exceptions.Select(e => e.Text)).Where(t => !ChatFilterList.IsClean(t)).ToArray();
 		Assert.Empty(bad);
 		Assert.All(TextRuleSeeds.Terms(), t => Assert.NotNull(TextRulesAdmin.CleanTerm(t.Term)));
 		Assert.All(TextRuleSeeds.Exceptions(), e => Assert.NotNull(TextRulesAdmin.CleanTerm(e.Term)));

@@ -66,6 +66,8 @@ namespace GenOnlineService.TextRules
 
 		public static readonly IReadOnlyList<string> All = [Extreme, Standard, Strict];
 
+		public static int Rank(string level) => level == Extreme ? 0 : level == Standard ? 1 : 2;
+
 		public static string? OfCategory(string category) => category switch
 		{
 			TextCategories.Slur => Extreme,

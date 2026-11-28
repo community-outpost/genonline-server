@@ -133,8 +133,9 @@ namespace GenOnlineService.TextRules
 	{
 		private const string ResourcePrefix = "GenOnlineService.data.textrules.";
 
-		// The seed version: 1 the service's own lists and the plugin's reserved words, 2 the LDNOOBW lists and stricter display name rules.
-		public const int Version = 2;
+		// The seed version: 1 the service's own lists and the plugin's reserved words, 2 the LDNOOBW lists and stricter display name rules,
+		// 3 the chat rules that block only extreme and staff words and the German and Russian lists.
+		public const int Version = 3;
 
 		// The seed words added after a seed version; a word in more than one list keeps its first entry, so the service's own wins
 		public static IReadOnlyList<TextRuleTerm> Terms(int after = 0)
@@ -223,14 +224,22 @@ namespace GenOnlineService.TextRules
 		public static TextCheck Check(string kind, string text) => Current.Check(kind, text);
 
 		public const string OtherCategory = "other";
+		public const string ExtremeCategory = "extreme";
+		public const string CustomCategory = "custom";
 
 		private static readonly string[] s_categoryPriority = [TextCategories.Impersonation, TextCategories.Reserved, TextCategories.Slur, TextCategories.Sexual, TextCategories.Insult, TextCategories.Profanity];
 
-		// The refusal of a text rule, {category, message?}: the category of the words that matched and the staff message of the deciding
-		// rule, never the matched word itself. Name only categories count for display names only.
+		// The refusal of a text rule, {category, message?}, with the category of the matched words and the staff message of the deciding
+		// rule but never the matched word, where name only categories count for display names only and chat has extreme when an extreme
+		// word matched and custom for the staff words and rules
 		public static Failure Refusal(string code, TextCheck check)
 		{
 			List<TextTermInfo> terms = check.Hits.Select(h => h.Term).Where(t => check.Kind == TextKinds.DisplayName || !TextCategories.IsNameOnly(t.Category)).ToList();
+			if (check.Kind == TextKinds.Chat)
+			{
+				string chat = terms.Any(t => t.Level == TextLevels.Extreme) ? ExtremeCategory : CustomCategory;
+				return Result.Fail(code, check.Message == null ? new { Category = chat } : new { Category = chat, Message = check.Message });
+			}
 			if (terms.Any(t => t.Severity == TextSeverities.Block))
 			{
 				terms = terms.Where(t => t.Severity == TextSeverities.Block).ToList();
