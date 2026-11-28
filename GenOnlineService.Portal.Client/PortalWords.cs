@@ -100,6 +100,60 @@ namespace GenOnlineService.Portal.Client
 
 		public static string RosterType(string? roster) => Sentence(roster);
 
+		public static string EacKind(string? kind) => Key(kind) switch
+		{
+			"actionrequired" => "Action required",
+			"integrityviolation" => "Integrity violation",
+			_ => kind ?? ""
+		};
+
+		// The values of EOS_EAntiCheatCommonClientAction in the EOS SDK
+		public static string EacAction(int action) => action switch
+		{
+			0 => "Invalid",
+			1 => "Remove player",
+			_ => "Code " + action.ToString(CultureInfo.InvariantCulture)
+		};
+
+		// The values of EOS_EAntiCheatCommonClientActionReason in the EOS SDK
+		public static string EacReason(int reason) => reason switch
+		{
+			0 => "Invalid",
+			1 => "Internal error",
+			2 => "Invalid message",
+			3 => "Authentication failed",
+			4 => "Null client",
+			5 => "Heartbeat timeout",
+			6 => "Client violation",
+			7 => "Backend violation",
+			8 => "Temporary cooldown",
+			9 => "Temporary ban",
+			10 => "Permanent ban",
+			_ => "Code " + reason.ToString(CultureInfo.InvariantCulture)
+		};
+
+		// The values of EOS_EAntiCheatClientViolationType in the EOS SDK
+		public static string EacViolation(int violation) => violation switch
+		{
+			0 => "Invalid",
+			1 => "Integrity catalog not found",
+			2 => "Integrity catalog error",
+			3 => "Integrity catalog certificate revoked",
+			4 => "Integrity catalog misses the main executable",
+			5 => "Game file mismatch",
+			6 => "Required game file not found",
+			7 => "Unknown game file forbidden",
+			8 => "System file untrusted",
+			9 => "Forbidden module loaded",
+			10 => "Corrupted memory",
+			11 => "Forbidden tool detected",
+			12 => "Internal anti-cheat violation",
+			13 => "Corrupted network message flow",
+			14 => "Virtual machine not allowed",
+			15 => "Forbidden system configuration",
+			_ => "Code " + violation.ToString(CultureInfo.InvariantCulture)
+		};
+
 		public static string SlotState(string? state) => Key(state) switch
 		{
 			"open" => "Open",

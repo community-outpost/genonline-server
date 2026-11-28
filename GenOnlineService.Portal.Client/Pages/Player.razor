@@ -457,6 +457,21 @@ else
                     }
                 </BbCardContent>
             </BbCard>
+            @if (m_eac.Count > 0)
+            {
+                <BbCard Class="bb:mt-4" data-testid="player-eac">
+                    <BbCardHeader>
+                        <BbCardTitle As="h2">Waiting Easy Anti-Cheat findings (@m_eac.Count)</BbCardTitle>
+                        <BbCardDescription title="@EacFindingFacts.TrustNote">What game clients reported about this player, decided in the waiting case.</BbCardDescription>
+                    </BbCardHeader>
+                    <BbCardContent Class="bb:space-y-4">
+                        @foreach (PortalCaseSignal signal in m_eac)
+                        {
+                            <EacFindingFacts Signal="@signal" />
+                        }
+                    </BbCardContent>
+                </BbCard>
+            }
         </BbTabsContent>
 
         <BbTabsContent Value="roles" Class="bb:mt-4">
@@ -1109,6 +1124,7 @@ else
         m_connectionsError = null;
         m_cases = null;
         m_casesError = null;
+        m_eac = [];
         await LoadAsync();
 
         // the host audits this read, so it runs once per opened page and not after each action
@@ -1239,6 +1255,7 @@ else
     // the Cases tab loads on first open; the host audits that read
     private List<PortalCaseSummary>? m_cases;
     private string? m_casesError;
+    private List<PortalCaseSignal> m_eac = [];
 
     private async Task LoadCasesAsync()
     {
@@ -1249,6 +1266,7 @@ else
         PortalAnswer<PortalCase> answer = await Api.GetWaitingCaseAsync(Id);
         m_casesError = answer.Ok ? null : answer.Error;
         m_cases = (answer.Value?.Standing.PriorCases ?? []).ToList();
+        m_eac = (answer.Value?.Signals ?? []).Where(signal => signal.Kind == "eac").ToList();
     }
 
     private bool NeedsReason => ReasonRequired && String.IsNullOrWhiteSpace(m_reason);

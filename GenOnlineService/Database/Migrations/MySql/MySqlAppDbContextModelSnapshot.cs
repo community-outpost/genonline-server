@@ -22,6 +22,116 @@ namespace GenOnlineService.Migrations.MySql
             MySqlModelBuilderExtensions.HasCharSet(modelBuilder, "utf8mb4");
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
 
+            modelBuilder.Entity("AnticheatEacFinding", b =>
+                {
+                    b.Property<long>("ReportId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("report_id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("ReportId"));
+
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("varchar(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<long>("LobbyId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("lobby_id");
+
+                    b.Property<long>("MatchId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("match_id");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<long?>("ReviewedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<bool>("SelfReported")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("self_reported");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("ReportId");
+
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_anticheat_eac_findings_case");
+
+                    b.HasIndex("ReviewedAt")
+                        .HasDatabaseName("ix_anticheat_eac_findings_reviewed_at");
+
+                    b.HasIndex("UserId", "MatchId", "LobbyId", "Kind", "SelfReported")
+                        .IsUnique()
+                        .HasDatabaseName("ux_anticheat_eac_findings_target");
+
+                    b.ToTable("anticheat_eac_findings", (string)null);
+                });
+
+            modelBuilder.Entity("AnticheatEacWitness", b =>
+                {
+                    b.Property<long>("WitnessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("witness_id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("WitnessId"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("int")
+                        .HasColumnName("action");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("varchar(512)")
+                        .HasColumnName("details");
+
+                    b.Property<long>("FindingId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("finding_id");
+
+                    b.Property<int>("ReasonCode")
+                        .HasColumnType("int")
+                        .HasColumnName("reason_code");
+
+                    b.Property<long>("ReporterId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reporter_id");
+
+                    b.Property<int>("ViolationType")
+                        .HasColumnType("int")
+                        .HasColumnName("violation_type");
+
+                    b.HasKey("WitnessId");
+
+                    b.HasIndex("FindingId", "ReporterId", "Action", "ReasonCode", "ViolationType")
+                        .IsUnique()
+                        .HasDatabaseName("ux_anticheat_eac_witnesses_reporter_codes");
+
+                    b.ToTable("anticheat_eac_witnesses", (string)null);
+                });
+
             modelBuilder.Entity("AnticheatIllegalRequest", b =>
                 {
                     b.Property<long>("ReportId")

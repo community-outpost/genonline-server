@@ -197,8 +197,9 @@ namespace Database
 			IQueryable<long> modules = db.AnticheatModuleReports.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.UserId);
 			IQueryable<long> probes = db.AnticheatProbeReports.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.UserId);
 			IQueryable<long> ruleMatches = db.AutomatedRuleMatches.AsNoTracking().Where(m => m.ReviewState == GenOnlineService.Rules.RuleReviewStates.Pending).Select(m => m.UserID);
+			IQueryable<long> eac = db.AnticheatEacFindings.AsNoTracking().Where(r => r.ReviewedAt == null).Select(r => r.UserId);
 			var found = new HashSet<long>();
-			foreach (IQueryable<long> source in new[] { modules, probes, ruleMatches })
+			foreach (IQueryable<long> source in new[] { modules, probes, ruleMatches, eac })
 			{
 				found.UnionWith(await (ids == null ? source : source.Where(id => ids.Contains(id))).Distinct().ToListAsync(cancellationToken));
 			}

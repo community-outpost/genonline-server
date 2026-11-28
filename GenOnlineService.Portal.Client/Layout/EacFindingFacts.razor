@@ -1,0 +1,49 @@
+@* The Easy Anti-Cheat finding of a case signal with every witness, the readable code names beside the raw codes *@
+
+<div class="bb:space-y-2" data-testid="eac-finding">
+    <div class="bb:text-sm">
+        @PortalWords.EacKind(Signal.EacKind)
+        <BbBadge Variant="BadgeVariant.Outline" title="@TrustNote">@WitnessText</BbBadge>
+    </div>
+    <ul class="bb:space-y-2" aria-label="Witnesses">
+        @foreach (PortalCaseEacWitness witness in Signal.Witnesses ?? [])
+        {
+            <li>
+                <dl class="go-case-facts">
+                    <dt>Reported by</dt>
+                    <dd><BbLink Href="@PortalRoutes.PlayerPage(witness.Reporter.Id)">@witness.Reporter.FullName</BbLink> <When Value="@witness.At" /></dd>
+                    @if (Signal.EacKind == "integrity_violation")
+                    {
+                        <dt>Violation</dt><dd>@PortalWords.EacViolation(witness.ViolationType) <span class="go-muted">(@witness.ViolationType)</span></dd>
+                    }
+                    else
+                    {
+                        <dt>Action</dt><dd>@PortalWords.EacAction(witness.Action) <span class="go-muted">(@witness.Action)</span></dd>
+                        <dt>Reason</dt><dd>@PortalWords.EacReason(witness.ReasonCode) <span class="go-muted">(@witness.ReasonCode)</span></dd>
+                    }
+                    <dt>EAC text</dt><dd style="white-space: pre-wrap; overflow-wrap: anywhere">@(String.IsNullOrEmpty(witness.Details) ? "—" : witness.Details)</dd>
+                </dl>
+            </li>
+        }
+    </ul>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public PortalCaseSignal Signal { get; set; } = new PortalCaseSignal();
+
+    public const string TrustNote = "Game clients send these reports and Epic does not sign them. A report about another player counts by its distinct witnesses, and a self reported finding is a signal only.";
+
+    private string WitnessText
+    {
+        get
+        {
+            if (Signal.SelfReported == true)
+            {
+                return "Self reported";
+            }
+            int witnesses = (Signal.Witnesses ?? []).Select(w => w.Reporter.Id).Distinct().Count();
+            return witnesses == 1 ? "1 witness" : PortalText.Count(witnesses) + " witnesses";
+        }
+    }
+}

@@ -135,6 +135,13 @@ namespace GenOnlineService.Rest
 		public string? State { get; init; }
 
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? EacKind { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public bool? SelfReported { get; init; }
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public IReadOnlyList<CaseEacWitness>? Witnesses { get; init; }
+
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public long? RuleId { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public string? RuleName { get; init; }
@@ -148,6 +155,16 @@ namespace GenOnlineService.Rest
 		public string? Actions { get; init; }
 		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
 		public JsonElement? Facts { get; init; }
+	}
+
+	public sealed record CaseEacWitness
+	{
+		public Member Reporter { get; init; } = new Member();
+		public DateTime At { get; init; }
+		public int Action { get; init; }
+		public int ReasonCode { get; init; }
+		public int ViolationType { get; init; }
+		public string Details { get; init; } = "";
 	}
 
 	public sealed record CaseSanction
@@ -220,6 +237,7 @@ namespace GenOnlineService.Rest
 			[AntiCheatReviewKinds.Probes] = 40,
 			[AntiCheatReviewKinds.Devices] = 30,
 			[AntiCheatReviewKinds.IllegalRequests] = 30,
+			[AntiCheatReviewKinds.Eac] = 40,
 			[CaseSignalKinds.RuleMatch] = 20,
 			[CaseSignalKinds.Report] = 10
 		};
@@ -288,6 +306,11 @@ namespace GenOnlineService.Rest
 			HashSet<long> people = [userID];
 			people.UnionWith(rows.Where(r => r.Report != null).Select(r => r.Report!.ReporterID));
 			people.UnionWith(evidence.Values.SelectMany(e => e.SenderIDs));
+			long[] eacIDs = rows.Where(r => r.Kind == AntiCheatReviewKinds.Eac).Select(r => r.ID).ToArray();
+			Dictionary<long, List<AnticheatEacWitness>> witnesses = eacIDs.Length == 0 ? [] : (await db.AnticheatEacWitnesses.AsNoTracking()
+				.Where(w => eacIDs.Contains(w.FindingId)).OrderBy(w => w.WitnessId).ToListAsync(cancellationToken))
+				.GroupBy(w => w.FindingId).ToDictionary(g => g.Key, g => g.ToList());
+			people.UnionWith(witnesses.Values.SelectMany(list => list).Select(w => w.ReporterId));
 			people.UnionWith(history.Append(shown).Where(c => c != null).SelectMany(c => new[] { c!.ClaimedByID ?? 0, c.ClosedByID ?? 0 }).Where(id => id > 0));
 			Dictionary<long, (string Name, int Tag)> names = await Database.DisplayNames.GetBulk(db, people);
 
@@ -310,7 +333,7 @@ namespace GenOnlineService.Rest
 				Player = RealtimeMembers.Of(userID, names),
 				Standing = await StandingAsync(db, userID, history, names, cancellationToken),
 				Case = shown == null ? null : SummaryOf(shown, names),
-				Signals = rows.Select(r => SignalOf(r, evidence, names, ruleNames)).ToArray(),
+				Signals = rows.Select(r => SignalOf(r, evidence, names, ruleNames, witnesses)).ToArray(),
 				Matches = matches
 			};
 		}
@@ -347,7 +370,8 @@ namespace GenOnlineService.Rest
 			SanctionId = c.SanctionID
 		};
 
-		private static CaseSignal SignalOf(Database.CaseSignalRow row, Dictionary<long, Database.Chat.ReportEvidence> evidence, IReadOnlyDictionary<long, (string Name, int Tag)> names, IReadOnlyDictionary<long, string> ruleNames)
+		private static CaseSignal SignalOf(Database.CaseSignalRow row, Dictionary<long, Database.Chat.ReportEvidence> evidence, IReadOnlyDictionary<long, (string Name, int Tag)> names, IReadOnlyDictionary<long, string> ruleNames,
+			IReadOnlyDictionary<long, List<AnticheatEacWitness>> witnesses)
 		{
 			CaseSignal signal = new CaseSignal { Kind = row.Kind, Id = row.ID, At = row.At, MatchId = row.MatchID, LobbyId = row.LobbyID };
 			if (row.Report is PlayerReport report)
@@ -399,7 +423,13 @@ namespace GenOnlineService.Rest
 				ModuleSize = row.ModuleSize,
 				Request = row.Request,
 				Detail = row.Detail,
-				State = row.State
+				State = row.State,
+				EacKind = row.EacKind,
+				SelfReported = row.SelfReported,
+				Witnesses = row.Kind == AntiCheatReviewKinds.Eac ? witnesses.GetValueOrDefault(row.ID, []).Select(w => new CaseEacWitness
+				{
+					Reporter = RealtimeMembers.Of(w.ReporterId, names), At = w.CreatedAt, Action = w.Action, ReasonCode = w.ReasonCode, ViolationType = w.ViolationType, Details = w.Details
+				}).ToArray() : null
 			};
 		}
 

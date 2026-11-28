@@ -146,6 +146,8 @@ public abstract partial class AppDbContext : DbContext
 	public DbSet<AnticheatModuleReport> AnticheatModuleReports => Set<AnticheatModuleReport>();
 	public DbSet<AnticheatProbeReport> AnticheatProbeReports => Set<AnticheatProbeReport>();
 	public DbSet<AnticheatIllegalRequest> AnticheatIllegalRequests => Set<AnticheatIllegalRequest>();
+	public DbSet<AnticheatEacFinding> AnticheatEacFindings => Set<AnticheatEacFinding>();
+	public DbSet<AnticheatEacWitness> AnticheatEacWitnesses => Set<AnticheatEacWitness>();
 
 	public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
 	public DbSet<ServiceAccountPermission> ServiceAccountPermissions => Set<ServiceAccountPermission>();
@@ -289,6 +291,8 @@ public abstract partial class AppDbContext : DbContext
 		modelBuilder.ApplyConfiguration(new AnticheatModuleReportConfiguration());
 		modelBuilder.ApplyConfiguration(new AnticheatProbeReportConfiguration());
 		modelBuilder.ApplyConfiguration(new AnticheatIllegalRequestConfiguration());
+		modelBuilder.ApplyConfiguration(new AnticheatEacFindingConfiguration());
+		modelBuilder.ApplyConfiguration(new AnticheatEacWitnessConfiguration());
 		modelBuilder.ApplyConfiguration(new ServiceAccountConfiguration());
 		modelBuilder.ApplyConfiguration(new ServiceAccountPermissionConfiguration());
 		modelBuilder.ApplyConfiguration(new ApiTokenConfiguration());

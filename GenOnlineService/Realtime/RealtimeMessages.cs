@@ -381,6 +381,18 @@ namespace GenOnlineService.Realtime
 		public int? StartPosition { get; init; }
 	}
 
+	public sealed record ReportAnticheatEventRequest
+	{
+		public string? Kind { get; init; }
+		public long? TargetUserId { get; init; }
+		public long? LobbyId { get; init; }
+		public string? MatchId { get; init; }
+		public int? Action { get; init; }
+		public int? ReasonCode { get; init; }
+		public int? ViolationType { get; init; }
+		public string? Details { get; init; }
+	}
+
 	public sealed record SetPresenceStatusRequest
 	{
 		public string? Status { get; init; }

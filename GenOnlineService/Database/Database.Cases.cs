@@ -111,6 +111,8 @@ namespace Database
 		public string? Request { get; init; }
 		public string? Detail { get; init; }
 		public string? State { get; init; }
+		public string? EacKind { get; init; }
+		public bool? SelfReported { get; init; }
 
 		public PlayerReport? Report { get; init; }
 
@@ -206,7 +208,8 @@ namespace Database
 				signals.AddRange((await rows.ToListAsync(cancellationToken)).Select(r => new CaseSignalRow
 				{
 					Kind = kind, ID = r.ReportID, UserID = r.UserID, MatchID = r.MatchID > 0 ? r.MatchID : null, LobbyID = r.LobbyID, At = r.ReportedAt,
-					ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, Reason = r.Reason, Request = r.Request, Detail = r.Detail, State = r.State
+					ModuleName = r.ModuleName, ModulePath = r.ModulePath, ModuleSize = r.ModuleSize, Reason = r.Reason, Request = r.Request, Detail = r.Detail, State = r.State,
+					EacKind = r.EacKind, SelfReported = r.SelfReported
 				}));
 			}
 			if (kinds.Contains(CaseSignalKinds.RuleMatch))

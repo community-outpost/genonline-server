@@ -195,6 +195,50 @@ public class AnticheatIllegalRequest
 	public Int64? CaseID { get; set; }
 }
 
+// One Easy Anti-Cheat decision about a player in one match or lobby as game clients reported it
+public class AnticheatEacFinding
+{
+	public Int64 ReportId { get; set; }
+
+	// the player the decision names
+	public Int64 UserId { get; set; }
+
+	// 0 when the report named no match or no lobby
+	public Int64 MatchId { get; set; }
+	public Int64 LobbyId { get; set; }
+
+	// action_required or integrity_violation
+	public string Kind { get; set; } = null!;
+
+	// true when the player reported the decision about themselves
+	public bool SelfReported { get; set; }
+	public DateTime CreatedAt { get; set; }
+	public DateTime? ReviewedAt { get; set; }
+	public Int64? ReviewedBy { get; set; }
+	public Int64? CaseID { get; set; }
+}
+
+// One reporter of a finding with the EAC codes and text that reporter saw
+public class AnticheatEacWitness
+{
+	public Int64 WitnessId { get; set; }
+	public Int64 FindingId { get; set; }
+	public Int64 ReporterId { get; set; }
+
+	// EOS_EAntiCheatCommonClientAction, 0 for an integrity violation
+	public int Action { get; set; }
+
+	// EOS_EAntiCheatCommonClientActionReason, 0 for an integrity violation
+	public int ReasonCode { get; set; }
+
+	// EOS_EAntiCheatClientViolationType, 0 for an action
+	public int ViolationType { get; set; }
+
+	// the EAC text, never shown to other players
+	public string Details { get; set; } = null!;
+	public DateTime CreatedAt { get; set; }
+}
+
 public static class AntiCheatReviewKinds
 {
 	public const string Modules = "modules";
@@ -205,7 +249,9 @@ public static class AntiCheatReviewKinds
 
 	public const string IllegalRequests = "illegal_requests";
 
-	public static readonly IReadOnlyList<string> All = [Modules, Probes, Devices, IllegalRequests];
+	public const string Eac = "eac";
+
+	public static readonly IReadOnlyList<string> All = [Modules, Probes, Devices, IllegalRequests, Eac];
 
 	public static bool IsKnown(string? kind) => kind != null && All.Contains(kind);
 }
@@ -337,6 +383,58 @@ public class AnticheatIllegalRequestConfiguration : IEntityTypeConfiguration<Ant
 	}
 }
 
+public class AnticheatEacFindingConfiguration : IEntityTypeConfiguration<AnticheatEacFinding>
+{
+	public const int KindMaxLength = 32;
+
+	public void Configure(EntityTypeBuilder<AnticheatEacFinding> entity)
+	{
+		entity.ToTable("anticheat_eac_findings");
+		entity.HasKey(e => e.ReportId);
+		entity.Property(e => e.ReportId).HasColumnName("report_id").ValueGeneratedOnAdd();
+		entity.Property(e => e.UserId).HasColumnName("user_id");
+		entity.Property(e => e.MatchId).HasColumnName("match_id");
+		entity.Property(e => e.LobbyId).HasColumnName("lobby_id");
+		entity.Property(e => e.Kind).HasColumnName("kind").HasMaxLength(KindMaxLength).IsRequired();
+		entity.Property(e => e.SelfReported).HasColumnName("self_reported");
+		entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+		entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
+		entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
+		entity.Property(e => e.CaseID).HasColumnName("case_id");
+		entity.HasIndex(e => e.ReviewedAt).HasDatabaseName("ix_anticheat_eac_findings_reviewed_at");
+		entity.HasIndex(e => e.CaseID).HasDatabaseName("ix_anticheat_eac_findings_case");
+
+		// reports about one player in one match from every witness meet in one finding
+		entity.HasIndex(e => new { e.UserId, e.MatchId, e.LobbyId, e.Kind, e.SelfReported })
+			.IsUnique()
+			.HasDatabaseName("ux_anticheat_eac_findings_target");
+	}
+}
+
+public class AnticheatEacWitnessConfiguration : IEntityTypeConfiguration<AnticheatEacWitness>
+{
+	public const int DetailsMaxBytes = 512;
+
+	public void Configure(EntityTypeBuilder<AnticheatEacWitness> entity)
+	{
+		entity.ToTable("anticheat_eac_witnesses");
+		entity.HasKey(e => e.WitnessId);
+		entity.Property(e => e.WitnessId).HasColumnName("witness_id").ValueGeneratedOnAdd();
+		entity.Property(e => e.FindingId).HasColumnName("finding_id");
+		entity.Property(e => e.ReporterId).HasColumnName("reporter_id");
+		entity.Property(e => e.Action).HasColumnName("action");
+		entity.Property(e => e.ReasonCode).HasColumnName("reason_code");
+		entity.Property(e => e.ViolationType).HasColumnName("violation_type");
+		entity.Property(e => e.Details).HasColumnName("details").HasMaxLength(DetailsMaxBytes).IsRequired();
+		entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+
+		// shortcut: a repeat with the same codes and another text keeps the first text, key on a text hash if staff need every text
+		entity.HasIndex(e => new { e.FindingId, e.ReporterId, e.Action, e.ReasonCode, e.ViolationType })
+			.IsUnique()
+			.HasDatabaseName("ux_anticheat_eac_witnesses_reporter_codes");
+	}
+}
+
 	
 
 namespace Database
@@ -356,6 +454,9 @@ namespace Database
 		public string? Detail { get; init; }
 		public string? State { get; init; }
 
+		public string? EacKind { get; init; }
+		public bool? SelfReported { get; init; }
+
 		// null for a row stored before the other kinds kept the time
 		public DateTime? ReportedAt { get; init; }
 
@@ -363,6 +464,8 @@ namespace Database
 		public Int64? ReviewedBy { get; init; }
 		public Int64? CaseID { get; init; }
 	}
+
+	public sealed record EacEventReport(Int64 ReporterId, Int64 TargetUserId, Int64 MatchId, Int64 LobbyId, string Kind, int Action, int ReasonCode, int ViolationType, string Details, DateTime At);
 
 	public static class AntiCheatReviews
 	{
@@ -377,6 +480,11 @@ namespace Database
 				AntiCheatReviewKinds.IllegalRequests => db.AnticheatIllegalRequests.AsNoTracking().Select(r => new AntiCheatReviewRow
 				{
 					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, LobbyID = r.LobbyId, Request = r.Request, Detail = r.Detail, State = r.State,
+					ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
+				}),
+				AntiCheatReviewKinds.Eac => db.AnticheatEacFindings.AsNoTracking().Select(r => new AntiCheatReviewRow
+				{
+					ReportID = r.ReportId, UserID = r.UserId, MatchID = r.MatchId, LobbyID = r.LobbyId > 0 ? r.LobbyId : null, EacKind = r.Kind, SelfReported = r.SelfReported,
 					ReportedAt = r.CreatedAt, ReviewedAt = r.ReviewedAt, ReviewedBy = r.ReviewedBy, CaseID = r.CaseID
 				}),
 				_ => Probes(db, kind).AsNoTracking().Select(r => new AntiCheatReviewRow
@@ -402,6 +510,9 @@ namespace Database
 					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
 					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
 				AntiCheatReviewKinds.IllegalRequests => await db.AnticheatIllegalRequests
+					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
+					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
+				AntiCheatReviewKinds.Eac => await db.AnticheatEacFindings
 					.Where(r => ids.Contains(r.ReportId) && r.UserId == userID && r.ReviewedAt == null)
 					.ExecuteUpdateAsync(s => s.SetProperty(r => r.ReviewedAt, now).SetProperty(r => r.ReviewedBy, reviewerID).SetProperty(r => r.CaseID, caseID), cancellationToken),
 				AntiCheatReviewKinds.Probes or AntiCheatReviewKinds.Devices => await Probes(db, kind)
@@ -560,6 +671,62 @@ namespace Database
 
 				AppMetrics.RecordSecurityAction("anticheat_illegal_request_review", "error");
 				s_log.LogError(ex, "FlagAccountForReview_IllegalRequest failed");
+				return false;
+			}
+		}
+
+		// Epic does not sign these client reports, so a finding about another player is corroborated by its distinct witnesses and a self reported one is a signal only
+		public static async Task<bool> RecordEacEvent(AppDbContext db, EacEventReport report)
+		{
+			bool self = report.TargetUserId == report.ReporterId;
+			Task<AnticheatEacFinding?> Find() => db.AnticheatEacFindings.AsNoTracking().FirstOrDefaultAsync(f => f.UserId == report.TargetUserId && f.MatchId == report.MatchId
+				&& f.LobbyId == report.LobbyId && f.Kind == report.Kind && f.SelfReported == self);
+			try
+			{
+				DateTime now = TruncateToMicroseconds(report.At);
+				AnticheatEacFinding? finding = await Find();
+				bool created = false;
+				if (finding == null)
+				{
+					finding = new AnticheatEacFinding { UserId = report.TargetUserId, MatchId = report.MatchId, LobbyId = report.LobbyId, Kind = report.Kind, SelfReported = self, CreatedAt = now };
+					db.AnticheatEacFindings.Add(finding);
+					try
+					{
+						await db.SaveChangesAsync();
+						created = true;
+					}
+					catch (Exception ex) when (DbHelpers.IsUniqueViolation(ex))
+					{
+						// another witness stored the finding first
+						db.ChangeTracker.Clear();
+						finding = await Find() ?? throw new InvalidOperationException("EAC finding vanished", ex);
+					}
+				}
+
+				db.AnticheatEacWitnesses.Add(new AnticheatEacWitness
+				{
+					FindingId = finding.ReportId, ReporterId = report.ReporterId, Action = report.Action, ReasonCode = report.ReasonCode, ViolationType = report.ViolationType,
+					Details = report.Details, CreatedAt = now
+				});
+				try
+				{
+					await db.SaveChangesAsync();
+				}
+				catch (Exception ex) when (DbHelpers.IsUniqueViolation(ex))
+				{
+				}
+
+				AppMetrics.RecordSecurityAction("anticheat_eac_review", "success");
+				if (created)
+				{
+					RaiseReport(report.TargetUserId, report.MatchId, AntiCheatReviewKinds.Eac);
+				}
+				return true;
+			}
+			catch (Exception ex)
+			{
+				AppMetrics.RecordSecurityAction("anticheat_eac_review", "error");
+				s_log.LogError(ex, "RecordEacEvent failed");
 				return false;
 			}
 		}

@@ -206,6 +206,9 @@ else
                                     <dt>State</dt><dd>@PortalWords.RequestState(signal.State)</dd>
                                 </dl>
                                 break;
+                            case "eac":
+                                <EacFindingFacts Signal="@signal" />
+                                break;
                             case PortalCaseKinds.RuleMatch:
                                 <div class="bb:space-y-2">
                                     <div class="bb:text-sm">

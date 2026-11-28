@@ -21,6 +21,116 @@ namespace GenOnlineService.Migrations.Postgres
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("AnticheatEacFinding", b =>
+                {
+                    b.Property<long>("ReportId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("report_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ReportId"));
+
+                    b.Property<long?>("CaseID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("case_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<long>("LobbyId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("lobby_id");
+
+                    b.Property<long>("MatchId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("match_id");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<long?>("ReviewedBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<bool>("SelfReported")
+                        .HasColumnType("boolean")
+                        .HasColumnName("self_reported");
+
+                    b.Property<long>("UserId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("ReportId");
+
+                    b.HasIndex("CaseID")
+                        .HasDatabaseName("ix_anticheat_eac_findings_case");
+
+                    b.HasIndex("ReviewedAt")
+                        .HasDatabaseName("ix_anticheat_eac_findings_reviewed_at");
+
+                    b.HasIndex("UserId", "MatchId", "LobbyId", "Kind", "SelfReported")
+                        .IsUnique()
+                        .HasDatabaseName("ux_anticheat_eac_findings_target");
+
+                    b.ToTable("anticheat_eac_findings", (string)null);
+                });
+
+            modelBuilder.Entity("AnticheatEacWitness", b =>
+                {
+                    b.Property<long>("WitnessId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("witness_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("WitnessId"));
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer")
+                        .HasColumnName("action");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("details");
+
+                    b.Property<long>("FindingId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("finding_id");
+
+                    b.Property<int>("ReasonCode")
+                        .HasColumnType("integer")
+                        .HasColumnName("reason_code");
+
+                    b.Property<long>("ReporterId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("reporter_id");
+
+                    b.Property<int>("ViolationType")
+                        .HasColumnType("integer")
+                        .HasColumnName("violation_type");
+
+                    b.HasKey("WitnessId");
+
+                    b.HasIndex("FindingId", "ReporterId", "Action", "ReasonCode", "ViolationType")
+                        .IsUnique()
+                        .HasDatabaseName("ux_anticheat_eac_witnesses_reporter_codes");
+
+                    b.ToTable("anticheat_eac_witnesses", (string)null);
+                });
+
             modelBuilder.Entity("AnticheatIllegalRequest", b =>
                 {
                     b.Property<long>("ReportId")
