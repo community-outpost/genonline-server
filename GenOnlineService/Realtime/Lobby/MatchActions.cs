@@ -29,6 +29,14 @@ namespace GenOnlineService.Realtime
 		private static readonly TimeSpan s_answerLifetime = TimeSpan.FromHours(1);
 		private static readonly ConcurrentDictionary<(long MatchID, long UserID), (string Body, MatchResultResponse Answer, DateTime At)> s_answers = new();
 
+		// A client asks again shortly before its URLs expire, so a kept answer must outlast this margin to be reused
+		private static readonly TimeSpan s_reuseMargin = TimeSpan.FromMinutes(2);
+
+		internal static bool KeptAnswerUsable(MatchResultResponse answer, DateTime at, DateTime now)
+		{
+			return now - at < s_answerLifetime && (answer.ExpiresAt == null || answer.ExpiresAt > now + s_reuseMargin);
+		}
+
 		// A result is accepted until this long after the match finished, or after it started while it has no end
 		public static readonly TimeSpan ResultWindow = TimeSpan.FromHours(24);
 
@@ -42,9 +50,7 @@ namespace GenOnlineService.Realtime
 			UInt64 matchID = (UInt64)matchIDValue;
 			string body = JsonSerializer.Serialize(request, ApiResults.Json);
 			(long, long) key = (matchIDValue, me);
-			// A kept answer is only reused while its upload URLs still work
-			if (s_answers.TryGetValue(key, out var kept) && kept.Body == body && DateTime.UtcNow - kept.At < s_answerLifetime
-				&& (kept.Answer.ExpiresAt == null || kept.Answer.ExpiresAt > DateTime.UtcNow))
+			if (s_answers.TryGetValue(key, out var kept) && kept.Body == body && KeptAnswerUsable(kept.Answer, kept.At, DateTime.UtcNow))
 			{
 				return Result.Success(kept.Answer);
 			}
@@ -82,7 +88,7 @@ namespace GenOnlineService.Realtime
 			DateTime? urlExpiry = S3CredentialManager.UrlExpiry();
 			MatchResultResponse answer = await BuildAnswerAsync(
 				(fileType, screenshotType) => S3CredentialManager.GetUploadTarget(fileType, screenshotType, matchID, me, slotIndexInLobby, lobbyCreationTime),
-				GenOnlineService.Flags.FlagCatalog.Get(StatsUploadFlag, true),
+				WantsStatsURL(GenOnlineService.Flags.FlagCatalog.Get(StatsUploadFlag, true), request),
 				GenOnlineService.Flags.FlagCatalog.Get(ReplayUploadFlag, true),
 				urlExpiry);
 
@@ -111,6 +117,8 @@ namespace GenOnlineService.Realtime
 
 		public const string StatsUploadFlag = "client.telemetry.stats_upload";
 		public const string ReplayUploadFlag = "client.telemetry.replay_upload";
+
+		internal static bool WantsStatsURL(bool statsUploadEnabled, MatchResultRequest request) => statsUploadEnabled && request.StatsFile != false;
 
 		internal static async Task<MatchResultResponse> BuildAnswerAsync(Func<EMetadataFileType, EScreenshotType, Task<GenOnlineService.Service.UploadTarget?>> presign, bool statsUploadEnabled, bool replayUploadEnabled, DateTime? expiresAt = null)
 		{

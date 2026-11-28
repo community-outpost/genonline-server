@@ -1117,7 +1117,14 @@ namespace Database
 			}
 		}
 
-		public static async Task<List<(long MatchId, int Slot, MemberMetadataModel File)>> ListIssuedFiles(AppDbContext db, DateTime startedAfter, CancellationToken cancellationToken = default)
+		// A failure report can come from an upload that reached the storage anyway, so failed files are checked like waiting ones
+		internal static IEnumerable<MemberMetadataModel> FilesToCheck(MatchPlayerDetails details)
+		{
+			return (details.metadata ?? new List<MemberMetadataModel>()).Where(file => file.file_key != null
+				&& (file.file_status == EMetadataFileStatus.FILE_STATUS_ISSUED || file.file_status == EMetadataFileStatus.FILE_STATUS_FAILED));
+		}
+
+		public static async Task<List<(long MatchId, int Slot, MemberMetadataModel File)>> ListFilesToCheck(AppDbContext db, DateTime startedAfter, CancellationToken cancellationToken = default)
 		{
 			var found = new List<(long, int, MemberMetadataModel)>();
 			var players = await db.MatchPlayers.AsNoTracking()
@@ -1127,10 +1134,9 @@ namespace Database
 				.ToListAsync(cancellationToken);
 			foreach (var player in players)
 			{
-				foreach (MemberMetadataModel file in ReadDetails(player.Details).metadata ?? new List<MemberMetadataModel>())
+				foreach (MemberMetadataModel file in FilesToCheck(ReadDetails(player.Details)))
 				{
-					if (file.file_status == EMetadataFileStatus.FILE_STATUS_ISSUED && file.file_key != null)
-						found.Add((player.MatchId, player.Slot, file));
+					found.Add((player.MatchId, player.Slot, file));
 				}
 			}
 			return found;

@@ -138,7 +138,7 @@ namespace GenOnlineService.Service
 		// After the URL expired nothing more can arrive, so the storage decides
 		internal static MemberMetadataModel ApplyExpiry(MemberMetadataModel file, StoredObjectInfo? head, long maxBytes, DateTime now)
 		{
-			if (file.file_status != EMetadataFileStatus.FILE_STATUS_ISSUED)
+			if (!NeedsExpiryCheck(file.file_status))
 			{
 				return file;
 			}
@@ -148,9 +148,18 @@ namespace GenOnlineService.Service
 				return Uploaded(file, head!, now);
 			}
 
+			// A reported failure keeps its reason when the storage has nothing either
+			if (file.file_status == EMetadataFileStatus.FILE_STATUS_FAILED)
+			{
+				return file;
+			}
+
 			file.file_status = EMetadataFileStatus.FILE_STATUS_MISSING;
 			return file;
 		}
+
+		// A failure report can come from an upload that reached the storage anyway, so it is checked like a file still waiting
+		internal static bool NeedsExpiryCheck(EMetadataFileStatus? status) => status == EMetadataFileStatus.FILE_STATUS_ISSUED || status == EMetadataFileStatus.FILE_STATUS_FAILED;
 
 		internal static MatchFileStatus StatusOf(EMetadataFileStatus? status) => status switch
 		{
@@ -227,7 +236,7 @@ namespace GenOnlineService.Service
 				{
 					await using AppDbContext db = await dbFactory.CreateDbContextAsync();
 					MemberMetadataModel? file = await Database.MatchHistory.GetFile(db, item.Key.MatchID, item.Key.Slot, item.Key.Key);
-					if (file != null && file.Value.file_status == EMetadataFileStatus.FILE_STATUS_ISSUED)
+					if (file != null && NeedsExpiryCheck(file.Value.file_status))
 					{
 						StoredObjectInfo? head = await store.HeadAsync(item.Key.Key);
 						await Database.MatchHistory.SetFile(db, item.Key.MatchID, item.Key.Slot, ApplyExpiry(file.Value, head, MaxBytes(), now));
@@ -250,11 +259,11 @@ namespace GenOnlineService.Service
 			return settled;
 		}
 
-		// After a restart the files issued in the last day that are still waiting are checked again
+		// After a restart the files of the last day that are still waiting or reported failed are checked again
 		public static async Task RecoverAsync(IDbContextFactory<AppDbContext> dbFactory, DateTime now)
 		{
 			await using AppDbContext db = await dbFactory.CreateDbContextAsync();
-			foreach ((long matchID, int slot, MemberMetadataModel file) in await Database.MatchHistory.ListIssuedFiles(db, now - TimeSpan.FromDays(1)))
+			foreach ((long matchID, int slot, MemberMetadataModel file) in await Database.MatchHistory.ListFilesToCheck(db, now - TimeSpan.FromDays(1)))
 			{
 				if (file.file_key != null)
 				{

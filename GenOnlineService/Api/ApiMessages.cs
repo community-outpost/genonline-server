@@ -212,6 +212,10 @@ namespace GenOnlineService.Api
 		public int Side { get; init; }
 		public int DurationS { get; init; }
 		public MatchStats? Stats { get; init; }
+
+		// Absent means true, so clients that never send it still get a stats URL
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public bool? StatsFile { get; init; }
 	}
 
 	[ApiFixture("put-matches-results-me.response")]
