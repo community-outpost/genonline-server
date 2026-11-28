@@ -201,7 +201,8 @@ namespace GenOnlineService.Realtime
 				ChatFilterRevision = TextRules.TextChecks.Current.ChatFilter.Revision,
 				Badges = RealtimeBadges.Definitions(StaffRoles.Catalog),
 				Channels = RoomCatalog.Channels(),
-				Limits = BuildLimits()
+				Limits = BuildLimits(),
+				PingBeacons = GenOnlineService.PingBeacons.Current
 			};
 		}
 

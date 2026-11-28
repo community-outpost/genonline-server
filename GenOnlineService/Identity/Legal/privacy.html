@@ -44,6 +44,9 @@ volume serial number. We store them with the last IP address they were seen from
 last seen, or for as long as a ban it belongs to.</li>
 <li>Your continent and approximate coordinates, also worked out from your IP address, are used by lobbies and matchmaking. They
 are kept in memory while you are online and are not stored in the database.</li>
+<li>The game measures the round trip time from your computer to a list of public ping beacons and sends us the times. We keep
+them in memory only while you are signed in, to estimate your ping to lobbies, and never store them. Other players never see
+them, only the estimated ping.</li>
 </ul>
 <p>We use this data to keep the service secure, to enforce bans and to find accounts used to evade them. Staff can see it when
 they investigate a player, and every such view is recorded.</p>

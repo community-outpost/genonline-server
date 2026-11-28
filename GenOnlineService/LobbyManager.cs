@@ -1221,7 +1221,6 @@ namespace GenOnlineService
 		private bool HasInvite(Int64 userID) => Invites.TryGetValue(userID, out var invite) && invite.Expires > DateTime.UtcNow;
 
 		public string Region { get; private set; } = "";
-		public int EstimatedLatency { get; private set; } = 999999;
 
 		public UInt16 MaximumCameraHeight { get; private set; } = GenOnlineService.Constants.g_DefaultCameraMaxHeight;
 

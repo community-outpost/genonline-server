@@ -769,6 +769,28 @@ namespace GenOnlineService
 			}
 		}
 
+		// The last accepted ping beacon report, never stored or handed over, so another copy estimates from GeoIP until the next report
+		internal volatile IReadOnlyDictionary<string, int>? RegionRtts;
+		private long m_regionReportAtMs = long.MinValue;
+
+		internal bool TryTakeRegionReport(long nowMs, long intervalMs, out long retryAfterMs)
+		{
+			while (true)
+			{
+				long last = Interlocked.Read(ref m_regionReportAtMs);
+				if (last != long.MinValue && nowMs - last < intervalMs)
+				{
+					retryAfterMs = last + intervalMs - nowMs;
+					return false;
+				}
+				if (Interlocked.CompareExchange(ref m_regionReportAtMs, nowMs, last) == last)
+				{
+					retryAfterMs = 0;
+					return true;
+				}
+			}
+		}
+
 		private int m_signallingResendPending;
 
 		internal void ResetPeerTransports(object connection)

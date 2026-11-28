@@ -85,6 +85,25 @@ namespace GenOnlineService.Realtime
 			return Result.Success(new WatchLobbyListData { Lobbies = lobbies });
 		}
 
+		public Task<Result<Empty>> ReportRegionLatency(ReportRegionLatencyRequest request)
+		{
+			if (RequireAccess(ESessionAccessType.ServerListReadOnly) is Failure denied)
+			{
+				return Task.FromResult<Result<Empty>>(denied);
+			}
+			if (RegionLatency.Report(Session, request, GenOnlineService.PingBeacons.Current, Environment.TickCount64) is Failure refused)
+			{
+				return Task.FromResult<Result<Empty>>(refused);
+			}
+
+			LobbyListPublisher.Refresh(m_lobbyManager, Session);
+			if (Session.currentLobbyID != -1)
+			{
+				LobbyListPublisher.MarkDirty(Session.currentLobbyID);
+			}
+			return Task.FromResult(Result.Success());
+		}
+
 		public async Task<Result<Empty>> UnwatchLobbyList(Empty request)
 		{
 			if (RequireAccess(ESessionAccessType.ServerListReadOnly) is Failure denied)

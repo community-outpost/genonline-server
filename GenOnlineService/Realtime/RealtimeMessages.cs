@@ -32,6 +32,7 @@ namespace GenOnlineService.Realtime
 	public enum LobbyStage { Setup, Countdown, InGame, Complete }
 	public enum LobbyVisibility { Public, Friends }
 	public enum AnticheatKind { None, GoIntegrated, EasyAnticheat }
+	public enum LatencySource { Geo, Beacon }
 	public enum LobbyLeftReason { Left, Kicked, Closed }
 	public enum CountdownCancelReason { PlayerNotReady, MeshIncomplete, PlayerLeft, SettingsChanged }
 	public enum MatchRequeueReason { PlayerLeft, LobbyGone, MeshIncomplete, JoinTimeout, SetupFailed }
@@ -186,6 +187,7 @@ namespace GenOnlineService.Realtime
 		public bool HasPassword { get; init; }
 		public string Region { get; init; } = "";
 		public int LatencyMs { get; init; }
+		public LatencySource LatencySource { get; init; }
 		public AnticheatKind Anticheat { get; init; }
 		public LobbySummarySettings Settings { get; init; } = new LobbySummarySettings();
 		public BuildIdentity Build { get; init; } = new BuildIdentity();
@@ -486,6 +488,17 @@ namespace GenOnlineService.Realtime
 		public bool HasMore { get; init; }
 	}
 
+	public sealed record RegionRtt
+	{
+		public string Region { get; init; } = "";
+		public int RttMs { get; init; }
+	}
+
+	public sealed record ReportRegionLatencyRequest
+	{
+		public IReadOnlyList<RegionRtt> Regions { get; init; } = [];
+	}
+
 	public sealed record WatchLobbyListData
 	{
 		public IReadOnlyList<LobbySummary> Lobbies { get; init; } = [];
@@ -549,6 +562,7 @@ namespace GenOnlineService.Realtime
 		public IReadOnlyDictionary<string, BadgeDefinition> Badges { get; init; } = new Dictionary<string, BadgeDefinition>();
 		public IReadOnlyList<ChannelInfo> Channels { get; init; } = [];
 		public Limits Limits { get; init; } = new Limits();
+		public IReadOnlyList<PingBeacon> PingBeacons { get; init; } = [];
 	}
 
 	public sealed record BadgesUpdateEvent

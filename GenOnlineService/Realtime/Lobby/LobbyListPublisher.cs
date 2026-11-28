@@ -101,29 +101,51 @@ namespace GenOnlineService.Realtime
 					continue;
 				}
 
-				IRealtimeClient client = RealtimeOut.Session(watcher.Session);
-				lock (watcher.Lock)
+				Publish(lobbyManager, watcher, dirty);
+			}
+		}
+
+		// The rows of every list the viewer watches are sent again, as their latency estimate changed
+		public static void Refresh(LobbyManager lobbyManager, UserSession viewer)
+		{
+			foreach (Watcher watcher in s_watchers.Values)
+			{
+				if (ReferenceEquals(watcher.Session, viewer))
 				{
-					foreach (Int64 lobbyID in dirty)
+					Int64[] visible;
+					lock (watcher.Lock)
 					{
-						// the dirty marks are already taken, so one failing lobby must not drop the updates of the others
-						try
+						visible = watcher.Visible.ToArray();
+					}
+					Publish(lobbyManager, watcher, visible);
+				}
+			}
+		}
+
+		private static void Publish(LobbyManager lobbyManager, Watcher watcher, IEnumerable<Int64> lobbyIDs)
+		{
+			IRealtimeClient client = RealtimeOut.Session(watcher.Session);
+			lock (watcher.Lock)
+			{
+				foreach (Int64 lobbyID in lobbyIDs)
+				{
+					// the dirty marks are already taken, so one failing lobby must not drop the updates of the others
+					try
+					{
+						Lobby? lobby = lobbyManager.GetLobby(lobbyID);
+						if (lobby != null && RealtimeLobbies.IsListedFor(lobby, watcher.Session))
 						{
-							Lobby? lobby = lobbyManager.GetLobby(lobbyID);
-							if (lobby != null && RealtimeLobbies.IsListedFor(lobby, watcher.Session))
-							{
-								watcher.Visible.Add(lobbyID);
-								RealtimeOut.Fire(client.LobbyListUpsert(new LobbyListUpsertEvent { Lobby = RealtimeLobbies.SummaryOf(lobby, watcher.Session) }));
-							}
-							else if (watcher.Visible.Remove(lobbyID))
-							{
-								RealtimeOut.Fire(client.LobbyListRemove(new LobbyIdEvent { LobbyId = lobbyID }));
-							}
+							watcher.Visible.Add(lobbyID);
+							RealtimeOut.Fire(client.LobbyListUpsert(new LobbyListUpsertEvent { Lobby = RealtimeLobbies.SummaryOf(lobby, watcher.Session) }));
 						}
-						catch (Exception ex)
+						else if (watcher.Visible.Remove(lobbyID))
 						{
-							AppLog.For(typeof(LobbyListPublisher)).LogError(ex, "Publishing lobby {LobbyId} to a list watcher failed", lobbyID);
+							RealtimeOut.Fire(client.LobbyListRemove(new LobbyIdEvent { LobbyId = lobbyID }));
 						}
+					}
+					catch (Exception ex)
+					{
+						AppLog.For(typeof(LobbyListPublisher)).LogError(ex, "Publishing lobby {LobbyId} to a list watcher failed", lobbyID);
 					}
 				}
 			}

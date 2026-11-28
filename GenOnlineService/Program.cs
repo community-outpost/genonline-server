@@ -1403,6 +1403,7 @@ namespace GenOnlineService
 
 			var app = builder.Build();
 			ServiceLocator.Services = app.Services;
+			PingBeacons.Load(app.Configuration, AppLog.For(typeof(PingBeacons)));
 			GenOnlineService.Realtime.RealtimeOut.Initialize(app.Services.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<GenOnlineService.Realtime.RealtimeHub, GenOnlineService.Realtime.IRealtimeClient>>());
 			await GenOnlineService.Realtime.RealtimeControl.StartAsync(realtimeBackplane);
 			app.Logger.LogInformation("Service copy {CopyId} starting", GenOnlineService.Failover.CopyIdentity.ID);

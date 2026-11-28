@@ -165,6 +165,7 @@ namespace GenOnlineService.Realtime
 		// Without a viewer session (a REST caller with no hub connection) the latency estimate is 0
 		public static LobbySummary SummaryOf(Lobby lobby, UserSession? viewer)
 		{
+			(int latencyMs, LatencySource latencySource) = viewer == null ? (0, LatencySource.Geo) : EstimateLatency(lobby, viewer);
 			return new LobbySummary
 			{
 				Id = lobby.LobbyID,
@@ -177,7 +178,8 @@ namespace GenOnlineService.Realtime
 				Visibility = VisibilityOf(lobby),
 				HasPassword = lobby.IsPassworded,
 				Region = lobby.Region,
-				LatencyMs = viewer == null ? 0 : EstimateLatencyMs(lobby, viewer),
+				LatencyMs = latencyMs,
+				LatencySource = latencySource,
 				Anticheat = AnticheatOf(lobby.AnticheatID),
 				Settings = new LobbySummarySettings
 				{
@@ -228,23 +230,38 @@ namespace GenOnlineService.Realtime
 		}
 
 		// The slowest link to any other player bounds the viewer, so the lobby reports the largest estimate
-		public static int EstimateLatencyMs(Lobby lobby, UserSession viewer)
+		public static (int Ms, LatencySource Source) EstimateLatency(Lobby lobby, UserSession viewer)
 		{
-			int largest = 0;
+			List<UserSession> others = new();
 			foreach (LobbyMember member in lobby.Members)
 			{
-				if (member.SlotState != EPlayerType.SLOT_PLAYER || member.UserID == viewer.m_UserID)
+				if (member.SlotState == EPlayerType.SLOT_PLAYER && member.UserID != viewer.m_UserID && member.GetSession().TryGetTarget(out UserSession? session) && session != null)
 				{
-					continue;
-				}
-
-				if (member.GetSession().TryGetTarget(out UserSession? session) && session != null)
-				{
-					double distanceKm = HaversineDistanceKm(viewer.m_dLatitude, viewer.m_dLongitude, session.m_dLatitude, session.m_dLongitude);
-					largest = Math.Max(largest, Convert.ToInt32(2.0 * (PropagationDelayMs(distanceKm) * 2.0)));
+					others.Add(session);
 				}
 			}
-			return largest;
+			return EstimateLatency(viewer, others);
+		}
+
+		public static (int Ms, LatencySource Source) EstimateLatency(UserSession viewer, IEnumerable<UserSession> others)
+		{
+			int largest = 0;
+			bool any = false;
+			bool allBeacon = true;
+			foreach (UserSession other in others)
+			{
+				int? bound = RegionLatency.BoundMs(viewer.RegionRtts, other.RegionRtts);
+				allBeacon &= bound != null;
+				any = true;
+				largest = Math.Max(largest, bound ?? GeoLatencyMs(viewer, other));
+			}
+			return (largest, any && allBeacon ? LatencySource.Beacon : LatencySource.Geo);
+		}
+
+		private static int GeoLatencyMs(UserSession a, UserSession b)
+		{
+			double distanceKm = HaversineDistanceKm(a.m_dLatitude, a.m_dLongitude, b.m_dLatitude, b.m_dLongitude);
+			return Convert.ToInt32(2.0 * (PropagationDelayMs(distanceKm) * 2.0));
 		}
 
 		private static double ToRadians(double angleInDegrees) => angleInDegrees * Math.PI / 180.0;
