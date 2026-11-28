@@ -100,6 +100,46 @@ public sealed class MatchPlayerDetails
 	public List<MemberMetadataModel> metadata { get; set; } = new();
 }
 
+public enum MatchFeedSort { FinishedAt, Id }
+
+// Faction and Result apply to the row of the first player
+public sealed record MatchFeedFilter
+{
+	public IReadOnlyList<long> Players { get; init; } = [];
+	public string? Map { get; init; }
+	public ELobbyType? Type { get; init; }
+	public bool? Rated { get; init; }
+	public short? TeamSize { get; init; }
+	public bool? Desync { get; init; }
+	public DateTime? FinishedAfter { get; init; }
+	public DateTime? FinishedBefore { get; init; }
+	public int? DurationMin { get; init; }
+	public int? DurationMax { get; init; }
+	public int? Side { get; init; }
+	public string? Result { get; init; }
+}
+
+// FinishedAt is not used by the id sort
+public readonly record struct MatchFeedKey(DateTime FinishedAt, long Id);
+
+// Boundary is the key of the row the page continues from, Backward reads the page before it
+public sealed record MatchFeedQuery(MatchFeedFilter Filter, MatchFeedSort Sort, bool Descending, int PerPage, MatchFeedKey? Boundary = null, bool Backward = false);
+
+// Next continues after the page and Prev reads the page before it, Partial means the scan budget ended the page early
+public sealed record MatchFeedPage(List<MatchHistory_Entry> Matches, MatchFeedKey? Next, MatchFeedKey? Prev, bool Partial);
+
+public sealed class MatchFeedRow
+{
+	public long Id { get; set; }
+	public DateTime? FinishedAt { get; set; }
+	public DateTime StartedAt { get; set; }
+	public string MapName { get; set; } = string.Empty;
+	public ELobbyType? LobbyType { get; set; }
+	public bool TrackStats { get; set; }
+	public short? TeamSize { get; set; }
+	public bool Desynced { get; set; }
+}
+
 public class MatchPublication
 {
 	public long MatchId { get; set; }
@@ -916,16 +956,199 @@ namespace Database
 
 		public static async Task<List<MatchHistory_Entry>> GetMatchesOfPlayer(AppDbContext db, long userID, long? beforeID, int take, CancellationToken cancellationToken = default)
 		{
-			IQueryable<Match> query = db.Matches.AsNoTracking().Where(m => m.FinishedAt != null && db.MatchPlayers.Any(p => p.MatchId == m.Id && p.UserId == userID));
-			if (beforeID != null)
+			MatchFeedKey? boundary = beforeID is long before ? new MatchFeedKey(default, before) : null;
+			MatchFeedPage page = await GetMatchFeed(db, new MatchFeedQuery(new MatchFeedFilter { Players = [userID] }, MatchFeedSort.Id, true, take, boundary), cancellationToken);
+			return page.Matches;
+		}
+
+		// shortcut: 50 index rows per requested row is a guess, tune it once real data shows how rare the filters are
+		public const int FeedScanBudgetPerRow = 50;
+
+		public static async Task<MatchFeedPage> GetMatchFeed(AppDbContext db, MatchFeedQuery query, CancellationToken cancellationToken = default)
+		{
+			(IQueryable<MatchFeedRow> rows, List<Func<MatchFeedRow, bool>> residuals, int take) = BuildFeedQuery(db, query);
+			List<MatchFeedRow> examined = await rows.ToListAsync(cancellationToken);
+			List<MatchFeedRow> passing = examined.Where(row => residuals.All(residual => residual(row))).Take(query.PerPage + 1).ToList();
+
+			bool more = passing.Count > query.PerPage;
+			bool partial = !more && residuals.Count > 0 && examined.Count == take;
+			List<MatchFeedRow> page = passing.Take(query.PerPage).ToList();
+
+			// beyond continues in the direction of the read, behind turns back towards the boundary
+			MatchFeedKey? beyond = more ? KeyOf(page[^1], query.Sort) : partial ? KeyOf(examined[^1], query.Sort) : null;
+			MatchFeedKey? behind = query.Boundary == null ? null : page.Count > 0 ? KeyOf(page[0], query.Sort) : query.Boundary;
+			if (query.Backward)
 			{
-				long before = beforeID.Value;
-				query = query.Where(m => m.Id < before);
+				page.Reverse();
+				(beyond, behind) = (behind, beyond);
 			}
 
-			List<Match> matches = await query.OrderByDescending(m => m.Id).Take(take).ToListAsync(cancellationToken);
-			return await ToEntries(db, matches, cancellationToken);
+			List<long> ids = page.Select(row => row.Id).ToList();
+			Dictionary<long, Match> matches = await db.Matches.AsNoTracking().Where(m => ids.Contains(m.Id)).ToDictionaryAsync(m => m.Id, cancellationToken);
+			List<MatchHistory_Entry> entries = await ToEntries(db, ids.Select(id => matches[id]).ToList(), cancellationToken);
+			return new MatchFeedPage(entries, beyond, behind, partial);
 		}
+
+		private static MatchFeedKey KeyOf(MatchFeedRow row, MatchFeedSort sort) =>
+			new MatchFeedKey(sort == MatchFeedSort.Id ? default : row.FinishedAt!.Value, row.Id);
+
+		// The rows in index order up to take, and the filters left to check on them: one equality filter leads the global feed,
+		// the first player leads a player feed, and the rest is checked in memory so a rare combination never scans unbounded
+		internal static (IQueryable<MatchFeedRow> Rows, List<Func<MatchFeedRow, bool>> Residuals, int Take) BuildFeedQuery(AppDbContext db, MatchFeedQuery query)
+		{
+			MatchFeedFilter filter = query.Filter;
+			bool byId = query.Sort == MatchFeedSort.Id;
+			IQueryable<MatchFeedRow> rows;
+			string? lead = null;
+
+			if (filter.Players.Count > 0)
+			{
+				long first = filter.Players[0];
+				IQueryable<MatchPlayer> players = db.MatchPlayers.AsNoTracking().Where(p => p.UserId == first);
+				if (!byId)
+				{
+					players = players.Where(p => p.FinishedAt != null);
+				}
+				int? side = filter.Side;
+				string? result = filter.Result;
+				if (side != null)
+				{
+					players = players.Where(p => p.Side == side);
+				}
+				if (result != null)
+				{
+					players = players.Where(p => p.Result == result);
+				}
+				// A user holding two slots keeps only the lowest matching slot, so the match comes once
+				players = players.Where(p => !db.MatchPlayers.Any(o => o.MatchId == p.MatchId && o.UserId == first && o.Slot < p.Slot
+					&& (side == null || o.Side == side) && (result == null || o.Result == result)));
+				foreach (long other in filter.Players.Skip(1))
+				{
+					players = players.Where(p => db.MatchPlayers.Any(o => o.MatchId == p.MatchId && o.UserId == other));
+				}
+				rows = players.Join(db.Matches.AsNoTracking().Where(m => m.FinishedAt != null), p => p.MatchId, m => m.Id, (p, m) => new MatchFeedRow
+				{
+					Id = p.MatchId,
+					FinishedAt = p.FinishedAt,
+					StartedAt = m.StartedAt,
+					MapName = m.MapName,
+					LobbyType = m.LobbyType,
+					TrackStats = m.TrackStats,
+					TeamSize = m.TeamSize,
+					Desynced = m.Desynced
+				});
+			}
+			else
+			{
+				IQueryable<Match> matches = db.Matches.AsNoTracking().Where(m => m.FinishedAt != null);
+				if (filter.Map is string map)
+				{
+					lead = nameof(filter.Map);
+					matches = matches.Where(m => m.MapName == map);
+				}
+				else if (filter.TeamSize is short teamSize)
+				{
+					lead = nameof(filter.TeamSize);
+					matches = matches.Where(m => m.TeamSize == teamSize);
+				}
+				else if (filter.Type is ELobbyType type)
+				{
+					lead = nameof(filter.Type);
+					matches = matches.Where(m => m.LobbyType == type);
+				}
+				else if (filter.Desync == true)
+				{
+					lead = nameof(filter.Desync);
+					matches = matches.Where(m => m.Desynced);
+				}
+				else if (filter.Rated is bool rated)
+				{
+					lead = nameof(filter.Rated);
+					matches = matches.Where(m => m.TrackStats == rated);
+				}
+				rows = matches.Select(m => new MatchFeedRow
+				{
+					Id = m.Id,
+					FinishedAt = m.FinishedAt,
+					StartedAt = m.StartedAt,
+					MapName = m.MapName,
+					LobbyType = m.LobbyType,
+					TrackStats = m.TrackStats,
+					TeamSize = m.TeamSize,
+					Desynced = m.Desynced
+				});
+			}
+
+			if (filter.FinishedAfter is DateTime after)
+			{
+				rows = rows.Where(r => r.FinishedAt >= after);
+			}
+			if (filter.FinishedBefore is DateTime before)
+			{
+				rows = rows.Where(r => r.FinishedAt < before);
+			}
+
+			bool descending = query.Descending != query.Backward;
+			if (query.Boundary is MatchFeedKey key)
+			{
+				long id = key.Id;
+				DateTime finished = key.FinishedAt;
+				if (byId)
+				{
+					rows = descending ? rows.Where(r => r.Id < id) : rows.Where(r => r.Id > id);
+				}
+				else
+				{
+					rows = descending
+						? rows.Where(r => r.FinishedAt < finished || (r.FinishedAt == finished && r.Id < id))
+						: rows.Where(r => r.FinishedAt > finished || (r.FinishedAt == finished && r.Id > id));
+				}
+			}
+			if (byId)
+			{
+				rows = descending ? rows.OrderByDescending(r => r.Id) : rows.OrderBy(r => r.Id);
+			}
+			else
+			{
+				rows = descending ? rows.OrderByDescending(r => r.FinishedAt).ThenByDescending(r => r.Id) : rows.OrderBy(r => r.FinishedAt).ThenBy(r => r.Id);
+			}
+
+			List<Func<MatchFeedRow, bool>> residuals = new();
+			if (filter.Map is string residualMap && lead != nameof(filter.Map))
+			{
+				residuals.Add(r => r.MapName == residualMap);
+			}
+			if (filter.TeamSize is short residualTeamSize && lead != nameof(filter.TeamSize))
+			{
+				residuals.Add(r => r.TeamSize == residualTeamSize);
+			}
+			if (filter.Type is ELobbyType residualType && lead != nameof(filter.Type))
+			{
+				residuals.Add(r => r.LobbyType == residualType);
+			}
+			if (filter.Desync is bool desync && lead != nameof(filter.Desync))
+			{
+				residuals.Add(r => r.Desynced == desync);
+			}
+			if (filter.Rated is bool residualRated && lead != nameof(filter.Rated))
+			{
+				residuals.Add(r => r.TrackStats == residualRated);
+			}
+			if (filter.DurationMin is int minimum)
+			{
+				residuals.Add(r => DurationOf(r) >= minimum);
+			}
+			if (filter.DurationMax is int maximum)
+			{
+				residuals.Add(r => DurationOf(r) <= maximum);
+			}
+
+			int take = residuals.Count == 0 ? query.PerPage + 1 : query.PerPage * FeedScanBudgetPerRow;
+			return (rows.Take(take), residuals, take);
+		}
+
+		// The same whole seconds as the staff match list shows
+		private static long DurationOf(MatchFeedRow row) => (long)(row.FinishedAt!.Value - row.StartedAt).TotalSeconds;
 
 		public static async Task FinalizeAndScheduleExternalPublication(
 			AppDbContext db,
