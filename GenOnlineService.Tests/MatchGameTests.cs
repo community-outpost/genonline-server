@@ -19,6 +19,8 @@
 using System.Text.Json;
 using GenOnlineService.Realtime;
 using GenOnlineService.Rest;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -72,5 +74,65 @@ public class MatchGameTests
 
 		MatchFeedPage page = await Database.MatchHistory.GetMatchFeed(db, new MatchFeedQuery(new MatchFeedFilter(), MatchFeedSort.Id, false, 10));
 		Assert.Equal(new string?[] { ClientGames.Generals, null }, page.Matches.Select(m => m.game).ToArray());
+	}
+
+	private static IQueryCollection Query(string text) => new QueryCollection(QueryHelpers.ParseQuery(text));
+
+	[Theory]
+	[InlineData("?game=generals", null)]
+	[InlineData("?game=zerohour&player=5&faction=2", null)]
+	[InlineData("?player=5&faction=2", "filter_requires_game")]
+	[InlineData("?faction=2", "filter_requires_player")]
+	[InlineData("?game=none", "invalid_parameter")]
+	[InlineData("?game=Generals", "invalid_parameter")]
+	[InlineData("?game=generals&game=zerohour", "invalid_parameter")]
+	[InlineData("?sort=id&game=generals", "invalid_parameter")]
+	public void TheGameFilterTakesAKnownGameAndAFactionNeedsIt(string query, string? code)
+	{
+		(MatchFeedRequest? request, Failure? failure) = MatchFeedArgs.Read(Query(query), null);
+		Assert.Equal(code, failure?.Code);
+		if (code == null)
+		{
+			Assert.Equal(query.Contains("generals") ? ClientGames.Generals : ClientGames.ZeroHour, request!.Query.Filter.Game);
+		}
+		else if (code != "invalid_parameter")
+		{
+			Assert.Equal("faction", JsonSerializer.SerializeToElement(failure!.Value.Params).GetProperty("Parameter").GetString());
+		}
+	}
+
+	[Fact]
+	public void ACursorKeepsTheGameFilter()
+	{
+		(MatchFeedRequest? request, _) = MatchFeedArgs.Read(Query("?game=generals&player=5&faction=3"), null);
+		string cursor = MatchFeedArgs.Encode(request!.Query, new MatchFeedKey(MatchSeed.Origin, 9), false);
+		(MatchFeedRequest? next, Failure? failure) = MatchFeedArgs.Read(Query("?cursor=" + Uri.EscapeDataString(cursor)), null);
+		Assert.Null(failure);
+		Assert.Equal(ClientGames.Generals, next!.Query.Filter.Game);
+		Assert.Equal(3, next.Query.Filter.Side);
+	}
+
+	[ProbeTheory]
+	[MemberData(nameof(ProbeDatabase.Providers), MemberType = typeof(ProbeDatabase))]
+	public async Task TheGameFilterKeepsOnlyMatchesOfThatGame(string provider)
+	{
+		await using ProbeDatabase? probe = await ProbeDatabase.Create(provider);
+		if (probe == null) return;
+		await using AppDbContext db = probe.Open();
+		DateTime t = MatchSeed.Origin;
+		MatchSeed.Add(db, 1, t.AddMinutes(1), game: ClientGames.Generals, players: [new SeedPlayer(5, Side: 2), new SeedPlayer(6)]);
+		MatchSeed.Add(db, 2, t.AddMinutes(2), game: ClientGames.ZeroHour, players: [new SeedPlayer(5, Side: 2), new SeedPlayer(6)]);
+		MatchSeed.Add(db, 3, t.AddMinutes(3), players: [new SeedPlayer(5, Side: 2)]);
+		MatchSeed.Add(db, 4, t.AddMinutes(4), game: ClientGames.Generals, map: "Alpine Assault", players: [new SeedPlayer(5, Side: 3)]);
+		await db.SaveChangesAsync();
+
+		async Task<long[]> Of(MatchFeedFilter filter) =>
+			(await Database.MatchHistory.GetMatchFeed(db, new MatchFeedQuery(filter, MatchFeedSort.FinishedAt, true, 20))).Matches.Select(m => m.match_id).ToArray();
+
+		Assert.Equal(new long[] { 4, 1 }, await Of(new MatchFeedFilter { Game = ClientGames.Generals }));
+		Assert.Equal(new long[] { 2 }, await Of(new MatchFeedFilter { Game = ClientGames.ZeroHour }));
+		Assert.Equal(new long[] { 4 }, await Of(new MatchFeedFilter { Game = ClientGames.Generals, Map = "Alpine Assault" }));
+		Assert.Equal(new long[] { 1 }, await Of(new MatchFeedFilter { Players = [5], Game = ClientGames.Generals, Side = 2 }));
+		Assert.Equal(new long[] { 2 }, await Of(new MatchFeedFilter { Players = [5, 6], Game = ClientGames.ZeroHour }));
 	}
 }

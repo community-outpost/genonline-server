@@ -159,6 +159,8 @@ public class MatchesFeedHttpTests
 			("?sort=id&map=Tournament%20Desert", null, "invalid_parameter", "map"),
 			("?sort=name", null, "invalid_parameter", "sort"),
 			("?faction=1", null, "filter_requires_player", "faction"),
+			("?faction=1", 5, "filter_requires_game", "faction"),
+			("?game=none", null, "invalid_parameter", "game"),
 			("?result=win", null, "filter_requires_player", "result"),
 			("?after_id=1&map=x", null, "mixed_paging", null),
 			("?since=2026-11-01T00:00:00Z&cursor=" + Q(cursor), null, "mixed_paging", null),

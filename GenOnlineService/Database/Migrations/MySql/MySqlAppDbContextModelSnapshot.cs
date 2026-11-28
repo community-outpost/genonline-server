@@ -1825,6 +1825,9 @@ namespace GenOnlineService.Migrations.MySql
                     b.HasIndex("Desynced", "FinishedAt", "Id")
                         .HasDatabaseName("ix_matches_desync_finished");
 
+                    b.HasIndex("Game", "FinishedAt", "Id")
+                        .HasDatabaseName("ix_matches_game_finished");
+
                     b.HasIndex("LobbyType", "FinishedAt", "Id")
                         .HasDatabaseName("ix_matches_type_finished");
 

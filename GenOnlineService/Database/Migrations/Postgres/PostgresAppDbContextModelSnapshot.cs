@@ -1823,6 +1823,9 @@ namespace GenOnlineService.Migrations.Postgres
                         .HasDatabaseName("ix_matches_desync_finished")
                         .HasFilter("desynced");
 
+                    b.HasIndex("Game", "FinishedAt", "Id")
+                        .HasDatabaseName("ix_matches_game_finished");
+
                     b.HasIndex("LobbyType", "FinishedAt", "Id")
                         .HasDatabaseName("ix_matches_type_finished");
 

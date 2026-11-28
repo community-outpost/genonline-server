@@ -81,6 +81,7 @@ namespace GenOnlineService.Rest
 			[MatchFeedCodes.UnknownParameter] = StatusCodes.Status400BadRequest,
 			[MatchFeedCodes.MixedPaging] = StatusCodes.Status400BadRequest,
 			[MatchFeedCodes.FilterRequiresPlayer] = StatusCodes.Status400BadRequest,
+			[MatchFeedCodes.FilterRequiresGame] = StatusCodes.Status400BadRequest,
 			[RestCodes.MethodNotAllowed] = StatusCodes.Status405MethodNotAllowed,
 			[RestCodes.AppealExists] = StatusCodes.Status409Conflict,
 			[RestCodes.AppealDecided] = StatusCodes.Status409Conflict,

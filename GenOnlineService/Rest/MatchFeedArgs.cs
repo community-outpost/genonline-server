@@ -33,8 +33,9 @@ namespace GenOnlineService.Rest
 		public const string UnknownParameter = "unknown_parameter";
 		public const string MixedPaging = "mixed_paging";
 		public const string FilterRequiresPlayer = "filter_requires_player";
+		public const string FilterRequiresGame = "filter_requires_game";
 
-		public static readonly IReadOnlyList<string> All = [InvalidCursor, InvalidParameter, UnknownParameter, MixedPaging, FilterRequiresPlayer];
+		public static readonly IReadOnlyList<string> All = [InvalidCursor, InvalidParameter, UnknownParameter, MixedPaging, FilterRequiresPlayer, FilterRequiresGame];
 	}
 
 	// One read of a match feed: the query, and whether the caller sent a cursor
@@ -53,7 +54,7 @@ namespace GenOnlineService.Rest
 		public const string Order = "order";
 
 		public static readonly IReadOnlyList<string> Filters =
-			["player", "map", "type", "rated", "team_size", "desync", "finished_after", "finished_before", "duration_min", "duration_max", "faction", "result"];
+			["player", "map", "type", "rated", "team_size", "desync", "finished_after", "finished_before", "duration_min", "duration_max", "game", "faction", "result"];
 
 		private const string TimeFormat = "yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'";
 
@@ -247,6 +248,7 @@ namespace GenOnlineService.Rest
 					"finished_before" => Time(text) is DateTime before ? filter with { FinishedBefore = before } : null,
 					"duration_min" => Int(text, 0, MaxDurationS) is int min ? filter with { DurationMin = min } : null,
 					"duration_max" => Int(text, 0, MaxDurationS) is int max ? filter with { DurationMax = max } : null,
+					"game" => text is ClientGames.ZeroHour or ClientGames.Generals ? filter with { Game = text } : null,
 					"faction" => int.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int side) ? filter with { Side = side } : null,
 					"result" => text is MatchResults.Win or MatchResults.Loss ? filter with { Result = text } : null,
 					_ => null
@@ -270,6 +272,11 @@ namespace GenOnlineService.Rest
 			{
 				return (null, Result.Fail(MatchFeedCodes.FilterRequiresPlayer, new { Parameter = filter.Side != null ? "faction" : "result" }));
 			}
+			// A side number names a different faction in each game
+			if (filter.Side != null && filter.Game == null)
+			{
+				return (null, Result.Fail(MatchFeedCodes.FilterRequiresGame, new { Parameter = "faction" }));
+			}
 			return (filter, null);
 		}
 
@@ -286,6 +293,7 @@ namespace GenOnlineService.Rest
 			if (filter.FinishedBefore != null) values["finished_before"] = filter.FinishedBefore.Value.ToString(TimeFormat, CultureInfo.InvariantCulture);
 			if (filter.DurationMin != null) values["duration_min"] = filter.DurationMin.Value.ToString(CultureInfo.InvariantCulture);
 			if (filter.DurationMax != null) values["duration_max"] = filter.DurationMax.Value.ToString(CultureInfo.InvariantCulture);
+			if (filter.Game != null) values["game"] = filter.Game;
 			if (filter.Side != null) values["faction"] = filter.Side.Value.ToString(CultureInfo.InvariantCulture);
 			if (filter.Result != null) values["result"] = filter.Result;
 			return values;

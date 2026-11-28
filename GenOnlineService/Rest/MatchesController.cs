@@ -83,7 +83,7 @@ namespace GenOnlineService.Rest
 			+ "The cursor carries the sort and the filters. No total is counted. `partial: true` means the page stopped at its scan budget before it filled: keep following `next_cursor`.\n\n"
 			+ "`sort=id` allows only `player` and `order` and walks every finished match once, as a full crawl. `finished_after` with `order=asc` is the incremental feed.\n\n"
 			+ "A 400 names its reason: `invalid_cursor`, `invalid_parameter` (`params.parameter`), `unknown_parameter`, `mixed_paging` (a legacy parameter with a new one) "
-			+ "or `filter_requires_player` (`faction` or `result` without `player`). A legacy parameter answers with `Deprecation: true`.";
+			+ "`filter_requires_player` (`faction` or `result` without `player`) or `filter_requires_game` (`faction` without `game`). A legacy parameter answers with `Deprecation: true`.";
 
 		private static readonly string[] s_legacyList = ["after_id", "since"];
 		private static readonly string[] s_legacyOfPlayer = ["before_id"];

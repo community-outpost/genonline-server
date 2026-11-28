@@ -119,6 +119,7 @@ public sealed record MatchFeedFilter
 	public DateTime? FinishedBefore { get; init; }
 	public int? DurationMin { get; init; }
 	public int? DurationMax { get; init; }
+	public string? Game { get; init; }
 	public int? Side { get; init; }
 	public string? Result { get; init; }
 }
@@ -142,6 +143,7 @@ public sealed class MatchFeedRow
 	public bool TrackStats { get; set; }
 	public short? TeamSize { get; set; }
 	public bool Desynced { get; set; }
+	public string? Game { get; set; }
 }
 
 public class MatchPublication
@@ -197,6 +199,7 @@ public class MatchConfiguration : IEntityTypeConfiguration<Match>
 		entity.HasIndex(e => new { e.LobbyType, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_type_finished");
 		entity.HasIndex(e => new { e.TrackStats, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_rated_finished");
 		entity.HasIndex(e => new { e.TeamSize, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_team_size_finished");
+		entity.HasIndex(e => new { e.Game, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_game_finished");
 		IndexBuilder<Match> desync = entity.HasIndex(e => new { e.Desynced, e.FinishedAt, e.Id }).HasDatabaseName("ix_matches_desync_finished");
 		if (m_partialIndexes)
 		{
@@ -1097,7 +1100,8 @@ namespace Database
 					LobbyType = m.LobbyType,
 					TrackStats = m.TrackStats,
 					TeamSize = m.TeamSize,
-					Desynced = m.Desynced
+					Desynced = m.Desynced,
+					Game = m.Game
 				});
 			}
 			else
@@ -1123,6 +1127,11 @@ namespace Database
 					lead = nameof(filter.Desync);
 					matches = matches.Where(m => m.Desynced);
 				}
+				else if (filter.Game is string game)
+				{
+					lead = nameof(filter.Game);
+					matches = matches.Where(m => m.Game == game);
+				}
 				else if (filter.Rated is bool rated)
 				{
 					lead = nameof(filter.Rated);
@@ -1137,7 +1146,8 @@ namespace Database
 					LobbyType = m.LobbyType,
 					TrackStats = m.TrackStats,
 					TeamSize = m.TeamSize,
-					Desynced = m.Desynced
+					Desynced = m.Desynced,
+					Game = m.Game
 				});
 			}
 
@@ -1192,6 +1202,10 @@ namespace Database
 			if (filter.Desync is bool desync && lead != nameof(filter.Desync))
 			{
 				residuals.Add(r => r.Desynced == desync);
+			}
+			if (filter.Game is string residualGame && lead != nameof(filter.Game))
+			{
+				residuals.Add(r => r.Game == residualGame);
 			}
 			if (filter.Rated is bool residualRated && lead != nameof(filter.Rated))
 			{

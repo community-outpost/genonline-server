@@ -94,7 +94,8 @@ namespace GenOnlineService.OpenApi
 			new("finished_before", "string", "Finished before this time, at or after `finished_after`.") { Format = "date-time" },
 			new("duration_min", "integer", "The shortest duration in seconds.") { Minimum = 0, Maximum = GenOnlineService.Rest.MatchFeedArgs.MaxDurationS },
 			new("duration_max", "integer", "The longest duration in seconds, at least `duration_min`.") { Minimum = 0, Maximum = GenOnlineService.Rest.MatchFeedArgs.MaxDurationS },
-			new("faction", "integer", "The side the first player played. Needs `player`."),
+			new("game", "string", "The game the match was played in. Matches stored before the game was recorded have none and match no game.") { Enum = ["zerohour", "generals"] },
+			new("faction", "integer", "The side the first player played. Needs `player` and `game`, since a side number names a different faction in each game."),
 			new("result", "string", "The result of the first player. Needs `player`.") { Enum = ["win", "loss"] },
 		];
 	}
