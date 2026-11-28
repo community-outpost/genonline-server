@@ -25,7 +25,7 @@ using System.Globalization;
 
 namespace GenOnlineService.Rest
 {
-	public readonly record struct PlayerListArgs(bool Online, string? Search);
+	public readonly record struct PlayerListArgs(bool Online, string? Search, int? Tag = null);
 
 	public static class PlayerArgs
 	{
@@ -50,7 +50,20 @@ namespace GenOnlineService.Rest
 			{
 				return (default, Result.Invalid("search"));
 			}
-			return (new PlayerListArgs(online, search), null);
+
+			int? tag = null;
+			int hash = search == null ? -1 : search.LastIndexOf('#');
+			if (hash >= 0)
+			{
+				string tagText = search![(hash + 1)..].Trim();
+				search = search[..hash].Trim();
+				if (search.Length == 0 || tagText.Length > 4 || !tagText.All(char.IsAsciiDigit) || !int.TryParse(tagText, NumberStyles.None, CultureInfo.InvariantCulture, out int value) || value < Database.DisplayNames.MinTag)
+				{
+					return (default, Result.Invalid("search"));
+				}
+				tag = value;
+			}
+			return (new PlayerListArgs(online, search, tag), null);
 		}
 
 		// A comma separated list of 1 to 100 positive ids; duplicates are dropped, the first position is kept
@@ -78,6 +91,24 @@ namespace GenOnlineService.Rest
 		}
 	}
 
+	public static class PlayerSearch
+	{
+		// The one player holding Name#tag: the name as the prefix search normalises it, the tag as a number
+		public static async Task<(int Total, List<Database.PublicPlayer> Page)> ByNameAndTag(AppDbContext db, string name, int tag, int skip, int take)
+		{
+			string normalized = NameNormalizer.Normalize(name);
+			IQueryable<User> matches = Database.PublicPlayers.Visible(db).Where(u => u.UsernameNormalized == normalized && u.NameTag == tag);
+			int total = await matches.CountAsync();
+			List<Database.PublicPlayer> page = await matches
+				.OrderBy(u => u.ID)
+				.Skip(skip)
+				.Take(take)
+				.Select(u => new Database.PublicPlayer(u.ID, u.Username, u.NameTag, u.CreatedAt))
+				.ToListAsync();
+			return (total, page);
+		}
+	}
+
 	public sealed class PlayersController : ApiControllerBase
 	{
 		private readonly IDbContextFactory<AppDbContext> m_dbFactory;
@@ -98,18 +129,20 @@ namespace GenOnlineService.Rest
 				(OffsetPage page, Failure? pageFailure) = Paging.ReadOffset(Request);
 				if (pageFailure == null)
 				{
-					return args.Online ? ListOnline(args.Search, page) : await SearchAsync(args.Search!, page);
+					return args.Online ? ListOnline(args.Search, args.Tag, page) : await SearchAsync(args.Search!, args.Tag, page);
 				}
 				failure = pageFailure;
 			}
 			return RestResults.Fail(failure.Value);
 		}
 
-		private IActionResult ListOnline(string? search, OffsetPage page)
+		private IActionResult ListOnline(string? search, int? tag, OffsetPage page)
 		{
 			string? prefix = search == null ? null : NameNormalizer.Normalize(search);
 			List<Member> online = OnlinePlayers()
-				.Where(member => prefix == null || NameNormalizer.Normalize(member.Name).StartsWith(prefix, StringComparison.Ordinal))
+				.Where(member => prefix == null || (tag == null
+					? NameNormalizer.Normalize(member.Name).StartsWith(prefix, StringComparison.Ordinal)
+					: NameNormalizer.Normalize(member.Name) == prefix && member.Tag == Database.DisplayNames.FormatTag(tag.Value)))
 				.OrderBy(member => NameNormalizer.Normalize(member.Name), StringComparer.Ordinal)
 				.ThenBy(member => member.Id)
 				.ToList();
@@ -141,10 +174,12 @@ namespace GenOnlineService.Rest
 			}
 		}
 
-		private async Task<IActionResult> SearchAsync(string search, OffsetPage page)
+		private async Task<IActionResult> SearchAsync(string search, int? tag, OffsetPage page)
 		{
 			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync(HttpContext.RequestAborted);
-			(int total, List<Database.PublicPlayer> players) = await Database.PublicPlayers.Search(db, search, page.Skip, page.PerPage);
+			(int total, List<Database.PublicPlayer> players) = tag == null
+				? await Database.PublicPlayers.Search(db, search, page.Skip, page.PerPage)
+				: await PlayerSearch.ByNameAndTag(db, search, tag.Value, page.Skip, page.PerPage);
 
 			Paging.WriteOffsetHeaders(HttpContext, page, total);
 			return RestResults.Ok(new PlayerListResponse { Players = players.Select(player => RealtimeMembers.Of(player.ID, player.Name, null, player.NameTag)).ToArray() });

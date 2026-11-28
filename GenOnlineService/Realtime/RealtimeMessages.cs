@@ -83,6 +83,8 @@ namespace GenOnlineService.Realtime
 	{
 		public long Id { get; init; }
 		public string Name { get; init; } = "";
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Tag { get; init; }
 		public IReadOnlyList<string> Badges { get; init; } = [];
 		public bool Online { get; init; }
 		public PresenceActivity Activity { get; init; }
