@@ -1,4 +1,4 @@
-@* Read-only for the owner role and for roles that rank the same as or above the caller *@
+@* Read-only for roles that rank the same as or above the caller, and for the owner role unless the caller is an owner *@
 @page "/admin/roles/{Name}"
 @inject PortalApi Api
 @inject ToastService Toasts
@@ -69,7 +69,7 @@ else
             </Icon>
             <ChildContent>
                 <BbAlertTitle>You can only read this role</BbAlertTitle>
-                <BbAlertDescription>@(role.Locked ? "The owner role cannot be changed in the service." : "This role ranks the same as or above your own highest role.")</BbAlertDescription>
+                <BbAlertDescription>@(role.Locked ? "Only an owner can change the owner role." : "This role ranks the same as or above your own highest role.")</BbAlertDescription>
             </ChildContent>
         </BbAlert>
     }
@@ -142,7 +142,7 @@ else
                     }
                     <div class="bb:space-y-2">
                         <p class="bb:text-sm bb:font-medium">Permissions</p>
-                        <RolePermissions Permissions="@m_permissions" Chosen="@m_chosen" ReadOnly="@ReadOnly" IdPrefix="role-permission" Changed="@(() => Task.CompletedTask)" />
+                        <RolePermissions Permissions="@m_permissions" Chosen="@m_chosen" ReadOnly="@ReadOnly" Protected="@role.ProtectedPermissions" IdPrefix="role-permission" Changed="@(() => Task.CompletedTask)" />
                     </div>
                 </BbCardContent>
                 @if (!ReadOnly)
@@ -290,7 +290,7 @@ else
 
     private PortalSessionInfo Session => Api.Session!;
 
-    private bool ReadOnly => m_role == null || m_role.Locked || !m_role.Manageable;
+    private bool ReadOnly => m_role == null || !m_role.Manageable;
 
     private bool ColorValid => String.IsNullOrWhiteSpace(m_color) || PortalRoleText.IsValidColor(m_color.Trim());
 
@@ -336,7 +336,8 @@ else
             return;
         }
 
-        m_permissions = permissions.Value!.Permissions;
+        // an owner may give the owner role a permission back that it dropped, so none is locked for holding too little
+        m_permissions = role.Locked && role.Manageable ? permissions.Value!.Permissions.Select(p => p with { Held = true }).ToList() : permissions.Value!.Permissions;
         m_places = PortalRoleText.Placements(roles.Value.Roles, role.Name);
         Show(role);
         if (m_tab == "members")

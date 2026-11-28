@@ -63,6 +63,7 @@ namespace GenOnlineService.Rest
 			Position = role.Position,
 			BuiltIn = role.BuiltIn,
 			Locked = role.Name == RoleCatalog.Owner,
+			ProtectedPermissions = role.Name == RoleCatalog.Owner ? RoleCatalog.OwnerProtected.Order(StringComparer.Ordinal).ToList() : [],
 			Manageable = RoleDefinitionRules.CanManage(callerPosition, role),
 			Permissions = role.Permissions.Order(StringComparer.Ordinal).ToList(),
 			MemberCount = role.Name == RoleCatalog.Everyone ? 0 : members.GetValueOrDefault(role.Name)

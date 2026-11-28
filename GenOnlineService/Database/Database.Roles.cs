@@ -222,6 +222,13 @@ namespace Database
 				db.StoredRolePermissions.AddRange(builtIn.Permissions.Select(p => new StoredRolePermission { Role = builtIn.Name, Permission = p }));
 			}
 
+			// an owner role nobody edited follows the permissions of the code, so a new permission reaches owners
+			if (await db.StoredRoles.AsNoTracking().AnyAsync(r => r.Name == RoleCatalog.Owner && r.UpdatedBy == "system", cancellationToken))
+			{
+				HashSet<string> held = (await db.StoredRolePermissions.AsNoTracking().Where(p => p.Role == RoleCatalog.Owner).Select(p => p.Permission).ToListAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
+				db.StoredRolePermissions.AddRange(Permissions.Human.Except(held).Select(p => new StoredRolePermission { Role = RoleCatalog.Owner, Permission = p }));
+			}
+
 			try
 			{
 				await db.SaveChangesAsync(cancellationToken);

@@ -56,6 +56,9 @@ namespace GenOnlineService.Rest
 		public const string RolePositionTaken = "roles.position_taken";
 		public const string RolePermissionNotHeld = "roles.permission_not_held";
 		public const string RoleLocked = "roles.locked";
+
+		// A change to the owner role would drop a permission the owner role must keep
+		public const string RolePermissionProtected = "roles.permission_protected";
 		public const string RoleBuiltIn = "roles.builtin";
 	}
 
@@ -92,6 +95,7 @@ namespace GenOnlineService.Rest
 			[RestCodes.RolePositionTaken] = StatusCodes.Status409Conflict,
 			[RestCodes.RolePermissionNotHeld] = StatusCodes.Status403Forbidden,
 			[RestCodes.RoleLocked] = StatusCodes.Status403Forbidden,
+			[RestCodes.RolePermissionProtected] = StatusCodes.Status403Forbidden,
 			[RestCodes.RoleBuiltIn] = StatusCodes.Status403Forbidden,
 			[GenOnlineService.Flags.FlagCodes.Stale] = StatusCodes.Status409Conflict,
 			[GenOnlineService.Flags.FlagCodes.Exists] = StatusCodes.Status409Conflict,

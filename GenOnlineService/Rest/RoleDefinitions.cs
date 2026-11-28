@@ -45,7 +45,11 @@ namespace GenOnlineService.Rest
 		public int Position { get; init; }
 		public bool BuiltIn { get; init; }
 
+		// Owner: never deleted, renamed or moved
 		public bool Locked { get; init; }
+
+		// Permissions the role always keeps, so a save that drops one is refused
+		public IReadOnlyList<string> ProtectedPermissions { get; init; } = [];
 
 		public bool Manageable { get; init; }
 		public IReadOnlyList<string> Permissions { get; init; } = [];

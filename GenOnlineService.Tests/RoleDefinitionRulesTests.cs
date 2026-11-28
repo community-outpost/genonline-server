@@ -73,13 +73,14 @@ public class RoleDefinitionRulesTests
 	}
 
 	[Fact]
-	public void OwnerIsNeverEditableNotEvenByAnOwner()
+	public void OwnerIsNeverDeletedAndNeverEditedByAnAdmin()
 	{
 		RoleDefinition owner = RoleCatalog.Defaults.Roles[RoleCatalog.Owner];
 
-		Assert.Equal(RestCodes.RoleLocked, CodeOf(RoleDefinitionRules.CheckUpdate(RoleCatalog.Defaults, RoleCatalog.OwnerPosition, s_all, owner, Wanted("owner", owner.Position, Permissions.ModerationKick))));
+		Assert.Equal(RestCodes.RoleRank, CodeOf(RoleDefinitionRules.CheckUpdate(RoleCatalog.Defaults, RoleCatalog.AdminPosition, s_all, owner, Wanted("owner", owner.Position, [.. owner.Permissions]))));
+		Assert.Equal(RestCodes.RolePermissionProtected, CodeOf(RoleDefinitionRules.CheckUpdate(RoleCatalog.Defaults, RoleCatalog.OwnerPosition, s_all, owner, Wanted("owner", owner.Position, Permissions.ModerationKick))));
 		Assert.Equal(RestCodes.RoleLocked, CodeOf(RoleDefinitionRules.CheckDelete(RoleCatalog.OwnerPosition, owner)));
-		Assert.False(RoleDefinitionRules.CanManage(RoleCatalog.OwnerPosition, owner));
+		Assert.False(RoleDefinitionRules.CanManage(RoleCatalog.AdminPosition, owner));
 	}
 
 	[Fact]

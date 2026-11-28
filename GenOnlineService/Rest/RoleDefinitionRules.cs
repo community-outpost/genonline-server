@@ -23,7 +23,8 @@ namespace GenOnlineService.Rest
 	public sealed record RoleChange(string Name, string DisplayName, string? Color, string? Description, int Position, IReadOnlySet<string> Permissions, string? Tag = null);
 
 	// The hierarchy rules of editing roles, as in Discord: a caller manages only roles below their own highest role, puts a role only
-	// below it, and adds or removes only permissions they hold themselves. Owner is never editable, and built-in roles stay.
+	// below it, and adds or removes only permissions they hold themselves. Only an owner edits the owner role, which keeps its
+	// protected permissions and is never deleted, and built-in roles stay.
 	public static class RoleDefinitionRules
 	{
 		public static Failure? ValidateFields(RoleChange wanted)
@@ -70,10 +71,10 @@ namespace GenOnlineService.Rest
 
 		public static Failure? CheckUpdate(RoleCatalog catalog, int callerPosition, IReadOnlySet<string> callerPermissions, RoleDefinition existing, RoleChange wanted)
 		{
-			if (existing.Name == RoleCatalog.Owner) return Result.Fail(RestCodes.RoleLocked, new { Role = existing.Name });
+			bool isOwnerRole = existing.Name == RoleCatalog.Owner;
 
 			// everyone is the baseline of every player, so only an owner changes it
-			int needed = existing.Name == RoleCatalog.Everyone ? RoleCatalog.OwnerPosition : existing.Position + 1;
+			int needed = isOwnerRole || existing.Name == RoleCatalog.Everyone ? RoleCatalog.OwnerPosition : existing.Position + 1;
 			if (callerPosition < needed) return Result.Fail(RestCodes.RoleRank, new { Role = existing.Name });
 
 			if (wanted.Name != existing.Name) return Result.Invalid("name");
@@ -91,6 +92,15 @@ namespace GenOnlineService.Rest
 				if (failure != null) return failure;
 			}
 
+			if (isOwnerRole)
+			{
+				string? dropped = RoleCatalog.OwnerProtected.Except(wanted.Permissions).Order(StringComparer.Ordinal).FirstOrDefault();
+				if (dropped != null) return Result.Fail(RestCodes.RolePermissionProtected, new { Permission = dropped });
+
+				// an owner may give the owner role back a permission it dropped, so rank decides here and not the permissions held
+				callerPermissions = Permissions.Human;
+			}
+
 			return CheckPermissions(existing.Permissions, wanted.Permissions, callerPermissions);
 		}
 
@@ -104,8 +114,7 @@ namespace GenOnlineService.Rest
 
 		public static bool CanManage(int callerPosition, RoleDefinition role)
 		{
-			if (role.Name == RoleCatalog.Owner) return false;
-			return role.Name == RoleCatalog.Everyone ? callerPosition >= RoleCatalog.OwnerPosition : role.Position < callerPosition;
+			return role.Name == RoleCatalog.Everyone || role.Name == RoleCatalog.Owner ? callerPosition >= RoleCatalog.OwnerPosition : role.Position < callerPosition;
 		}
 
 		// The position that places a role directly above another one: halfway to the next role above it, never reaching the caller.

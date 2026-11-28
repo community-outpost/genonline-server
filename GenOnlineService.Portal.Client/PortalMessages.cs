@@ -508,8 +508,11 @@ namespace GenOnlineService.Portal.Client
 		public int Position { get; init; }
 		public bool BuiltIn { get; init; }
 
-		// Owner: nobody edits it in the service
+		// Owner: never deleted, renamed or moved
 		public bool Locked { get; init; }
+
+		// Permissions the role always keeps, shown checked and locked
+		public IReadOnlyList<string> ProtectedPermissions { get; init; } = [];
 
 		// The caller may edit or delete it: it sits below their own highest role
 		public bool Manageable { get; init; }

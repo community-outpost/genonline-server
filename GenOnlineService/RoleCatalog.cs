@@ -73,6 +73,9 @@ namespace GenOnlineService
 
 		public static bool IsBuiltIn(string name) => name == Moderator || name == Admin || name == Owner || name == Caster || name == Everyone;
 
+		// The owner role always holds these, so roles and staff stay manageable: roles.manage gates the role routes, the player role routes and the Discord bot links
+		public static readonly IReadOnlySet<string> OwnerProtected = new HashSet<string>(StringComparer.Ordinal) { Permissions.RolesManage };
+
 		private const string StaffTag = "★★GO STAFF★★";
 		private const string StaffColor = "#f5c542";
 
@@ -88,7 +91,7 @@ namespace GenOnlineService
 		public static RoleCatalog Defaults { get; } = From(BuiltInDefinitions);
 
 		// Safe by construction: machine and unknown permissions are dropped, a built-in role keeps its fixed position, owner keeps
-		// every human permission, and a built-in role missing from the input comes back with its defaults
+		// its protected permissions, and a built-in role missing from the input comes back with its defaults
 		public static RoleCatalog From(IEnumerable<RoleDefinition> definitions)
 		{
 			var roles = new Dictionary<string, RoleDefinition>(StringComparer.Ordinal);
@@ -103,7 +106,7 @@ namespace GenOnlineService
 				}
 				if (definition.Name == Owner)
 				{
-					permissions = new HashSet<string>(Permissions.Human, StringComparer.Ordinal);
+					permissions.UnionWith(OwnerProtected);
 				}
 
 				roles[definition.Name] = definition with { Position = position, Permissions = permissions };
