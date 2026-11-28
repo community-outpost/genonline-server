@@ -765,6 +765,37 @@ namespace Database
 			return await db.ChatMessages.AsNoTracking().Where(m => m.Kind == ChatMessageKinds.Match && m.MatchID == matchId && m.SenderID == senderId).OrderByDescending(m => m.ID).Take(limit).ToListAsync(cancellationToken);
 		}
 
+		// The lines staff read, newest first with the deleted ones: one public conversation (kind and id), its lines of one sender, or
+		// every channel, lobby and match line of one sender, never direct or group lines
+		public static async Task<List<ChatMessage>> GetLog(AppDbContext db, string? kind, long? conversationId, long? senderId, DateTime? from, DateTime? to, long? beforeId, int limit, CancellationToken cancellationToken = default)
+		{
+			IQueryable<ChatMessage> query = db.ChatMessages.AsNoTracking();
+			query = kind switch
+			{
+				ChatMessageKinds.Channel => query.Where(m => m.Kind == ChatMessageKinds.Channel && m.ChannelID == conversationId),
+				ChatMessageKinds.Lobby => query.Where(m => m.Kind == ChatMessageKinds.Lobby && m.LobbyID == conversationId),
+				ChatMessageKinds.Match => query.Where(m => m.Kind == ChatMessageKinds.Match && m.MatchID == conversationId),
+				_ => query.Where(m => m.Kind == ChatMessageKinds.Channel || m.Kind == ChatMessageKinds.Lobby || m.Kind == ChatMessageKinds.Match)
+			};
+			if (senderId is long sender)
+			{
+				query = query.Where(m => m.SenderID == sender);
+			}
+			if (from is DateTime start)
+			{
+				query = query.Where(m => m.CreatedAt >= start);
+			}
+			if (to is DateTime end)
+			{
+				query = query.Where(m => m.CreatedAt < end);
+			}
+			if (beforeId is long before)
+			{
+				query = query.Where(m => m.ID < before);
+			}
+			return await query.OrderByDescending(m => m.ID).Take(limit).ToListAsync(cancellationToken);
+		}
+
 		public static async Task<List<ChatMessage>> GetRecentMessagesBy(AppDbContext db, long senderId, int limit, CancellationToken cancellationToken = default)
 		{
 			return await db.ChatMessages.AsNoTracking().Where(m => m.SenderID == senderId).OrderByDescending(m => m.ID).Take(limit).ToListAsync(cancellationToken);

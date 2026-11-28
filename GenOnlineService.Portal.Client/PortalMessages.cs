@@ -46,6 +46,7 @@ namespace GenOnlineService.Portal.Client
 		public const string Settings = "api/v1/application/settings";
 		public const string Announcements = "api/v1/announcements";
 		public const string Messages = "api/v1/messages";
+		public const string ChatLogs = "api/v1/admin/chat";
 		public const string StaffRealtime = "api/v1/admin/realtime";
 		public const string StaffLobbies = "api/v1/admin/lobbies";
 		public const string Lobbies = "api/v1/lobbies";
@@ -77,6 +78,7 @@ namespace GenOnlineService.Portal.Client
 		public const string LobbiesPage = "/admin/lobbies";
 		public const string TextRulesPage = "/admin/text-rules";
 		public const string InvestigatePage = "/admin/investigate";
+		public const string ChatLogsPage = "/admin/chat";
 		public const string ConfigPage = "/admin/config";
 		public const string RulesPage = "/admin/rules";
 		public const string RuleMatchesPage = "/admin/rules/matches";
@@ -107,6 +109,8 @@ namespace GenOnlineService.Portal.Client
 
 		public static string AuditOf(long target) => AuditPage + "?target=" + target;
 
+		public static string ChatLogsOf(string conversation) => ChatLogsPage + "?conversation=" + Uri.EscapeDataString(conversation);
+
 		public static string InvestigateOf(string kind, string value) => InvestigatePage + "?kind=" + Uri.EscapeDataString(kind) + "&value=" + Uri.EscapeDataString(value);
 
 		public static string InvestigateDevice(string kind, string key) => InvestigatePage + "?kind=" + Uri.EscapeDataString(kind) + "&key=" + Uri.EscapeDataString(key);
@@ -125,6 +129,7 @@ namespace GenOnlineService.Portal.Client
 		public const string AuditRead = "audit.read";
 		public const string TokensManage = "tokens.manage";
 		public const string ChatDeleteAny = "chat.delete_any";
+		public const string ChatLogs = "chat.logs";
 		public const string AnnouncementsSend = "announcements.send";
 		public const string SettingsManage = "settings.manage";
 		public const string ServerStats = "server.stats";
@@ -164,6 +169,7 @@ namespace GenOnlineService.Portal.Client
 			"name_reset" => "Name reset",
 			"message_delete" => "Message deleted",
 			"message_lookup" => "Message looked up",
+			"chat_log_view" => "Chat log read",
 			"staff_message" => "Staff message",
 			"report_view" => "Report viewed",
 			"report_close" => "Report closed",
@@ -219,7 +225,7 @@ namespace GenOnlineService.Portal.Client
 		public static readonly IReadOnlyList<string> All =
 		[
 			"appeal_open", "appeal_decide", "role_grant", "role_revoke", "role_create", "role_update", "role_delete", "kick", "mute", "unmute", "ban", "unban", "rename", "name_reset",
-			"message_delete", "message_lookup", "staff_message", "report_view", "report_close", "player_inspect",
+			"message_delete", "message_lookup", "chat_log_view", "staff_message", "report_view", "report_close", "player_inspect",
 			"device_reveal", "connection_lookup", "anticheat_review", "announcement", "setting_update", "token_mint", "token_rotate",
 			"token_revoke", "sa_create", "sa_update", "sa_grant", "sa_revoke", "sa_disable", "sa_enable", "password_reset",
 			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "text_term_add", "text_term_update",
@@ -795,6 +801,33 @@ namespace GenOnlineService.Portal.Client
 			}
 			return String.Join("&", parts);
 		}
+	}
+
+	public sealed record PortalChatLogSender
+	{
+		public long Id { get; init; }
+		public string Name { get; init; } = "";
+		public string? Tag { get; init; }
+	}
+
+	// A deleted line keeps its text for staff, like the cases do
+	public sealed record PortalChatLogLine
+	{
+		public long Id { get; init; }
+		public string Conversation { get; init; } = "";
+		public PortalChatLogSender Sender { get; init; } = new PortalChatLogSender();
+
+		// Match lines only: everyone, allies or self
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Scope { get; init; }
+		public string Text { get; init; } = "";
+		public DateTime CreatedAt { get; init; }
+		public bool Deleted { get; init; }
+	}
+
+	public sealed record PortalChatLogPage
+	{
+		public IReadOnlyList<PortalChatLogLine> Messages { get; init; } = [];
 	}
 
 	public sealed record PortalAuditPage

@@ -1,0 +1,318 @@
+@page "/admin/chat"
+@inject PortalApi Api
+@inject NavigationManager Navigation
+@inject ToastService Toasts
+
+<PageTitle>Chat logs · Generals Online</PageTitle>
+
+<PageHeader Description="The chat of public channels, lobbies and matches, newest first. Direct and group messages are never shown. Every read is written to the audit log. Times are UTC.">
+    <Title>Chat logs</Title>
+</PageHeader>
+
+@if (!Session.Can(PortalPermissions.ChatLogs))
+{
+    <Refusal Title="Chat logs" Description="Reading chat logs needs the chat.logs permission." Icon="lock" />
+}
+else
+{
+    <BbCard Class="go-filtered">
+        <BbCardContent Class="bb:pt-6 bb:space-y-4">
+            <form class="go-audit-filters" @onsubmit="Apply" data-testid="chat-filters">
+                <div class="bb:space-y-2">
+                    <BbLabel For="chat-kind">Conversation</BbLabel>
+                    <BbNativeSelect TValue="string" Id="chat-kind" @bind-Value="m_kind" Class="bb:w-full">
+                        <option value="">Any public chat</option>
+                        <option value="channel">Channel</option>
+                        <option value="lobby">Lobby</option>
+                        <option value="match">Match</option>
+                    </BbNativeSelect>
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="chat-id">Channel, lobby or match id</BbLabel>
+                    <BbInput Id="chat-id" @bind-Value="m_id" UpdateTiming="UpdateTiming.Immediate" Placeholder="Id…" inputmode="numeric" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="chat-player">Player</BbLabel>
+                    <BbInput Id="chat-player" @bind-Value="m_player" UpdateTiming="UpdateTiming.Immediate" Placeholder="Name, Name#tag or id…" autocomplete="off" spellcheck="false" />
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="chat-from">From (UTC)</BbLabel>
+                    <BbInput Id="chat-from" Type="InputType.Date" @bind-Value="m_from" />
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="chat-to">To (UTC)</BbLabel>
+                    <BbInput Id="chat-to" Type="InputType.Date" @bind-Value="m_to" />
+                </div>
+                <div class="go-audit-filter-buttons">
+                    <BbButton Type="ButtonType.Submit" Size="ButtonSize.Small" data-testid="chat-apply">
+                        <LucideIcon Name="list-filter" Class="bb:h-4 bb:w-4" />
+                        Filter
+                    </BbButton>
+                    @if (m_filtered)
+                    {
+                        <BbButton Variant="ButtonVariant.Ghost" Size="ButtonSize.Small" OnClick="Clear">Clear</BbButton>
+                    }
+                </div>
+            </form>
+
+            @if (m_error != null)
+            {
+                <BbAlert Variant="AlertVariant.Danger">
+                    <Icon>
+                        <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+                    </Icon>
+                    <ChildContent>
+                        <BbAlertTitle>The chat log could not load</BbAlertTitle>
+                        <BbAlertDescription>@m_error</BbAlertDescription>
+                    </ChildContent>
+                </BbAlert>
+            }
+            else if (!m_filtered)
+            {
+                <BbEmpty Size="EmptySize.Small" Title="Pick what to read" Description="Name a conversation, a player or both. Reading is audited.">
+                    <Icon>
+                        <LucideIcon Name="messages-square" />
+                    </Icon>
+                </BbEmpty>
+            }
+            else if (m_lines == null)
+            {
+                <BbSkeleton Class="go-skeleton-panel" />
+            }
+            else
+            {
+                <BbDataTable TData="PortalChatLogLine" Data="@m_lines" ShowToolbar="false" ShowPagination="false" AriaLabel="Chat log">
+                    <Columns>
+                        <BbDataTableColumn TData="PortalChatLogLine" TValue="DateTime" Property="@(l => l.CreatedAt)" Header="Time" CellClass="go-nowrap">
+                            <CellTemplate Context="line">
+                                <When Value="@line.CreatedAt" Exact="true" />
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalChatLogLine" TValue="string" Property="@(l => l.Conversation)" Header="Conversation" CellClass="go-nowrap">
+                            <CellTemplate Context="line">
+                                <BbLink Href="@PortalRoutes.ChatLogsOf(line.Conversation)">@line.Conversation</BbLink>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalChatLogLine" TValue="string" Property="@(l => l.Sender.Name)" Header="Player">
+                            <CellTemplate Context="line">
+                                <BbLink Href="@PortalRoutes.PlayerPage(line.Sender.Id)">@NameOf(line.Sender)</BbLink>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalChatLogLine" TValue="string" Property="@(l => l.Scope)" Header="Sent to">
+                            <CellTemplate Context="line">
+                                @if (line.Scope != null)
+                                {
+                                    <BbBadge Variant="BadgeVariant.Outline">@line.Scope</BbBadge>
+                                }
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalChatLogLine" TValue="string" Property="@(l => l.Text)" Header="Text">
+                            <CellTemplate Context="line">
+                                <span class="@(line.Deleted ? "bb:text-muted-foreground bb:line-through" : "")" style="white-space: pre-wrap; overflow-wrap: anywhere">@line.Text</span>
+                                @if (line.Deleted)
+                                {
+                                    <BbBadge Variant="BadgeVariant.Outline">deleted</BbBadge>
+                                }
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        @if (Session.Can(PortalPermissions.ChatDeleteAny))
+                        {
+                            <BbDataTableColumn TData="PortalChatLogLine" TValue="string" Property="@(l => "")" Header="">
+                                <CellTemplate Context="line">
+                                    @if (!line.Deleted)
+                                    {
+                                        <BbButton Variant="ButtonVariant.Ghost" Size="ButtonSize.Small" OnClick="@(() => m_deleting = line)" data-testid="chat-delete">
+                                            <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4" />
+                                            Delete
+                                        </BbButton>
+                                    }
+                                </CellTemplate>
+                            </BbDataTableColumn>
+                        }
+                    </Columns>
+                    <EmptyTemplate>
+                        <BbEmpty Size="EmptySize.Small" Title="Nothing on record" Description="No line matches these filters. Chat is kept 30 days.">
+                            <Icon>
+                                <LucideIcon Name="messages-square" />
+                            </Icon>
+                        </BbEmpty>
+                    </EmptyTemplate>
+                </BbDataTable>
+
+                @if (m_more)
+                {
+                    <div class="bb:flex bb:justify-center">
+                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="MoreAsync" Loading="@m_loading" data-testid="chat-more">Load more</BbButton>
+                    </div>
+                }
+            }
+        </BbCardContent>
+    </BbCard>
+
+    <BbDialog Open="@(m_deleting != null)" OpenChanged="@(open => { if (!open) m_deleting = null; })">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>Delete this line?</BbDialogTitle>
+                <BbDialogDescription>Players see a removed message. The text stays here for staff and the change is audited.</BbDialogDescription>
+            </BbDialogHeader>
+            <p class="bb:text-sm bb:rounded-md bb:border bb:p-3" style="white-space: pre-wrap; overflow-wrap: anywhere">@m_deleting?.Text</p>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_deleting = null)" Disabled="@m_busy">Cancel</BbButton>
+                <BbButton Variant="ButtonVariant.Destructive" OnClick="DeleteAsync" Loading="@m_busy" data-testid="chat-delete-confirm">Delete</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
+}
+
+@code {
+    private const int PerPage = 50;
+
+    [SupplyParameterFromQuery(Name = "conversation")]
+    public string? Conversation { get; set; }
+
+    [SupplyParameterFromQuery(Name = "player")]
+    public string? Player { get; set; }
+
+    [SupplyParameterFromQuery(Name = "from")]
+    public string? From { get; set; }
+
+    [SupplyParameterFromQuery(Name = "to")]
+    public string? To { get; set; }
+
+    private string? m_kind;
+    private string? m_id;
+    private string? m_player;
+    private string? m_from;
+    private string? m_to;
+    private string? m_error;
+    private bool m_filtered;
+    private bool m_more;
+    private bool m_loading;
+    private bool m_busy;
+    private long? m_userID;
+    private string? m_conversation;
+    private List<PortalChatLogLine>? m_lines;
+    private PortalChatLogLine? m_deleting;
+
+    private PortalSessionInfo Session => Api.Session!;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        (m_kind, m_id) = SplitConversation(Conversation);
+        m_player = String.IsNullOrWhiteSpace(Player) ? null : Player.Trim();
+        m_from = Day(From);
+        m_to = Day(To);
+        m_conversation = m_kind == "" || m_id == null ? null : m_kind + ":" + m_id;
+        m_filtered = m_conversation != null || m_player != null;
+        m_error = null;
+        m_lines = null;
+        m_more = false;
+        if (Session.Can(PortalPermissions.ChatLogs) && m_filtered)
+        {
+            await LoadAsync(null);
+        }
+    }
+
+    // channel:5 splits into its kind and id, anything else leaves the conversation open
+    private static (string Kind, string? Id) SplitConversation(string? conversation)
+    {
+        int separator = conversation?.IndexOf(':') ?? -1;
+        return separator > 0 ? (conversation![..separator], conversation[(separator + 1)..]) : ("", null);
+    }
+
+    private static string? Day(string? text) => DateTime.TryParseExact(text?.Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _) ? text!.Trim() : null;
+
+    private static string NameOf(PortalChatLogSender sender) => sender.Tag == null ? sender.Name : sender.Name + "#" + sender.Tag;
+
+    // A number is an id, a name or Name#tag must find exactly one player
+    private async Task<bool> ResolvePlayerAsync()
+    {
+        m_userID = null;
+        if (m_player == null)
+        {
+            return true;
+        }
+        if (long.TryParse(m_player, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long id) && id > 0)
+        {
+            m_userID = id;
+            return true;
+        }
+
+        PortalAnswer<PortalPlayerPage> found = await Api.SearchPlayersAsync(m_player, 0, 10, CancellationToken.None);
+        if (!found.Ok)
+        {
+            m_error = PortalText.Error(found.Error);
+            return false;
+        }
+        PortalPlayerRow[] matches = found.Value!.Players.Where(p => String.Equals(p.Name, m_player, StringComparison.OrdinalIgnoreCase) || String.Equals(p.Name + "#" + p.Tag, m_player, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (matches.Length != 1)
+        {
+            m_error = matches.Length == 0 ? "No player has that name. Use a whole name, Name#tag or an id." : "Several players have that name. Use Name#tag or an id.";
+            return false;
+        }
+        m_userID = matches[0].Id;
+        return true;
+    }
+
+    private async Task LoadAsync(long? before)
+    {
+        if (before == null && !await ResolvePlayerAsync())
+        {
+            m_lines = [];
+            return;
+        }
+
+        m_loading = true;
+        PortalAnswer<PortalChatLogPage> answer = await Api.GetChatLogAsync(m_conversation, m_userID, m_from, m_to, before, PerPage, CancellationToken.None);
+        m_loading = false;
+        if (!answer.Ok)
+        {
+            m_error = PortalText.Error(answer.Error);
+            m_lines = [];
+            return;
+        }
+
+        IReadOnlyList<PortalChatLogLine> page = answer.Value!.Messages;
+        m_lines = before == null ? page.ToList() : [.. m_lines ?? [], .. page];
+        m_more = page.Count == PerPage;
+    }
+
+    private Task MoreAsync() => m_lines is { Count: > 0 } shown ? LoadAsync(shown[^1].Id) : Task.CompletedTask;
+
+    private void Apply()
+    {
+        string? id = String.IsNullOrWhiteSpace(m_id) ? null : m_id.Trim();
+        string? conversation = String.IsNullOrEmpty(m_kind) || id == null ? null : m_kind + ":" + id;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(PortalRoutes.ChatLogsPage, new Dictionary<string, object?>
+        {
+            ["conversation"] = conversation,
+            ["player"] = String.IsNullOrWhiteSpace(m_player) ? null : m_player.Trim(),
+            ["from"] = Day(m_from),
+            ["to"] = Day(m_to)
+        }));
+    }
+
+    private void Clear() => Navigation.NavigateTo(PortalRoutes.ChatLogsPage);
+
+    private async Task DeleteAsync()
+    {
+        if (m_deleting is not PortalChatLogLine line)
+        {
+            return;
+        }
+
+        m_busy = true;
+        PortalOutcome outcome = await Api.DeleteMessageAsync(line.Id.ToString(System.Globalization.CultureInfo.InvariantCulture), null);
+        m_busy = false;
+        m_deleting = null;
+        if (outcome.Ok)
+        {
+            m_lines = m_lines?.Select(l => l.Id == line.Id ? l with { Deleted = true } : l).ToList();
+            Toasts.Success("The line is deleted and in the audit log.", "Done");
+        }
+        else
+        {
+            Toasts.Error(PortalText.Error(outcome.Error), "Not deleted");
+        }
+    }
+}

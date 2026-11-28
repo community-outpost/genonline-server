@@ -103,6 +103,7 @@ namespace GenOnlineService.Rest
 			(Permissions.RulesManage, "Moderation", "Manage automated rules", "Edit, preview and sweep the rules that flag, kick, mute and ban players."),
 			(Permissions.TextRulesManage, "Moderation", "Manage text rules", "Change the word lists, exceptions and rules of the name and chat checks."),
 			(Permissions.ChatDeleteAny, "Chat", "Delete any message", "Delete a message of any player."),
+			(Permissions.ChatLogs, "Chat", "Read chat logs", "Read the chat of public channels, lobbies and matches, never direct or group messages. Every read is audited."),
 			(Permissions.ChatMessageAnyone, "Chat", "Message anyone", "Write to a player who blocked or muted direct messages."),
 			(Permissions.ChatStaffBadge, "Chat", "Staff badge in chat", "Show the role badge next to the name in chat."),
 			(Permissions.ChannelsManage, "Chat", "Manage channels", "Create and change chat channels."),

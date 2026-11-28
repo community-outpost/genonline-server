@@ -14,6 +14,13 @@
                 Match @match
             </BbButton>
         }
+        @if (Api.Session!.Can(PortalPermissions.ChatLogs))
+        {
+            <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Href="@PortalRoutes.ChatLogsOf("lobby:" + Id)" data-testid="lobby-chat-log">
+                <LucideIcon Name="messages-square" Class="bb:h-4 bb:w-4" />
+                Chat log
+            </BbButton>
+        }
         <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Href="@PortalRoutes.LivePage">
             <LucideIcon Name="activity" Class="bb:h-4 bb:w-4" />
             All lobbies

@@ -31,6 +31,7 @@ namespace GenOnlineService
 		public const string ModerationMute = "moderation.mute";
 		public const string ModerationRename = "moderation.rename";
 		public const string ChatDeleteAny = "chat.delete_any";
+		public const string ChatLogs = "chat.logs";
 		public const string ChatMessageAnyone = "chat.message_anyone";
 		public const string ChatStaffBadge = "chat.staff_badge";
 		public const string NamesProtected = "names.protected";
@@ -84,7 +85,7 @@ namespace GenOnlineService
 
 		public static readonly IReadOnlySet<string> Human = new HashSet<string>(StringComparer.Ordinal)
 		{
-			ModerationKick, ModerationBan, ModerationMute, ModerationRename, ChatDeleteAny, ChatMessageAnyone, ChatStaffBadge, NamesProtected, NamesUnrestricted, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage, AuditRead, SettingsManage, AnticheatReview, PlayersInspect, AccountsSupport, TextRulesManage, RulesManage, AppealsReview, FlagsManage, PlaylistsManage, LaddersManage, ChannelsManage, BroadcastsManage,
+			ModerationKick, ModerationBan, ModerationMute, ModerationRename, ChatDeleteAny, ChatLogs, ChatMessageAnyone, ChatStaffBadge, NamesProtected, NamesUnrestricted, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage, AuditRead, SettingsManage, AnticheatReview, PlayersInspect, AccountsSupport, TextRulesManage, RulesManage, AppealsReview, FlagsManage, PlaylistsManage, LaddersManage, ChannelsManage, BroadcastsManage,
 			LocalApiMatch, LocalApiStats, LocalApiEvents, LocalApiInterest, LocalApiCameraRead, LocalApiChatRead, LocalApiChatSend, LocalApiQuery, LocalApiCameraControl, LocalApiReplayControl, LocalApiObserve, LocalApiLobbyRead, LocalApiLobbyControl
 		};
 

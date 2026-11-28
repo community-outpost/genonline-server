@@ -104,6 +104,15 @@
                                 </BbSidebarMenuButton>
                             </BbSidebarMenuItem>
                         }
+                        @if (staff.Can(PortalPermissions.ChatLogs))
+                        {
+                            <BbSidebarMenuItem>
+                                <BbSidebarMenuButton Href="@PortalRoutes.ChatLogsPage" Tooltip="Chat logs">
+                                    <LucideIcon Name="messages-square" Class="bb:h-4 bb:w-4" />
+                                    <span>Chat logs</span>
+                                </BbSidebarMenuButton>
+                            </BbSidebarMenuItem>
+                        }
                     </BbSidebarMenu>
                 </BbSidebarGroup>
                 <BbSidebarGroup>

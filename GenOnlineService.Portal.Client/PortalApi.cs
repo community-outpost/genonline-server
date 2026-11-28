@@ -219,6 +219,20 @@ namespace GenOnlineService.Portal.Client
 			return SendAsync(HttpMethod.Post, $"{PortalRoutes.Players}/{userID}/two_factor_reset", new PortalReasonRequest { Reason = reason });
 		}
 
+		// Newest first, the next page continues before the last id, and the host audits every read
+		public Task<PortalAnswer<PortalChatLogPage>> GetChatLogAsync(string? conversation, long? userID, string? from, string? to, long? beforeID, int limit, CancellationToken cancellationToken)
+		{
+			var query = new List<string> { "limit=" + limit };
+			foreach ((string name, string? value) in new[] { ("conversation", conversation), ("user_id", userID?.ToString(System.Globalization.CultureInfo.InvariantCulture)), ("from", from), ("to", to), ("before_id", beforeID?.ToString(System.Globalization.CultureInfo.InvariantCulture)) })
+			{
+				if (value != null)
+				{
+					query.Add(name + "=" + Uri.EscapeDataString(value));
+				}
+			}
+			return GetAsync<PortalChatLogPage>(PortalRoutes.ChatLogs + "?" + String.Join("&", query), cancellationToken);
+		}
+
 		public Task<PortalOutcome> DeleteMessageAsync(string messageID, string? reason)
 		{
 			return SendAsync(HttpMethod.Delete, $"{PortalRoutes.Messages}/{Uri.EscapeDataString(messageID)}", new PortalReasonRequest { Reason = reason });

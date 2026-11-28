@@ -7,6 +7,13 @@
 <PageHeader Description="@(m_match is PortalMatch shown ? $"{shown.Name} on {shown.Map.Name}{(shown.Map.Official ? "" : " (unofficial map)")}" : "A match, running or finished.")">
     <Title>Match @Id</Title>
     <Actions>
+        @if (Api.Session!.Can(PortalPermissions.ChatLogs))
+        {
+            <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" Href="@PortalRoutes.ChatLogsOf("match:" + Id)" data-testid="match-chat-log">
+                <LucideIcon Name="messages-square" Class="bb:h-4 bb:w-4" />
+                Chat log
+            </BbButton>
+        }
         <BbButton Variant="ButtonVariant.Ghost" Size="ButtonSize.Small" Href="@PortalRoutes.MatchesPage">
             <LucideIcon Name="arrow-left" Class="bb:h-4 bb:w-4" />
             All matches

@@ -332,7 +332,7 @@ namespace GenOnlineService.Realtime
 		}
 
 		// The wire channel id of a stored row, a direct message is dm:<the other user> for either party
-		private static string ConversationIDOf(ChatMessage row, Int64 viewer)
+		internal static string ConversationIDOf(ChatMessage row, Int64 viewer)
 		{
 			return row.Kind switch
 			{
