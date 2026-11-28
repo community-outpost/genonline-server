@@ -46,8 +46,27 @@ public class AnticheatModuleReport
 
 public readonly record struct AcModuleReport(string ModuleName, string ModulePath, int ModuleSize);
 
+// Directories are compared without the drive letter, lower case with forward slashes, as the hub cleans module paths
 internal static class AntiCheatModuleAllowList
 {
+	// Windows, its side by side store and the driver store, where every GPU, audio and input driver loads from
+	public static readonly IReadOnlyList<string> DefaultDirectories =
+	[
+		"/windows/system32",
+		"/windows/syswow64",
+		"/windows/winsxs",
+		"/windows/microsoft.net",
+	];
+
+	// Overlays that hook the game, each only from the folder its vendor installs it to
+	public static readonly IReadOnlyList<(string Module, string DirectoryPart)> DefaultOverlays =
+	[
+		("gameoverlayrenderer.dll", "/steam"),
+		("discordhook.dll", "/discord/"),
+		("rtsshooks.dll", "/rivatuner statistics server"),
+		("graphics-hook32.dll", "/obs-studio/"),
+	];
+
 	private sealed class Snapshot
 	{
 		public string[] Modules = Array.Empty<string>();
@@ -94,37 +113,46 @@ internal static class AntiCheatModuleAllowList
 		IConfiguration acSettings = config.GetSection("AC");
 		Snapshot snapshot = new Snapshot
 		{
-			Modules = acSettings.GetSection("allowed_modules").Get<List<string>>()?.ToArray() ?? Array.Empty<string>(),
-			Paths = acSettings.GetSection("allowed_module_paths").Get<List<string>>()?.ToArray() ?? Array.Empty<string>()
+			Modules = acSettings.GetSection("allowed_modules").Get<List<string>>()?.Select(m => m.ToLowerInvariant()).ToArray() ?? Array.Empty<string>(),
+			Paths = acSettings.GetSection("allowed_module_paths").Get<List<string>>()?.Select(DirectoryOf).ToArray() ?? Array.Empty<string>()
 		};
 
 		s_snapshot = snapshot;
 		return snapshot;
 	}
 
-	public static bool IsAllowed(string moduleFilename, string modulePath)
+	// c:/windows/system32 and d:/windows/system32 both become /windows/system32
+	private static string DirectoryOf(string path)
 	{
-		Snapshot? snapshot = GetSnapshot();
+		string clean = path.Replace('\\', '/').ToLowerInvariant().TrimEnd('/');
+		return clean.Length >= 2 && clean[1] == ':' ? clean.Substring(2) : clean;
+	}
+
+	private static bool IsIn(string directory, string allowed) =>
+		directory == allowed || directory.StartsWith(allowed + "/", StringComparison.Ordinal);
+
+	public static bool IsAllowed(string moduleFilename, string modulePath) => IsAllowed(moduleFilename, modulePath, GetSnapshot());
+
+	private static bool IsAllowed(string moduleFilename, string modulePath, Snapshot? snapshot)
+	{
+		string module = moduleFilename.ToLowerInvariant();
+		string directory = DirectoryOf(modulePath);
+		if ((directory + "/").Contains("/../", StringComparison.Ordinal) || (directory + "/").Contains("/./", StringComparison.Ordinal))
+		{
+			return false;
+		}
+		if (DefaultDirectories.Any(d => IsIn(directory, d)) || DefaultOverlays.Any(o => o.Module == module && (directory + "/").Contains(o.DirectoryPart, StringComparison.Ordinal)))
+		{
+			return true;
+		}
 		if (snapshot == null)
 		{
 			return false;
 		}
-
-		if (Array.IndexOf(snapshot.Modules, moduleFilename) >= 0)
-		{
-			return true;
-		}
-
-		foreach (string allowedDir in snapshot.Paths)
-		{
-			if (modulePath.StartsWith(allowedDir))
-			{
-				return true;
-			}
-		}
-
-		return false;
+		return Array.IndexOf(snapshot.Modules, module) >= 0 || snapshot.Paths.Any(d => IsIn(directory, d));
 	}
+
+	internal static bool IsAllowedByDefault(string moduleFilename, string modulePath) => IsAllowed(moduleFilename, modulePath, null);
 }
 
 public class AnticheatNewAccountGame
