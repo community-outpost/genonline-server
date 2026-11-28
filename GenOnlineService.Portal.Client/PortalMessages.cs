@@ -142,6 +142,8 @@ namespace GenOnlineService.Portal.Client
 		public const string FlagsManage = "flags.manage";
 		public const string PlaylistsManage = "playlists.manage";
 		public const string RulesManage = "rules.manage";
+		public const string RulesDelete = "rules.delete";
+		public const string SanctionsDelete = "sanctions.delete";
 		public const string ChannelsManage = "channels.manage";
 	}
 
@@ -225,6 +227,8 @@ namespace GenOnlineService.Portal.Client
 			"rule_version" => "Automated rule saved",
 			"rule_update" => "Automated rule changed",
 			"rule_archive" => "Automated rule archived",
+			"rule_delete" => "Automated rule deleted",
+			"sanction_delete" => "Sanction deleted",
 			"rule_restore" => "Automated rule restored",
 			"rule_breaker" => "Automated rule fell back to Flag",
 			"rule_match_review" => "Rule match reviewed",
@@ -243,7 +247,7 @@ namespace GenOnlineService.Portal.Client
 			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "text_term_add", "text_term_update",
 			"text_term_remove", "text_exception_add", "text_exception_remove", "text_workflow_update", "text_rules_seed", "investigate_search", "flag_create", "flag_update", "flag_archive", "flag_restore", "flags_publish", "flags_rollback", "flags_import", "flags_reset",
 			"playlist_create", "playlist_update", "playlist_delete", "playlist_map_change",
-			"rule_create", "rule_version", "rule_update", "rule_archive", "rule_restore", "rule_breaker", "rule_match_review", "rule_preview", "rule_sweep_start", "rule_sweep_cancel"
+			"rule_create", "rule_version", "rule_update", "rule_archive", "rule_restore", "rule_breaker", "rule_match_review", "rule_preview", "rule_sweep_start", "rule_sweep_cancel", "rule_delete", "sanction_delete"
 		];
 	}
 

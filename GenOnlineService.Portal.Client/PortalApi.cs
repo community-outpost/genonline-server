@@ -197,6 +197,17 @@ namespace GenOnlineService.Portal.Client
 			return SendAsync(HttpMethod.Delete, $"{PortalRoutes.Sanctions}/{sanctionID}", new PortalReasonRequest { Reason = reason });
 		}
 
+		// A real delete of the record, where lifting only ends it
+		public Task<PortalOutcome> DeleteSanctionAsync(long sanctionID, string? reason)
+		{
+			return SendAsync(HttpMethod.Delete, $"{PortalRoutes.Sanctions}/{sanctionID}/record", new PortalReasonRequest { Reason = reason });
+		}
+
+		public Task<PortalOutcome> DeleteRuleAsync(long id)
+		{
+			return SendAsync(HttpMethod.Delete, $"{PortalRoutes.Rules}/{id}", new { });
+		}
+
 		public Task<PortalOutcome> RenamePlayerAsync(long userID, string? name, string? reason)
 		{
 			return SendAsync(HttpMethod.Patch, $"{PortalRoutes.Players}/{userID}", new PortalRenameRequest { Name = name, Reason = reason });

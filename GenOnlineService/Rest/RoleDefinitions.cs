@@ -101,6 +101,8 @@ namespace GenOnlineService.Rest
 			(Permissions.AppealsReview, "Moderation", "Review appeals", "Read the appeals of players. Deciding one that lifts or shortens a ban or mute also needs the ban or mute permission."),
 			(Permissions.AnticheatReview, "Moderation", "Review anti-cheat", "Read the anti-cheat review lists and mark rows reviewed."),
 			(Permissions.RulesManage, "Moderation", "Manage automated rules", "Edit, preview and sweep the rules that flag, kick, mute and ban players."),
+			(Permissions.RulesDelete, "Moderation", "Delete automated rules", "Remove an automated rule for good, with its versions and recorded matches."),
+			(Permissions.SanctionsDelete, "Moderation", "Delete sanctions", "Remove a sanction record for good, with its appeal and evidence. An active mute or ban ends first."),
 			(Permissions.TextRulesManage, "Moderation", "Manage text rules", "Change the word lists, exceptions and rules of the name and chat checks."),
 			(Permissions.ChatDeleteAny, "Chat", "Delete any message", "Delete a message of any player."),
 			(Permissions.ChatLogs, "Chat", "Read chat logs", "Read the chat of public channels, lobbies and matches, never direct or group messages. Every read is audited."),

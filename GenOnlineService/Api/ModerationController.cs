@@ -140,6 +140,22 @@ namespace GenOnlineService.Api
 			return ApiResults.NoContent(await SanctionActions.LiftAsync(m_dbFactory, Me, sanctionID, body?.Reason, RequirePermissionAsync));
 		}
 
+		[AllowSignInCookie]
+		[EndpointSummary("Deletes a sanction record with its appeal and evidence, after ending it when it is active.")]
+		[ProducesResponseType(StatusCodes.Status204NoContent)]
+		[ApiRequestBody(typeof(ReasonRequest))]
+		[ApiPermission(Permissions.SanctionsDelete)]
+		[HttpDelete("~/api/v1/sanctions/{sanctionID:long}/record")]
+		public async Task<IActionResult> DeleteSanction(long sanctionID)
+		{
+			(ReasonRequest? body, Failure? malformed) = await ReadBodyAsync<ReasonRequest>();
+			if (malformed != null)
+			{
+				return ApiResults.Fail(malformed.Value);
+			}
+			return ApiResults.NoContent(await SanctionActions.DeleteAsync(m_dbFactory, SanctionActions.ApiActorOf(Me), sanctionID, body?.Reason, S3CredentialManager.Store, RequirePermissionAsync));
+		}
+
 		// Kept until 90 days after the sanction ends; needs the permission of the sanction's type
 		[AllowSignInCookie]
 		[EndpointSummary("Keeps a match's screenshots of the sanctioned player as evidence for a sanction.")]

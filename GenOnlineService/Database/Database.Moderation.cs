@@ -110,6 +110,8 @@ public static class ModerationActions
 	public const string AppealOpen = "appeal_open";
 	public const string AppealDecide = "appeal_decide";
 
+	public const string SanctionDelete = "sanction_delete";
+
 	public const string PlaylistCreate = "playlist_create";
 	public const string PlaylistUpdate = "playlist_update";
 	public const string PlaylistDelete = "playlist_delete";
@@ -264,8 +266,9 @@ namespace Database
 		public const int SanctionRetentionYears = 2;
 		public const int AuditLogRetentionYears = 2;
 
-		// A sanction ended when it was lifted or expired, whichever came first; an active permanent ban never ends. Nothing
-		// refers to a sanction row by key: audit rows only name its id in their details text, and a report it answered is purged sooner
+		// A sanction ended when it was lifted or expired, whichever came first; an active permanent ban never ends. No foreign key
+		// refers to a sanction row, but appeals, evidence, held identifier hashes and case decisions carry its id, and audit rows
+		// only name it in their details text. DeleteSanctionRecord removes all of those, and this purge removes the appeals only.
 		public static async Task<(int Sanctions, int AuditLog)> PurgeExpired(AppDbContext db, DateTime utcNow, CancellationToken cancellationToken = default)
 		{
 			DateTime sanctionCutoff = utcNow.AddYears(-SanctionRetentionYears);
@@ -571,6 +574,56 @@ namespace Database
 			}
 			return active;
 		}
+
+		// Removes one sanction with its appeal, evidence rows and copies and held identifier hashes, unlinks the cases that decided it
+		// and keeps what the row held in one audit row, or removes nothing and returns false when evidence needs a store that is not there
+		public static async Task<bool> DeleteSanctionRecord(AppDbContext db, GenOnlineService.Service.IMatchDataStore? store, Int64 sanctionID, string reason, ModerationActor actor)
+		{
+			Sanction? sanction = await db.Sanctions.AsNoTracking().FirstOrDefaultAsync(s => s.ID == sanctionID);
+			if (sanction == null)
+			{
+				return true;
+			}
+			if (!await CanDeleteSanctionRecord(db, store, sanctionID))
+			{
+				return false;
+			}
+
+			await using var transaction = await db.Database.BeginTransactionAsync();
+			bool appeal = await db.Appeals.Where(a => a.SanctionID == sanctionID).ExecuteDeleteAsync() > 0;
+			(int evidence, IReadOnlyList<string> released) = await SanctionEvidenceStore.ReleaseAsync(db, sanctionID);
+			int hashes = await db.IdentifierHashes.Where(h => h.SanctionID == sanctionID).ExecuteDeleteAsync();
+			int cases = await db.ModerationCases.Where(c => c.SanctionID == sanctionID).ExecuteUpdateAsync(set => set.SetProperty(c => c.SanctionID, (Int64?)null));
+			await db.Sanctions.Where(s => s.ID == sanctionID).ExecuteDeleteAsync();
+
+			db.AuditLog.Add(UserEntry(actor, ModerationActions.SanctionDelete, sanction.UserID, reason, new
+			{
+				type = sanction.Type,
+				sanction_id = sanction.ID,
+				original_reason = sanction.Reason,
+				created_at = sanction.CreatedAt,
+				expires_at = sanction.ExpiresAt,
+				lifted_at = sanction.LiftedAt,
+				appeal,
+				evidence,
+				identifier_hashes = hashes,
+				cases_unlinked = cases
+			}, DateTime.UtcNow));
+			await db.SaveChangesAsync();
+			await transaction.CommitAsync();
+			db.ChangeTracker.Clear();
+
+			// the copies go only once the rows are gone for good, a copy left behind is removed by the evidence purge
+			foreach (string key in released)
+			{
+				await store!.DeleteAsync(key);
+			}
+			return true;
+		}
+
+		// Evidence copies live in the match data store, so a sanction that holds any needs that store to be deleted
+		public static async Task<bool> CanDeleteSanctionRecord(AppDbContext db, GenOnlineService.Service.IMatchDataStore? store, Int64 sanctionID) =>
+			store != null || !await db.SanctionEvidence.AnyAsync(e => e.SanctionID == sanctionID);
 
 		// One row per actor and player inside the window, written before the personal data is read, true when a row was written
 		public static async Task<bool> LogInspection(AppDbContext db, ModerationActor actor, Int64 target, DateTime now, TimeSpan window)

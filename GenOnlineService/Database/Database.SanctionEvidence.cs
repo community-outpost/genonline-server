@@ -198,6 +198,23 @@ namespace Database
 			return new EvidenceResult(EvidenceOutcome.Held, held, missing);
 		}
 
+		// Removes the evidence rows of the sanction and returns the copies no other sanction holds, for the caller to delete after its commit
+		public static async Task<(int Rows, IReadOnlyList<string> Released)> ReleaseAsync(AppDbContext db, Int64 sanctionID, CancellationToken cancellationToken = default)
+		{
+			List<string> keys = await db.SanctionEvidence.AsNoTracking().Where(e => e.SanctionID == sanctionID).Select(e => e.ObjectKey).Distinct().ToListAsync(cancellationToken);
+			var released = new List<string>();
+			foreach (string key in keys)
+			{
+				if (!await db.SanctionEvidence.AsNoTracking().AnyAsync(e => e.ObjectKey == key && e.SanctionID != sanctionID, cancellationToken))
+				{
+					released.Add(key);
+				}
+			}
+
+			int rows = await db.SanctionEvidence.Where(e => e.SanctionID == sanctionID).ExecuteDeleteAsync(cancellationToken);
+			return (rows, released);
+		}
+
 		// Deletes the copies whose sanctions ended more than 90 days ago or no longer exist. A copy another sanction still
 		// holds stays: that is checked right before each delete, so a hold recorded while the purge runs keeps its copy (and a
 		// hold that finds its shared copy gone counts it missing). The object goes before its row, so a failed delete is

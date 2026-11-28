@@ -301,6 +301,50 @@ namespace GenOnlineService.Realtime
 				return Result.NotFound("sanction");
 			}
 
+			await LiftAndReloadAsync(db, sanction, reason, actor);
+			return Result.Success();
+		}
+
+		// Removes a mute, ban or kick record of this environment with its appeal and evidence, ending an active mute or ban first as a lift does
+		public static async Task<Result<Empty>> DeleteAsync(IDbContextFactory<AppDbContext> dbFactory, Database.ModerationActor actor, Int64 sanctionID, string? reason, GenOnlineService.Service.IMatchDataStore? store, Func<string, Task<Failure?>> requirePermission)
+		{
+			Int64 me = actor.UserID ?? throw new ArgumentException("Deleting a sanction needs the acting account", nameof(actor));
+			if (await requirePermission(Permissions.SanctionsDelete) is Failure denied)
+			{
+				return denied;
+			}
+
+			await using AppDbContext db = await dbFactory.CreateDbContextAsync();
+			Sanction? sanction = sanctionID > 0 ? await Database.Moderation.GetSanction(db, sanctionID) : null;
+			if (sanction == null || sanction.Source != AuthoritySources.Local)
+			{
+				return Result.NotFound("sanction");
+			}
+
+			Failure? failure = CheckModeration(me, sanction.UserID, reason, reasonRequired: true);
+			if (failure != null)
+			{
+				return failure.Value;
+			}
+
+			// a delete refused for a missing store must not end the sanction
+			if (!await Database.Moderation.CanDeleteSanctionRecord(db, store, sanction.ID))
+			{
+				return Result.Fail(GenOnlineService.Rest.RestCodes.ServiceUnavailable, new { What = "match_data" });
+			}
+
+			if (sanction.Type != SanctionTypes.Kick && sanction.LiftedAt == null && (sanction.ExpiresAt == null || sanction.ExpiresAt > DateTime.UtcNow))
+			{
+				await LiftAndReloadAsync(db, sanction, reason, actor);
+			}
+
+			return await Database.Moderation.DeleteSanctionRecord(db, store, sanction.ID, reason!, actor)
+				? Result.Success()
+				: Result.Fail(GenOnlineService.Rest.RestCodes.ServiceUnavailable, new { What = "match_data" });
+		}
+
+		private static async Task LiftAndReloadAsync(AppDbContext db, Sanction sanction, string? reason, Database.ModerationActor actor)
+		{
 			await Database.Moderation.LiftSanction(db, sanction.ID, reason ?? String.Empty, actor);
 
 			// a ban lets the player connect again without waiting for the reload tick, a mute leaves the lobby view current
@@ -315,7 +359,6 @@ namespace GenOnlineService.Realtime
 				}
 				await AnnounceMuteAsync(sanction.UserID, remaining == null ? null : AccessControl.MutedUntilOf(remaining));
 			}
-			return Result.Success();
 		}
 
 		// The lobby the player is in on this copy hears the change, other copies show it from their next lobby state, and the CLI or a test host has no lobbies to tell

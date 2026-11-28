@@ -61,6 +61,10 @@ namespace GenOnlineService
 
 		public const string AppealsReview = "appeals.review";
 
+		// A real delete, which only owner and admin hold, where lifting a sanction or archiving a rule keeps the row
+		public const string SanctionsDelete = "sanctions.delete";
+		public const string RulesDelete = "rules.delete";
+
 		// What the game's local API allows, held by players and never a mark of staff
 		public const string LocalApiPrefix = "local_api.";
 		public const string LocalApiMatch = "local_api.match";
@@ -85,7 +89,7 @@ namespace GenOnlineService
 
 		public static readonly IReadOnlySet<string> Human = new HashSet<string>(StringComparer.Ordinal)
 		{
-			ModerationKick, ModerationBan, ModerationMute, ModerationRename, ChatDeleteAny, ChatLogs, ChatMessageAnyone, ChatStaffBadge, NamesProtected, NamesUnrestricted, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage, AuditRead, SettingsManage, AnticheatReview, PlayersInspect, AccountsSupport, TextRulesManage, RulesManage, AppealsReview, FlagsManage, PlaylistsManage, LaddersManage, ChannelsManage, BroadcastsManage,
+			ModerationKick, ModerationBan, ModerationMute, ModerationRename, ChatDeleteAny, ChatLogs, ChatMessageAnyone, ChatStaffBadge, NamesProtected, NamesUnrestricted, SocialUnblockable, RolesManage, ServerStats, AnnouncementsSend, TokensManage, AuditRead, SettingsManage, AnticheatReview, PlayersInspect, AccountsSupport, TextRulesManage, RulesManage, AppealsReview, SanctionsDelete, RulesDelete, FlagsManage, PlaylistsManage, LaddersManage, ChannelsManage, BroadcastsManage,
 			LocalApiMatch, LocalApiStats, LocalApiEvents, LocalApiInterest, LocalApiCameraRead, LocalApiChatRead, LocalApiChatSend, LocalApiQuery, LocalApiCameraControl, LocalApiReplayControl, LocalApiObserve, LocalApiLobbyRead, LocalApiLobbyControl
 		};
 

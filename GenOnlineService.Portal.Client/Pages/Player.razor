@@ -343,6 +343,10 @@ else
                                     {
                                         <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("lift", sanction))">Lift</BbButton>
                                     }
+                                    @if (Session.Can(PortalPermissions.SanctionsDelete))
+                                    {
+                                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => Open("delete_sanction", sanction))" data-testid="delete-sanction">Delete</BbButton>
+                                    }
                                 </CellTemplate>
                             </BbDataTableColumn>
                         </Columns>
@@ -976,7 +980,7 @@ else
             </div>
             <BbDialogFooter>
                 <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_dialogOpen = false)" Disabled="@m_saving">Cancel</BbButton>
-                <BbButton Variant="@(m_action is "ban" or "revoke_role" or "reset_name" or "password_reset" or "two_factor_reset" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="ConfirmAsync" Loading="@m_saving" Disabled="@NeedsReason" title="@(NeedsReason ? ReasonNeededText : null)" aria-describedby="@(NeedsReason ? "reason-needed" : null)" data-testid="confirm">Confirm</BbButton>
+                <BbButton Variant="@(m_action is "ban" or "delete_sanction" or "revoke_role" or "reset_name" or "password_reset" or "two_factor_reset" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="ConfirmAsync" Loading="@m_saving" Disabled="@NeedsReason" title="@(NeedsReason ? ReasonNeededText : null)" aria-describedby="@(NeedsReason ? "reason-needed" : null)" data-testid="confirm">Confirm</BbButton>
             </BbDialogFooter>
         </BbDialogContent>
     </BbDialog>
@@ -1059,7 +1063,7 @@ else
 
     private string? m_password;
 
-    private bool ReasonRequired => m_action is "ban" or "password_reset" or "two_factor_reset";
+    private bool ReasonRequired => m_action is "ban" or "delete_sanction" or "password_reset" or "two_factor_reset";
 
     private static readonly int[] s_matchPageSizes = { 10, 20 };
     private string? m_matchesError;
@@ -1242,6 +1246,7 @@ else
     private string TitleOf(PortalPlayer player) => m_action switch
     {
         "lift" => $"Lift the {m_lifting?.Type} of {player.FullName}",
+        "delete_sanction" => $"Delete the {m_lifting?.Type} of {player.FullName}",
         "revoke_role" => $"Revoke {m_role} from {player.FullName}",
         "rename" => $"Rename {player.FullName}",
         "reset_name" => $"Reset the name of {player.FullName}",
@@ -1260,6 +1265,7 @@ else
         "password_reset" => "A new random password replaces the current one at once and is shown to you once. The old password stops working, a lockout ends, the player is signed out of the game everywhere at once and website sign-ins end within a minute. Only do this after checking that you are talking to the owner of the account.",
         "two_factor_reset" => "Two-factor sign-in turns off at once: the authenticator app and every recovery code are removed, the password stays. A lockout ends, the player is signed out of the game everywhere at once and website sign-ins end within a minute. The player can set it up again. Only do this after checking that you are talking to the owner of the account.",
         "revoke_role" => "The player loses this role and its permissions at once. The change is in the audit log.",
+        "delete_sanction" => "The record, its appeal and its evidence are removed for good. An active mute or ban ends first. The audit log keeps one row with the type, the dates and the reason given.",
         _ => "The sanction ends now and stays on record."
     };
 
@@ -1299,6 +1305,7 @@ else
         {
             "revoke_role" => await Api.RevokeRoleAsync(Id, m_role!),
             "lift" => await Api.LiftSanctionAsync(m_lifting!.Id, reason),
+            "delete_sanction" => await Api.DeleteSanctionAsync(m_lifting!.Id, reason),
             "rename" => await Api.RenamePlayerAsync(Id, m_name, reason),
             "reset_name" => await Api.ResetNameAsync(Id, reason),
             "two_factor_reset" => await Api.ResetTwoFactorAsync(Id, reason),
