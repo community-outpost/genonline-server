@@ -36,6 +36,14 @@ namespace GenOnlineService.Portal.Client
 		public bool Ok => Error == null && Value != null;
 	}
 
+	// A refused client change names the field and carries the sentence of the shared checks
+	public readonly record struct PortalClientOutcome<T>(T? Value, string? Error, string? Message) where T : class
+	{
+		public bool Ok => Error == null && Value != null;
+
+		public string Text => Message ?? PortalText.Error(Error);
+	}
+
 	public readonly record struct PortalFlagOutcome<T>(T? Value, string? Error, string? Field) where T : class
 	{
 		public bool Ok => Error == null && Value != null;
@@ -479,6 +487,25 @@ namespace GenOnlineService.Portal.Client
 		public Task<PortalAnswer<PortalCreatedToken>> RotatePartnerTokenAsync(long id, long tokenID, int overlapMinutes)
 		{
 			return SendForAsync<PortalCreatedToken>(HttpMethod.Post, $"{PortalRoutes.ServiceAccounts}/{id}/personal_access_tokens/{tokenID}/rotate?overlap_minutes={overlapMinutes}", new { });
+		}
+
+		public Task<PortalAnswer<PortalPartnerClientPage>> ListPartnerClientsAsync(long id, CancellationToken cancellationToken = default) => GetAsync<PortalPartnerClientPage>($"{PortalRoutes.ServiceAccounts}/{id}/clients", cancellationToken);
+
+		public Task<PortalAnswer<PortalAuditPage>> ListPartnerAuditAsync(long id, CancellationToken cancellationToken = default) => GetAsync<PortalAuditPage>($"{PortalRoutes.ServiceAccounts}/{id}/audit_events", cancellationToken);
+
+		// The answer carries the secret of a confidential client, shown once
+		public Task<PortalClientOutcome<PortalSavedClient>> CreatePartnerClientAsync(long id, PortalCreateClientRequest client) => SendClientAsync(HttpMethod.Post, $"{PortalRoutes.ServiceAccounts}/{id}/clients", client);
+
+		// A rotated secret is in the answer, shown once
+		public Task<PortalClientOutcome<PortalSavedClient>> UpdatePartnerClientAsync(long id, string clientID, PortalUpdateClientRequest change) => SendClientAsync(HttpMethod.Patch, $"{PortalRoutes.ServiceAccounts}/{id}/clients/{Uri.EscapeDataString(clientID)}", change);
+
+		private async Task<PortalClientOutcome<PortalSavedClient>> SendClientAsync(HttpMethod method, string path, object body)
+		{
+			(HttpResponseMessage? response, PortalError? failure) = await SendRawAsync(method, path, body, null);
+			using (response)
+			{
+				return failure != null ? new PortalClientOutcome<PortalSavedClient>(null, failure.Error, failure.Message) : new PortalClientOutcome<PortalSavedClient>(await response!.Content.ReadFromJsonAsync<PortalSavedClient>(PortalJson.Options), null, null);
+			}
 		}
 
 		public Task<PortalOutcome> RevokePartnerTokenAsync(long id, long tokenID) => SendAsync(HttpMethod.Delete, $"{PortalRoutes.ServiceAccounts}/{id}/personal_access_tokens/{tokenID}", new { });

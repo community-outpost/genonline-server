@@ -228,6 +228,8 @@ namespace GenOnlineService.Portal.Client
 			"revoke_sessions" => "Signed out everywhere",
 			"revoke_client_sessions" => "Client sessions revoked",
 			"client_add" => "Client added",
+			"client_update" => "Client changed",
+			"client_disable" => "Client disabled",
 			"sa_update" => "Service account changed",
 			"text_term_add" => "Word added",
 			"text_term_update" => "Word changed",
@@ -270,7 +272,7 @@ namespace GenOnlineService.Portal.Client
 			"message_delete", "message_lookup", "chat_log_view", "staff_message", "report_view", "report_close", "player_inspect",
 			"device_reveal", "connection_lookup", "anticheat_review", "announcement", "setting_update", "room_create", "room_update", "token_mint", "token_rotate",
 			"token_revoke", "sa_create", "sa_update", "sa_grant", "sa_revoke", "sa_disable", "sa_enable", "password_reset",
-			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "text_term_add", "text_term_update",
+			"two_factor_reset", "revoke_sessions", "revoke_client_sessions", "client_add", "client_update", "client_disable", "text_term_add", "text_term_update",
 			"text_term_remove", "text_exception_add", "text_exception_remove", "text_workflow_update", "text_rules_seed", "investigate_search", "flag_create", "flag_update", "flag_archive", "flag_restore", "flags_publish", "flags_rollback", "flags_import", "flags_reset",
 			"playlist_create", "playlist_update", "playlist_delete", "playlist_map_change",
 			"rule_create", "rule_version", "rule_update", "rule_archive", "rule_restore", "rule_breaker", "rule_match_review", "rule_preview", "rule_sweep_start", "rule_sweep_cancel", "rule_delete", "sanction_delete"
@@ -968,6 +970,9 @@ namespace GenOnlineService.Portal.Client
 
 		public JsonElement? Params { get; init; }
 
+		// The sentence of a refused client registration, as the shared checks of the clients CLI word it
+		public string? Message => Params is JsonElement details && details.ValueKind == JsonValueKind.Object && details.TryGetProperty("message", out JsonElement text) && text.ValueKind == JsonValueKind.String ? text.GetString() : null;
+
 		public string? Field => Params is JsonElement details && details.ValueKind == JsonValueKind.Object && details.TryGetProperty("field", out JsonElement named) && named.ValueKind == JsonValueKind.String ? named.GetString() : null;
 	}
 
@@ -1126,6 +1131,56 @@ namespace GenOnlineService.Portal.Client
 		public IReadOnlyList<string> AllowedIps { get; init; } = [];
 
 		public bool IsActive(DateTime utcNow) => ExpiresAt > utcNow && (RevokedAt == null || RevokedAt > utcNow);
+	}
+
+	// An OAuth client of a partner, whose type is public or confidential and whose first_party is false when it shows the consent page
+	public sealed record PortalPartnerClient
+	{
+		public string ClientId { get; init; } = "";
+		public string Name { get; init; } = "";
+		public string Kind { get; init; } = "";
+		public string Type { get; init; } = "";
+		public bool FirstParty { get; init; }
+		public bool Enabled { get; init; }
+		public IReadOnlyList<string> Scopes { get; init; } = [];
+		public IReadOnlyList<string> RedirectUris { get; init; } = [];
+		public DateTime CreatedAt { get; init; }
+		public DateTime UpdatedAt { get; init; }
+	}
+
+	public sealed record PortalPartnerClientPage
+	{
+		public IReadOnlyList<PortalPartnerClient> Clients { get; init; } = [];
+	}
+
+	// The client secret is set only for a confidential client that was just created or rotated
+	public sealed record PortalSavedClient
+	{
+		public PortalPartnerClient Client { get; init; } = new PortalPartnerClient();
+		public string? ClientSecret { get; init; }
+	}
+
+	public sealed record PortalCreateClientRequest
+	{
+		public string ClientId { get; init; } = "";
+		public string Name { get; init; } = "";
+		public string Type { get; init; } = "";
+		public bool ThirdParty { get; init; }
+		public IReadOnlyList<string> Scopes { get; init; } = [];
+		public IReadOnlyList<string> RedirectUris { get; init; } = [];
+		public string? Reason { get; init; }
+	}
+
+	// Each part is optional and the null ones are left out of the body
+	public sealed record PortalUpdateClientRequest
+	{
+		public string? Name { get; init; }
+		public IReadOnlyList<string>? RedirectUris { get; init; }
+		public IReadOnlyList<string>? Scopes { get; init; }
+		public bool? ThirdParty { get; init; }
+		public bool? Enabled { get; init; }
+		public bool? RotateSecret { get; init; }
+		public string? Reason { get; init; }
 	}
 
 	public sealed record PortalPartnerTokenPage

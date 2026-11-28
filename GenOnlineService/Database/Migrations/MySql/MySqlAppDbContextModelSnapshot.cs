@@ -732,6 +732,10 @@ namespace GenOnlineService.Migrations.MySql
                         .HasColumnType("varchar(32)")
                         .HasColumnName("min_version");
 
+                    b.Property<long?>("PartnerID")
+                        .HasColumnType("bigint")
+                        .HasColumnName("partner_id");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("updated_at");
@@ -741,6 +745,9 @@ namespace GenOnlineService.Migrations.MySql
                     b.HasIndex("ClientID")
                         .IsUnique()
                         .HasDatabaseName("ux_clients_client_id");
+
+                    b.HasIndex("PartnerID")
+                        .HasDatabaseName("ix_clients_partner_id");
 
                     b.ToTable("clients", (string)null);
                 });
@@ -3589,6 +3596,14 @@ namespace GenOnlineService.Migrations.MySql
                     b.HasOne("User", null)
                         .WithMany()
                         .HasForeignKey("OwnerUserID")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Client", b =>
+                {
+                    b.HasOne("ServiceAccount", null)
+                        .WithMany()
+                        .HasForeignKey("PartnerID")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 

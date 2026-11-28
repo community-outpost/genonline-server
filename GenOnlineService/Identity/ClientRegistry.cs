@@ -21,6 +21,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using OpenIddict.Abstractions;
 using OpenIddict.EntityFrameworkCore.Models;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -37,6 +38,8 @@ public class Client
 	public bool FirstParty { get; set; }
 	public bool Enabled { get; set; } = true;
 	public string? MinVersion { get; set; }
+	// The partner (service account) that runs the client, null for the game's own clients
+	public Int64? PartnerID { get; set; }
 	public DateTime CreatedAt { get; set; } = DateTime.UnixEpoch;
 	public DateTime UpdatedAt { get; set; } = DateTime.UnixEpoch;
 }
@@ -97,6 +100,9 @@ public class ClientConfiguration : IEntityTypeConfiguration<Client>
 		builder.Property(e => e.FirstParty).HasColumnName("first_party");
 		builder.Property(e => e.Enabled).HasColumnName("enabled");
 		builder.Property(e => e.MinVersion).HasColumnName("min_version").HasMaxLength(32);
+		builder.Property(e => e.PartnerID).HasColumnName("partner_id");
+		builder.HasIndex(e => e.PartnerID).HasDatabaseName("ix_clients_partner_id");
+		builder.HasOne<ServiceAccount>().WithMany().HasForeignKey(e => e.PartnerID).OnDelete(DeleteBehavior.Restrict);
 		builder.Property(e => e.CreatedAt).HasColumnName("created_at");
 		builder.Property(e => e.UpdatedAt).HasColumnName("updated_at");
 	}
@@ -337,6 +343,26 @@ namespace GenOnlineService.Identity
 			}
 
 			return null;
+		}
+
+		// 32 random bytes; OpenIddict stores only its hash
+		public static string NewSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+		// The whole check of a client registration, shared by the CLI and the staff pages
+		public static string? ValidateClient(string clientID, string kind, string game, bool bConfidential, IReadOnlyCollection<string> scopes, IReadOnlyCollection<string> redirectUris, string name, bool bHasBuilds)
+		{
+			string? error = Validate(clientID, kind, game, bConfidential, scopes, redirectUris) ?? ValidateDetails(name, null);
+			if (error != null)
+			{
+				return error;
+			}
+
+			if (bHasBuilds && kind != ClientKinds.Game)
+			{
+				return "Only a game client lists accepted builds.";
+			}
+
+			return scopes.Contains(Scopes.OpenId) ? null : "Every client needs the openid scope.";
 		}
 
 		public static string? Validate(string clientID, string kind, string game, bool bConfidential, IReadOnlyCollection<string> scopes, IReadOnlyCollection<string> redirectUris)

@@ -248,6 +248,169 @@ else
         </BbCardContent>
     </BbCard>
 
+    <BbCard>
+        <BbCardHeader>
+            <div class="go-card-head">
+                <div class="go-card-head-text">
+                    <BbCardTitle As="h2">Sign-in clients</BbCardTitle>
+                    <BbCardDescription>The apps of this partner that sign players in with their Generals Online account. A third-party client shows the consent page. A confidential client has a secret, shown once.</BbCardDescription>
+                </div>
+                <BbButton Size="ButtonSize.Small" OnClick="OpenNewClient" data-testid="new-client">
+                    <LucideIcon Name="plus" Class="bb:h-4 bb:w-4" />
+                    New client
+                </BbButton>
+            </div>
+        </BbCardHeader>
+        <BbCardContent>
+            @if (m_clientsError != null)
+            {
+                <BbAlert Variant="AlertVariant.Danger">
+                    <Icon>
+                        <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+                    </Icon>
+                    <ChildContent>
+                        <BbAlertTitle>The clients could not load</BbAlertTitle>
+                        <BbAlertDescription>@PortalText.Error(m_clientsError)</BbAlertDescription>
+                    </ChildContent>
+                </BbAlert>
+            }
+            else
+            {
+                <BbDataTable TData="PortalPartnerClient" Data="@(m_clients ?? [])" ShowToolbar="false" ShowPagination="false" AriaLabel="Sign-in clients">
+                    <Columns>
+                        <BbDataTableColumn TData="PortalPartnerClient" TValue="string" Property="@(c => c.Name)" Header="Client">
+                            <CellTemplate Context="client">
+                                <span data-testid="client-row">@client.Name</span>
+                                <span class="bb:block bb:text-xs bb:text-muted-foreground bb:font-mono">@client.ClientId</span>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalPartnerClient" TValue="string" Property="@(c => c.Type)" Header="Type">
+                            <CellTemplate Context="client">
+                                <span class="go-cell-badges">
+                                    <BbBadge Variant="BadgeVariant.Outline">@PortalWords.Sentence(client.Type)</BbBadge>
+                                    <BbBadge Variant="BadgeVariant.Outline">@(client.FirstParty ? "First party" : "Third party")</BbBadge>
+                                    <BbBadge Variant="BadgeVariant.Outline">@PortalWords.Sentence(client.Kind)</BbBadge>
+                                </span>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalPartnerClient" TValue="string" Property="@(c => String.Join(", ", c.Scopes))" Header="Scopes">
+                            <CellTemplate Context="client">
+                                <span class="go-cell-badges">
+                                    @foreach (string scope in client.Scopes)
+                                    {
+                                        <BbBadge Variant="BadgeVariant.Outline" Class="bb:font-mono">@scope</BbBadge>
+                                    }
+                                </span>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalPartnerClient" TValue="string" Property="@(c => String.Join(", ", c.RedirectUris))" Header="Redirect addresses">
+                            <CellTemplate Context="client">
+                                @foreach (string uri in client.RedirectUris)
+                                {
+                                    <span class="bb:block bb:text-xs bb:font-mono">@uri</span>
+                                }
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalPartnerClient" TValue="string" Property="@(c => c.Enabled ? "enabled" : "disabled")" Header="Status">
+                            <CellTemplate Context="client">
+                                <BbBadge Variant="@(client.Enabled ? BadgeVariant.Secondary : BadgeVariant.SoftDestructive)">@(client.Enabled ? "enabled" : "disabled")</BbBadge>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalPartnerClient" TValue="string" Property="@(c => c.ClientId)" Header="Actions" HeaderClass="go-sr-header">
+                            <CellTemplate Context="client">
+                                <span class="bb:inline-flex bb:flex-wrap bb:gap-2">
+                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => OpenEditClient(client))" data-testid="edit-client">Edit</BbButton>
+                                    @if (client.Type == "confidential")
+                                    {
+                                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => OpenClientAction("rotate_client", client))" data-testid="rotate-client">Rotate secret</BbButton>
+                                    }
+                                    @if (client.Enabled)
+                                    {
+                                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => OpenClientAction("disable_client", client))" data-testid="disable-client">Disable</BbButton>
+                                    }
+                                    else
+                                    {
+                                        <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => OpenClientAction("enable_client", client))" data-testid="enable-client">Enable</BbButton>
+                                    }
+                                </span>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                    </Columns>
+                    <EmptyTemplate>
+                        <BbEmpty Size="EmptySize.Small" Title="No clients" Description="Register an app so the partner can sign players in.">
+                            <Icon>
+                                <LucideIcon Name="app-window" />
+                            </Icon>
+                        </BbEmpty>
+                    </EmptyTemplate>
+                </BbDataTable>
+            }
+        </BbCardContent>
+    </BbCard>
+
+    <BbCard>
+        <BbCardHeader>
+            <BbCardTitle As="h2">Audit log</BbCardTitle>
+            <BbCardDescription>The latest entries about this partner, its clients and its tokens, newest first. A secret is never written to the log.</BbCardDescription>
+        </BbCardHeader>
+        <BbCardContent>
+            @if (m_auditError != null)
+            {
+                <BbAlert Variant="AlertVariant.Danger">
+                    <Icon>
+                        <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+                    </Icon>
+                    <ChildContent>
+                        <BbAlertTitle>The audit log could not load</BbAlertTitle>
+                        <BbAlertDescription>@PortalText.Error(m_auditError)</BbAlertDescription>
+                    </ChildContent>
+                </BbAlert>
+            }
+            else
+            {
+                <BbDataTable TData="PortalAuditEvent" Data="@(m_audit ?? [])" ShowToolbar="false" ShowPagination="false" AriaLabel="Partner audit log">
+                    <Columns>
+                        <BbDataTableColumn TData="PortalAuditEvent" TValue="DateTime" Property="@(e => e.CreatedAt)" Header="Time" CellClass="go-nowrap">
+                            <CellTemplate Context="entry">
+                                <When Value="@entry.CreatedAt" Exact="true" />
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAuditEvent" TValue="string" Property="@(e => e.Action)" Header="Action">
+                            <CellTemplate Context="entry">
+                                <BbBadge Variant="BadgeVariant.Outline" title="@entry.Action">@PortalAuditActions.LabelOf(entry.Action)</BbBadge>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAuditEvent" TValue="string" Property="@(e => e.ActorName)" Header="Done by">
+                            <CellTemplate Context="entry">
+                                @if (entry.Actor is PortalAuditActor actor)
+                                {
+                                    <BbLink Href="@PortalRoutes.PlayerPage(actor.Id)">@(actor.DisplayName ?? "Player " + actor.Id)</BbLink>
+                                }
+                                else
+                                {
+                                    <span class="bb:text-muted-foreground" title="@entry.ActorName">@PortalText.ActorKind(entry.ActorKind)</span>
+                                }
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAuditEvent" TValue="string" Property="@(e => AuditDetailsOf(e))" Header="Details">
+                            <CellTemplate Context="entry">
+                                <span class="go-audit-details bb:text-xs">@AuditDetailsOf(entry)</span>
+                            </CellTemplate>
+                        </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalAuditEvent" TValue="string" Property="@(e => e.Reason)" Header="Reason" />
+                    </Columns>
+                    <EmptyTemplate>
+                        <BbEmpty Size="EmptySize.Small" Title="Nothing on record" Description="No audit entry names this partner yet.">
+                            <Icon>
+                                <LucideIcon Name="scroll-text" />
+                            </Icon>
+                        </BbEmpty>
+                    </EmptyTemplate>
+                </BbDataTable>
+            }
+        </BbCardContent>
+    </BbCard>
+
     <BbDialog @bind-Open="m_confirmOpen">
         <BbDialogContent>
             <BbDialogHeader>
@@ -268,7 +431,7 @@ else
             }
             <BbDialogFooter>
                 <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_confirmOpen = false)" Disabled="@m_saving">Cancel</BbButton>
-                <BbButton Variant="@(m_action is "disable" or "revoke" or "remove" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="ConfirmAsync" Loading="@m_saving" data-testid="confirm">Confirm</BbButton>
+                <BbButton Variant="@(m_action is "disable" or "revoke" or "remove" or "rotate_client" or "disable_client" ? ButtonVariant.Destructive : ButtonVariant.Default)" OnClick="ConfirmAsync" Loading="@m_saving" data-testid="confirm">Confirm</BbButton>
             </BbDialogFooter>
         </BbDialogContent>
     </BbDialog>
@@ -366,6 +529,111 @@ else
             </BbDialogFooter>
         </BbDialogContent>
     </BbDialog>
+
+    <BbDialog @bind-Open="m_clientOpen">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>@(m_client == null ? $"New client for {partner.Name}" : $"Edit {m_client.Name}")</BbDialogTitle>
+                <BbDialogDescription>The same checks as the clients command on the host apply. The change is in the audit log.</BbDialogDescription>
+            </BbDialogHeader>
+            <div class="bb:space-y-4">
+                @if (m_clientError != null)
+                {
+                    <BbAlert Variant="AlertVariant.Danger">
+                        <Icon>
+                            <LucideIcon Name="circle-alert" Class="bb:h-4 bb:w-4" />
+                        </Icon>
+                        <ChildContent>
+                            <BbAlertTitle>Not saved</BbAlertTitle>
+                            <BbAlertDescription>@m_clientError</BbAlertDescription>
+                        </ChildContent>
+                    </BbAlert>
+                }
+                @if (m_client == null)
+                {
+                    <div class="bb:space-y-2">
+                        <BbLabel For="client-id">Client id</BbLabel>
+                        <BbInput Id="client-id" @bind-Value="m_clientId" UpdateTiming="UpdateTiming.Immediate" Placeholder="strata" autocomplete="off" spellcheck="false" />
+                        <p class="bb:text-xs bb:text-muted-foreground">3 to 32 characters of a-z, 0-9 and _. It cannot change later.</p>
+                    </div>
+                }
+                <div class="bb:space-y-2">
+                    <BbLabel For="client-name">Name</BbLabel>
+                    <BbInput Id="client-name" @bind-Value="m_clientName" UpdateTiming="UpdateTiming.Immediate" Placeholder="Strata" autocomplete="off" />
+                    <p class="bb:text-xs bb:text-muted-foreground">Shown to players on the sign-in and consent pages.</p>
+                </div>
+                @if (m_client == null)
+                {
+                    <div class="bb:space-y-2">
+                        <BbLabel For="client-type">Type</BbLabel>
+                        <BbNativeSelect TValue="string" Id="client-type" @bind-Value="m_clientType" Class="bb:w-full">
+                            <option value="confidential">Confidential, a server keeps a secret</option>
+                            <option value="public">Public, no secret</option>
+                        </BbNativeSelect>
+                        <p class="bb:text-xs bb:text-muted-foreground">A public client only holds the scopes of a player. The type cannot change later.</p>
+                    </div>
+                }
+                <div class="bb:flex bb:items-center bb:gap-2">
+                    <BbSwitch Id="client-third-party" Checked="@m_clientThirdParty" CheckedChanged="@((bool on) => m_clientThirdParty = on)" />
+                    <BbLabel For="client-third-party">Third party, players see a consent page</BbLabel>
+                </div>
+                <div class="bb:space-y-2">
+                    <p class="bb:text-sm bb:font-medium">Scopes</p>
+                    <div class="bb:flex bb:flex-wrap bb:gap-2">
+                        <BbBadge Variant="BadgeVariant.Secondary" Class="bb:font-mono">openid</BbBadge>
+                        @foreach (string scope in s_clientScopes)
+                        {
+                            bool chosen = m_clientScopes.Contains(scope);
+                            <BbButton Variant="@(chosen ? ButtonVariant.Default : ButtonVariant.Outline)" Size="ButtonSize.Small" OnClick="@(() => ToggleClientScope(scope))" aria-pressed="@(chosen ? "true" : "false")" data-testid="client-scope">
+                                <LucideIcon Name="@(chosen ? "check" : "plus")" Class="bb:h-4 bb:w-4" />
+                                @scope
+                            </BbButton>
+                        }
+                    </div>
+                </div>
+                <div class="bb:space-y-2">
+                    <BbLabel For="client-redirects">Redirect addresses</BbLabel>
+                    <BbTextarea Id="client-redirects" @bind-Value="m_clientRedirects" UpdateTiming="UpdateTiming.Immediate" Placeholder="https://strata.example.com/callback" autocomplete="off" spellcheck="false" />
+                    <p class="bb:text-xs bb:text-muted-foreground">One per line. Each is https, or http on a loopback address, without a fragment.</p>
+                </div>
+            </div>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_clientOpen = false)" Disabled="@m_saving">Cancel</BbButton>
+                <BbButton OnClick="SaveClientAsync" Loading="@m_saving" Disabled="@(!ClientFormReady)" data-testid="save-client">@(m_client == null ? "Create client" : "Save")</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
+
+    <BbDialog Open="@(m_clientSecret != null)" OpenChanged="@((bool open) => { if (!open) m_clientSecret = null; })">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>Copy the client secret now</BbDialogTitle>
+                <BbDialogDescription>@m_clientSecretName</BbDialogDescription>
+            </BbDialogHeader>
+            <div class="bb:space-y-4">
+                <BbAlert Variant="AlertVariant.Warning">
+                    <Icon>
+                        <LucideIcon Name="triangle-alert" Class="bb:h-4 bb:w-4" />
+                    </Icon>
+                    <ChildContent>
+                        <BbAlertTitle>This is the only time the secret is shown</BbAlertTitle>
+                        <BbAlertDescription>The service keeps only a hash. Give the secret to the partner through a secret store or another private channel. Once this dialog closes, a lost secret can only be replaced by rotating it, which stops the old one.</BbAlertDescription>
+                    </ChildContent>
+                </BbAlert>
+                <div class="bb:flex bb:items-center bb:gap-2">
+                    <BbInput Value="@m_clientSecret" readonly Class="bb:font-mono bb:flex-1" AriaLabel="The client secret" data-testid="client-secret" />
+                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="CopyClientSecretAsync" data-testid="copy-client-secret">
+                        <LucideIcon Name="copy" Class="bb:h-4 bb:w-4" />
+                        Copy
+                    </BbButton>
+                </div>
+            </div>
+            <BbDialogFooter>
+                <BbButton OnClick="@(() => m_clientSecret = null)" data-testid="client-secret-done">I stored it</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
+
 }
 
 @code {
@@ -383,6 +651,25 @@ else
 
     [Parameter]
     public long Id { get; set; }
+
+    private List<PortalPartnerClient>? m_clients;
+    private string? m_clientsError;
+    private List<PortalAuditEvent>? m_audit;
+    private string? m_auditError;
+
+    private static readonly string[] s_clientScopes = ["profile", "offline_access"];
+
+    private bool m_clientOpen;
+    private PortalPartnerClient? m_client;
+    private string m_clientId = "";
+    private string m_clientName = "";
+    private string m_clientType = "confidential";
+    private bool m_clientThirdParty = true;
+    private string m_clientRedirects = "";
+    private readonly HashSet<string> m_clientScopes = new(StringComparer.Ordinal) { "profile" };
+    private string? m_clientError;
+    private string? m_clientSecret;
+    private string? m_clientSecretName;
 
     private PortalPartner? m_partner;
     private List<PortalPartnerToken>? m_tokens;
@@ -430,6 +717,14 @@ else
         m_error = tokens.Ok ? null : tokens.Error;
         m_partner = partner.Value;
         m_tokens = tokens.Value;
+
+        PortalAnswer<PortalPartnerClientPage> clients = await Api.ListPartnerClientsAsync(Id);
+        m_clientsError = clients.Ok ? null : clients.Error;
+        m_clients = clients.Value?.Clients.ToList();
+
+        PortalAnswer<PortalAuditPage> audit = await Api.ListPartnerAuditAsync(Id);
+        m_auditError = audit.Ok ? null : audit.Error;
+        m_audit = audit.Value?.AuditEvents.ToList();
     }
 
     private static string StatusOf(PortalPartnerToken token, DateTime now) =>
@@ -485,6 +780,9 @@ else
         "enable" => $"Enable {partner.Name}",
         "remove" => $"Remove {m_permission} from {partner.Name}",
         "rotate" => $"Rotate the token {m_token?.Name}",
+        "rotate_client" => $"Rotate the secret of {m_client?.Name}",
+        "disable_client" => $"Disable {m_client?.Name}",
+        "enable_client" => $"Enable {m_client?.Name}",
         _ => $"Revoke the token {m_token?.Name}"
     };
 
@@ -494,11 +792,20 @@ else
         "enable" => "The partner's tokens that are not revoked or expired work again.",
         "remove" => "Tokens minted later cannot carry this permission.",
         "rotate" => "A new token with the same scopes and allowed addresses replaces this one. The new token is shown once.",
+        "rotate_client" => "A new secret replaces the current one at once, and the partner's server fails to sign players in until it uses the new secret. The new secret is shown once.",
+        "disable_client" => "Players cannot sign in through this client and its current sign-ins end within a minute. The client stays on record.",
+        "enable_client" => "Players can sign in through this client again.",
         _ => "The token stops working at once. This cannot be undone."
     };
 
     private async Task ConfirmAsync()
     {
+        if (m_action is "rotate_client" or "disable_client" or "enable_client")
+        {
+            await ConfirmClientAsync();
+            return;
+        }
+
         m_saving = true;
         if (m_action == "rotate")
         {
@@ -526,6 +833,128 @@ else
         m_confirmOpen = false;
         Report(outcome.Ok, outcome.Error, "The change is saved and in the audit log.");
         await LoadAsync();
+    }
+
+    private static string AuditDetailsOf(PortalAuditEvent entry) => String.Join(", ", PortalWords.AuditDetails(entry.Details).Select(d => d.Label + ": " + d.Value));
+
+    private static List<string> Lines(string text) => text.Split(new[] { '\n', '\r', ',', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    private bool ClientFormReady => !String.IsNullOrWhiteSpace(m_clientName) && (m_client != null || !String.IsNullOrWhiteSpace(m_clientId)) && Lines(m_clientRedirects).Count > 0;
+
+    private void OpenNewClient()
+    {
+        m_client = null;
+        m_clientId = "";
+        m_clientName = "";
+        m_clientType = "confidential";
+        m_clientThirdParty = true;
+        m_clientRedirects = "";
+        m_clientScopes.Clear();
+        m_clientScopes.Add("profile");
+        m_clientError = null;
+        m_clientOpen = true;
+    }
+
+    private void OpenEditClient(PortalPartnerClient client)
+    {
+        m_client = client;
+        m_clientName = client.Name;
+        m_clientThirdParty = !client.FirstParty;
+        m_clientRedirects = String.Join("\n", client.RedirectUris);
+        m_clientScopes.Clear();
+        m_clientScopes.UnionWith(client.Scopes.Where(s => s != "openid"));
+        m_clientError = null;
+        m_clientOpen = true;
+    }
+
+    private void ToggleClientScope(string scope)
+    {
+        if (!m_clientScopes.Remove(scope))
+        {
+            m_clientScopes.Add(scope);
+        }
+    }
+
+    private async Task SaveClientAsync()
+    {
+        List<string> scopes = m_clientScopes.Prepend("openid").ToList();
+        m_saving = true;
+        PortalClientOutcome<PortalSavedClient> outcome = m_client == null
+            ? await Api.CreatePartnerClientAsync(Id, new PortalCreateClientRequest
+            {
+                ClientId = m_clientId.Trim(),
+                Name = m_clientName.Trim(),
+                Type = m_clientType,
+                ThirdParty = m_clientThirdParty,
+                Scopes = scopes,
+                RedirectUris = Lines(m_clientRedirects)
+            })
+            : await Api.UpdatePartnerClientAsync(Id, m_client.ClientId, new PortalUpdateClientRequest
+            {
+                Name = m_clientName.Trim(),
+                ThirdParty = m_clientThirdParty,
+                Scopes = scopes,
+                RedirectUris = Lines(m_clientRedirects)
+            });
+        m_saving = false;
+        if (!outcome.Ok)
+        {
+            m_clientError = outcome.Text;
+            return;
+        }
+
+        m_clientOpen = false;
+        ShowClientSecret(outcome.Value!);
+        Toasts.Success("The client is saved and in the audit log.", "Done");
+        await LoadAsync();
+    }
+
+    private void ShowClientSecret(PortalSavedClient saved)
+    {
+        if (saved.ClientSecret != null)
+        {
+            m_clientSecretName = $"{saved.Client.Name} ({saved.Client.ClientId})";
+            m_clientSecret = saved.ClientSecret;
+        }
+    }
+
+    private void OpenClientAction(string action, PortalPartnerClient client)
+    {
+        m_client = client;
+        Open(action);
+    }
+
+    private async Task ConfirmClientAsync()
+    {
+        var change = m_action switch
+        {
+            "rotate_client" => new PortalUpdateClientRequest { RotateSecret = true },
+            "disable_client" => new PortalUpdateClientRequest { Enabled = false },
+            _ => new PortalUpdateClientRequest { Enabled = true }
+        };
+
+        m_saving = true;
+        PortalClientOutcome<PortalSavedClient> outcome = await Api.UpdatePartnerClientAsync(Id, m_client!.ClientId, change);
+        m_saving = false;
+        m_confirmOpen = false;
+        if (outcome.Ok)
+        {
+            ShowClientSecret(outcome.Value!);
+        }
+        Report(outcome.Ok, outcome.Error, "The change is saved and in the audit log.");
+        await LoadAsync();
+    }
+
+    private async Task CopyClientSecretAsync()
+    {
+        if (m_clientSecret != null && await Api.CopyAsync(m_clientSecret))
+        {
+            Toasts.Success("The secret is on the clipboard.", "Copied");
+        }
+        else
+        {
+            Toasts.Error("The browser did not allow the clipboard. Select the secret and copy it by hand.", "Not copied");
+        }
     }
 
     private async Task<PortalOutcome> UpdateAsync(PortalUpdatePartnerRequest change)

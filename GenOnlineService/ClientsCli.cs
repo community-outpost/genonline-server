@@ -34,16 +34,16 @@ namespace GenOnlineService
 			+ "  GenOnlineService clients list\n"
 			+ "  GenOnlineService clients add <client_id> --kind game|launcher|chat|app --name <display name> --redirect-uris <uri,uri>\n"
 			+ "      --third-party true|false [--game zerohour|generals|none] [--type public|confidential] [--scopes <s1,s2>]\n"
-			+ "      [--min-version <yyyy.mm.patch>] [--builds <exe_crc:ini_crc,...>]\n"
+			+ "      [--min-version <yyyy.mm.patch>] [--builds <exe_crc:ini_crc,...>] [--partner <service account name>]\n"
 			+ "  GenOnlineService clients update <client_id> [--name <display name>] [--redirect-uris <uri,uri>] [--scopes <s1,s2>]\n"
 			+ "      [--min-version <yyyy.mm.patch>|none] [--builds <exe_crc:ini_crc,...>|none] [--third-party true|false] [--enabled true|false]\n"
-			+ "      [--rotate-secret true] [--reason <text>]\n"
+			+ "      [--rotate-secret true] [--partner <service account name>|none] [--reason <text>]\n"
 			+ "  GenOnlineService clients disable <client_id> [--reason <text>]\n"
 			+ "A confidential client's secret is printed once by add and by --rotate-secret.";
 
 		private static readonly string[] s_options =
 		{
-			"--kind", "--name", "--redirect-uris", "--game", "--type", "--third-party", "--scopes", "--min-version", "--builds", "--enabled", "--rotate-secret", "--reason"
+			"--kind", "--name", "--redirect-uris", "--game", "--type", "--third-party", "--scopes", "--min-version", "--builds", "--enabled", "--rotate-secret", "--partner", "--reason"
 		};
 
 		private sealed class CliException : Exception
@@ -143,8 +143,16 @@ namespace GenOnlineService
 				: uint.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out crc);
 		}
 
-		// 32 random bytes; OpenIddict stores only its hash
-		private static string NewSecret() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+		private static async Task<Int64?> FindPartner(AppDbContext db, string? name)
+		{
+			if (name == null || name == "none")
+			{
+				return null;
+			}
+
+			return await db.ServiceAccounts.AsNoTracking().Where(a => a.Name == name).Select(a => (Int64?)a.ID).FirstOrDefaultAsync()
+				?? throw new CliException($"Service account {name} does not exist.");
+		}
 
 		private static AuditLogEntry Audit(string action, Int64 targetID, object details, string? reason)
 		{
@@ -269,6 +277,7 @@ namespace GenOnlineService
 			List<AcceptedBuild> builds = options.TryGetValue("--builds", out string? buildList) ? ParseBuilds(buildList) : new List<AcceptedBuild>();
 
 			CheckClient(clientID, kind, game, bConfidential, scopes, redirectUris, name, builds);
+			Int64? partnerID = await FindPartner(db, options.GetValueOrDefault("--partner"));
 
 			if (await db.Clients.AnyAsync(c => c.ClientID == clientID) || await applications.FindByClientIdAsync(clientID) != null)
 			{
@@ -276,11 +285,11 @@ namespace GenOnlineService
 			}
 
 			OpenIddictApplicationDescriptor descriptor = ClientRegistry.Descriptor(clientID, name, bConfidential, bFirstParty, true, redirectUris, scopes);
-			string? secret = bConfidential ? NewSecret() : null;
+			string? secret = bConfidential ? ClientRegistry.NewSecret() : null;
 			descriptor.ClientSecret = secret;
 
 			DateTime now = DateTime.UtcNow;
-			var row = new Client { ClientID = clientID, Kind = kind, Game = game, FirstParty = bFirstParty, Enabled = true, MinVersion = minVersion, CreatedAt = now, UpdatedAt = now };
+			var row = new Client { ClientID = clientID, Kind = kind, Game = game, FirstParty = bFirstParty, Enabled = true, MinVersion = minVersion, PartnerID = partnerID, CreatedAt = now, UpdatedAt = now };
 
 			// the OpenIddict row, the client row, its builds and the audit entry commit together
 			await using (var tx = await db.Database.BeginTransactionAsync())
@@ -291,7 +300,7 @@ namespace GenOnlineService
 				db.ClientBuilds.AddRange(builds.Select(b => new ClientBuild { ClientDbID = row.ID, ExeCrc = b.ExeCrc, IniCrc = b.IniCrc }));
 				db.AuditLog.Add(Audit("client_add", row.ID, new
 				{
-					client_id = clientID, name, kind, game, type, first_party = bFirstParty, scopes, redirect_uris = redirectUris, min_version = minVersion,
+					client_id = clientID, name, kind, game, type, first_party = bFirstParty, scopes, redirect_uris = redirectUris, min_version = minVersion, partner_id = partnerID,
 					builds = builds.Select(b => new { exe_crc = b.ExeCrc, ini_crc = b.IniCrc })
 				}, options.GetValueOrDefault("--reason")));
 				await db.SaveChangesAsync();
@@ -328,6 +337,7 @@ namespace GenOnlineService
 			bool bEnabled = options.TryGetValue("--enabled", out string? enabled) ? ParseBool("--enabled", enabled) : row.Enabled;
 			string? minVersion = options.TryGetValue("--min-version", out string? min) ? ParseMinVersion(min) : row.MinVersion;
 			bool bRotate = options.TryGetValue("--rotate-secret", out string? rotate) && ParseBool("--rotate-secret", rotate);
+			Int64? partnerID = options.TryGetValue("--partner", out string? partnerName) ? await FindPartner(db, partnerName) : row.PartnerID;
 
 			List<ClientBuild> currentBuilds = await db.ClientBuilds.AsTracking().Where(b => b.ClientDbID == row.ID).ToListAsync();
 			List<AcceptedBuild> builds = options.TryGetValue("--builds", out string? buildList) ? ParseBuilds(buildList)
@@ -345,7 +355,7 @@ namespace GenOnlineService
 			OpenIddictApplicationDescriptor next = ClientRegistry.Descriptor(clientID, name, bConfidential, bFirstParty, bEnabled, redirectUris, scopes);
 
 			// the stored secret hash is kept unless it is rotated
-			string? secret = bRotate ? NewSecret() : null;
+			string? secret = bRotate ? ClientRegistry.NewSecret() : null;
 			next.ClientSecret = secret ?? descriptor.ClientSecret;
 
 			var changes = new Dictionary<string, object?>();
@@ -356,6 +366,7 @@ namespace GenOnlineService
 			if (bEnabled != row.Enabled) changes["enabled"] = bEnabled;
 			if (minVersion != row.MinVersion) changes["min_version"] = minVersion;
 			if (!builds.ToHashSet().SetEquals(currentBuilds.Select(b => new AcceptedBuild((uint)b.ExeCrc, (uint)b.IniCrc)))) changes["builds"] = builds.Select(b => new { exe_crc = b.ExeCrc, ini_crc = b.IniCrc });
+			if (partnerID != row.PartnerID) changes["partner_id"] = partnerID;
 			if (bRotate) changes["secret"] = "rotated";
 
 			if (changes.Count == 0)
@@ -367,6 +378,7 @@ namespace GenOnlineService
 			row.FirstParty = bFirstParty;
 			row.Enabled = bEnabled;
 			row.MinVersion = minVersion;
+			row.PartnerID = partnerID;
 			row.UpdatedAt = DateTime.UtcNow;
 
 			await using (var tx = await db.Database.BeginTransactionAsync())
@@ -399,26 +411,10 @@ namespace GenOnlineService
 
 		private static void CheckClient(string clientID, string kind, string game, bool bConfidential, List<string> scopes, List<string> redirectUris, string name, List<AcceptedBuild> builds)
 		{
-			string? error = ClientRegistry.Validate(clientID, kind, game, bConfidential, scopes, redirectUris);
+			string? error = ClientRegistry.ValidateClient(clientID, kind, game, bConfidential, scopes, redirectUris, name, builds.Count > 0);
 			if (error != null)
 			{
 				throw new CliException(error);
-			}
-
-			string? details = ClientRegistry.ValidateDetails(name, null);
-			if (details != null)
-			{
-				throw new CliException(details);
-			}
-
-			if (builds.Count > 0 && kind != ClientKinds.Game)
-			{
-				throw new CliException("Only a game client lists accepted builds.");
-			}
-
-			if (!scopes.Contains(Scopes.OpenId))
-			{
-				throw new CliException("Every client needs the openid scope.");
 			}
 		}
 	}

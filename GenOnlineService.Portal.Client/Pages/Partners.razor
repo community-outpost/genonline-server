@@ -6,7 +6,7 @@
 
 <PageTitle>Partners · Generals Online</PageTitle>
 
-<PageHeader Description="Service accounts of partner sites and tools, and their gopat- API tokens. Every change is in the audit log.">
+<PageHeader Description="Service accounts of partner sites and tools, their gopat- API tokens and their sign-in clients. Every change is in the audit log.">
     <Title>Partners</Title>
     <Actions>
         @if (Session.Can(PortalPermissions.TokensManage))
@@ -85,6 +85,7 @@ else
                                 </span>
                             </CellTemplate>
                         </BbDataTableColumn>
+                        <BbDataTableColumn TData="PortalPartner" TValue="string" Property="@(p => ClientCountOf(p))" Header="Sign-in clients" CellClass="go-nowrap" />
                         <BbDataTableColumn TData="PortalPartner" TValue="string" Property="@(p => p.ActiveTokens.ToString())" Header="Active tokens" CellClass="go-nowrap" />
                         <BbDataTableColumn TData="PortalPartner" TValue="string" Property="@(p => PortalText.Date(p.LastTokenUsedAt))" Header="Last token use" CellClass="go-nowrap" />
                     </Columns>
@@ -162,7 +163,22 @@ else
         PortalAnswer<List<PortalPartner>> answer = await Api.ListPartnersAsync();
         m_error = answer.Ok ? null : answer.Error;
         m_partners = answer.Value;
+
+        var counts = new Dictionary<long, int>();
+        foreach (PortalPartner partner in m_partners ?? [])
+        {
+            PortalAnswer<PortalPartnerClientPage> clients = await Api.ListPartnerClientsAsync(partner.Id);
+            if (clients.Ok)
+            {
+                counts[partner.Id] = clients.Value!.Clients.Count;
+            }
+        }
+        m_clientCounts = counts;
     }
+
+    private Dictionary<long, int> m_clientCounts = new();
+
+    private string ClientCountOf(PortalPartner partner) => m_clientCounts.TryGetValue(partner.Id, out int count) ? count.ToString() : "";
 
     private void OpenCreate()
     {
