@@ -291,9 +291,29 @@ else
                         Start a sweep
                     </BbButton>
                 }
+                @if (Api.Session!.Can(PortalPermissions.RulesDelete))
+                {
+                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => m_deleteOpen = true)" Disabled="@m_busy" data-testid="delete-rule">
+                        <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4" />
+                        Delete the rule
+                    </BbButton>
+                }
             </div>
         </BbCardContent>
     </BbCard>
+
+    <BbDialog @bind-Open="m_deleteOpen">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>Delete @rule.Name?</BbDialogTitle>
+                <BbDialogDescription>The rule, every version of it and every match it recorded are removed for good. Archive it instead to keep them. The audit log keeps one row with the counts.</BbDialogDescription>
+            </BbDialogHeader>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_deleteOpen = false)" Disabled="@m_busy">Cancel</BbButton>
+                <BbButton Variant="ButtonVariant.Destructive" OnClick="DeleteAsync" Loading="@m_busy" data-testid="confirm-delete-rule">Delete</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
 
     <BbDialog @bind-Open="m_saveOpen">
         <BbDialogContent>
@@ -440,6 +460,7 @@ else
     private PortalRuleSweep? m_sweep;
     private string? m_sweepError;
     private bool m_sweepOpen;
+    private bool m_deleteOpen;
     private CancellationTokenSource? m_polling;
 
     private bool m_versionsOpen;
@@ -768,6 +789,21 @@ else
         m_sweepError = started.ConflictWhat == "sweep" ? "A sweep of this rule is running already."
             : started.Error == "service.unavailable" ? "This copy of the service does not hold the realtime lease, so it runs no sweep. Try again in a moment."
             : PortalText.Error(started.Error);
+    }
+
+    private async Task DeleteAsync()
+    {
+        m_busy = true;
+        PortalOutcome deleted = await Api.DeleteRuleAsync(Id);
+        m_busy = false;
+        m_deleteOpen = false;
+        if (deleted.Ok)
+        {
+            Toasts.Success("The rule is deleted.", "Deleted");
+            Navigation.NavigateTo(PortalRoutes.RulesPage);
+            return;
+        }
+        Toasts.Error(deleted.Error == "conflict" ? "A sweep of this rule is running. Cancel it first." : PortalText.Error(deleted.Error), "Not deleted");
     }
 
     private async Task CancelSweepAsync()

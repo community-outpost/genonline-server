@@ -122,6 +122,9 @@ namespace GenOnlineService.Rules
 
 		internal static Func<int, Task>? BeforeBatch { get; set; }
 
+		// True while this copy runs or starts a sweep of the rule
+		public static bool IsActive(Int64 ruleID) => s_starting.ContainsKey(ruleID) || Get(ruleID)?.State == RuleSweepStates.Running;
+
 		public static RuleSweepProgress? Get(Int64 ruleID) => s_sweeps.TryGetValue(ruleID, out RuleSweepProgress? progress) ? progress : null;
 
 		public static async Task<Result<RuleSweepProgress>> StartAsync(RuleEnvironment environment, AppDbContext db, Database.ModerationActor actor, Int64 ruleID)

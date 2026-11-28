@@ -189,6 +189,31 @@ namespace GenOnlineService.Rules
 			return await ChangeAsync(db, actor, rule, archive ? RuleAudit.Archive : RuleAudit.Restore, Details(rule));
 		}
 
+		// Removes the rule with its versions and recorded matches, refused while a sweep of it runs on this copy
+		public static async Task<Result<Empty>> DeleteAsync(AppDbContext db, Database.ModerationActor actor, Int64 id)
+		{
+			AutomatedRule? rule = await GetAsync(db, id);
+			if (rule == null)
+			{
+				return Result.NotFound("rule");
+			}
+			if (RuleSweeps.IsActive(id))
+			{
+				return Result.Fail(RestCodes.Conflict, new { What = "sweep" });
+			}
+
+			await using (var transaction = await db.Database.BeginTransactionAsync())
+			{
+				int matches = await db.AutomatedRuleMatches.Where(m => m.RuleID == id).ExecuteDeleteAsync();
+				int versions = await db.AutomatedRuleVersions.Where(v => v.RuleID == id).ExecuteDeleteAsync();
+				await db.AutomatedRules.Where(r => r.ID == id).ExecuteDeleteAsync();
+				await Database.Moderation.AddAuditEntry(db, actor, RuleAudit.Delete, RuleAudit.TargetKind, id, null, new { name = rule.Name, mode = rule.Mode, versions, matches });
+				await transaction.CommitAsync();
+			}
+			await SignalAsync(db);
+			return Result.Success();
+		}
+
 		// The circuit breaker: an Enforce rule that acted too often falls back to Flag, once, with an audit row
 		public static async Task<bool> TripAsync(AppDbContext db, Database.ModerationActor actor, Int64 id, int actions, int limit)
 		{

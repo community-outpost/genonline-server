@@ -127,6 +127,7 @@ namespace GenOnlineService.Rules
 		public const string Update = "rule_update";
 		public const string Archive = "rule_archive";
 		public const string Restore = "rule_restore";
+		public const string Delete = "rule_delete";
 		public const string Breaker = "rule_breaker";
 		public const string Preview = "rule_preview";
 		public const string SweepStart = "rule_sweep_start";

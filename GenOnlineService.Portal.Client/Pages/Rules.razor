@@ -125,6 +125,13 @@ else
                                     <LucideIcon Name="@(rule.Archived ? "archive-restore" : "archive")" Class="bb:h-4 bb:w-4" />
                                     @(rule.Archived ? "Restore" : "Archive")
                                 </BbButton>
+                                @if (Api.Session!.Can(PortalPermissions.RulesDelete))
+                                {
+                                    <BbButton Variant="ButtonVariant.Outline" Size="ButtonSize.Small" OnClick="@(() => m_deleting = rule)" Disabled="@m_busy" data-testid="delete-rule">
+                                        <LucideIcon Name="trash-2" Class="bb:h-4 bb:w-4" />
+                                        Delete
+                                    </BbButton>
+                                }
                             </div>
                         </CellTemplate>
                     </BbDataTableColumn>
@@ -133,6 +140,19 @@ else
             }
         </BbCardContent>
     </BbCard>
+
+    <BbDialog Open="@(m_deleting != null)" OpenChanged="@((bool open) => { if (!open) m_deleting = null; })">
+        <BbDialogContent>
+            <BbDialogHeader>
+                <BbDialogTitle>Delete @m_deleting?.Name?</BbDialogTitle>
+                <BbDialogDescription>The rule, every version of it and every match it recorded are removed for good. Archive it instead to keep them. The audit log keeps one row with the counts.</BbDialogDescription>
+            </BbDialogHeader>
+            <BbDialogFooter>
+                <BbButton Variant="ButtonVariant.Outline" OnClick="@(() => m_deleting = null)" Disabled="@m_busy">Cancel</BbButton>
+                <BbButton Variant="ButtonVariant.Destructive" OnClick="DeleteAsync" Loading="@m_busy" data-testid="confirm-delete-rule">Delete</BbButton>
+            </BbDialogFooter>
+        </BbDialogContent>
+    </BbDialog>
 
     <BbDialog @bind-Open="m_createOpen">
         <BbDialogContent>
@@ -177,6 +197,7 @@ else
     private string? m_error;
     private bool m_busy;
     private bool m_createOpen;
+    private PortalRule? m_deleting;
     private string? m_name;
     private string? m_description;
     private string m_trigger = "sign_in";
@@ -246,6 +267,24 @@ else
             new PortalRuleEdge { From = "condition-1", To = "action-1", Output = PortalRuleWords.OutputTrue }
         ]
     };
+
+    private async Task DeleteAsync()
+    {
+        PortalRule rule = m_deleting!;
+        m_busy = true;
+        PortalOutcome deleted = await Api.DeleteRuleAsync(rule.Id);
+        m_busy = false;
+        m_deleting = null;
+        if (deleted.Ok)
+        {
+            Toasts.Success($"{rule.Name} is deleted.", "Deleted");
+        }
+        else
+        {
+            Toasts.Error(deleted.Error == "conflict" ? "A sweep of this rule is running. Cancel it first." : PortalText.Error(deleted.Error), "Not deleted");
+        }
+        await LoadAsync();
+    }
 
     private async Task ArchiveAsync(PortalRule rule)
     {

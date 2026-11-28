@@ -343,6 +343,16 @@ namespace GenOnlineService.Rules
 			return await ViewResultAsync(db, await RuleStore.ArchiveAsync(db, CallerActors.Of(User), id, archive: false));
 		}
 
+		[EndpointSummary("Deletes a rule for good with its versions and recorded matches.")]
+		[ProducesResponseType(StatusCodes.Status204NoContent)]
+		[Authorize(Policy = PermissionPolicies.Prefix + Permissions.RulesDelete)]
+		[HttpDelete("~/api/v1/rules/{id:long}")]
+		public async Task<IActionResult> Delete(long id)
+		{
+			await using AppDbContext db = await m_dbFactory.CreateDbContextAsync();
+			return ApiResults.NoContent(await RuleStore.DeleteAsync(db, CallerActors.Of(User), id));
+		}
+
 		[EndpointSummary("Checks a rule document without saving it and lists every problem.")]
 		[ProducesResponseType<RuleValidateResponse>(StatusCodes.Status200OK)]
 		[ApiRequestBody(typeof(RuleValidateRequest))]
